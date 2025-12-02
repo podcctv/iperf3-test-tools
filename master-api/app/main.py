@@ -1,18 +1,19 @@
 import asyncio
 import hashlib
 import hmac
+from datetime import datetime, timezone
 from typing import List
 
 import httpx
 from fastapi import Body, Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, text
 from sqlalchemy.orm import Session
 
 from .config import settings
-from .database import engine, get_db
+from .database import SessionLocal, engine, get_db
 from .agent_store import AgentConfigStore
-from .models import Base, Node, TestResult
+from .models import Base, Node, TestResult, TestSchedule
 from .remote_agent import fetch_agent_logs, redeploy_agent, remove_agent_container, RemoteCommandError
 from .schemas import (
     AgentActionResult,
@@ -23,9 +24,13 @@ from .schemas import (
     NodeUpdate,
     NodeRead,
     NodeWithStatus,
+    TestScheduleCreate,
+    TestScheduleRead,
+    TestScheduleUpdate,
     TestCreate,
     TestRead,
 )
+from .state_store import StateStore
 
 Base.metadata.create_all(bind=engine)
 
@@ -41,10 +46,118 @@ def _ensure_iperf_port_column() -> None:
             connection.commit()
 
 
+def _ensure_test_result_columns() -> None:
+    dialect = engine.dialect.name
+    with engine.connect() as connection:
+        if dialect == "sqlite":
+            columns = connection.exec_driver_sql("PRAGMA table_info(test_results)").fetchall()
+            column_names = {col[1] for col in columns}
+            if "summary" not in column_names:
+                connection.exec_driver_sql("ALTER TABLE test_results ADD COLUMN summary JSON")
+            if "created_at" not in column_names:
+                connection.exec_driver_sql("ALTER TABLE test_results ADD COLUMN created_at DATETIME")
+        elif dialect == "postgresql":
+            result = connection.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='test_results'"
+                )
+            )
+            column_names = {row[0] for row in result}
+            if "summary" not in column_names:
+                connection.execute(text("ALTER TABLE test_results ADD COLUMN summary JSONB"))
+            if "created_at" not in column_names:
+                connection.execute(text("ALTER TABLE test_results ADD COLUMN created_at TIMESTAMPTZ"))
+        connection.commit()
+
+
 _ensure_iperf_port_column()
+_ensure_test_result_columns()
+
+state_store = StateStore(settings.state_file, settings.state_recent_tests)
+
+
+def _bootstrap_state() -> None:
+    db = SessionLocal()
+    try:
+        state_store.restore(db)
+    finally:
+        db.close()
+
+
+_bootstrap_state()
 
 app = FastAPI(title="iperf3 master api")
 agent_store = AgentConfigStore(settings.agent_config_file)
+
+
+def _persist_state(db: Session) -> None:
+    state_store.persist(db)
+
+
+def _summarize_metrics(raw: dict | None) -> dict | None:
+    if not raw:
+        return None
+
+    body = raw.get("iperf_result") if isinstance(raw, dict) else None
+    result = body or raw
+    end = result.get("end", {}) if isinstance(result, dict) else {}
+    sum_received = end.get("sum_received") or end.get("sum") or {}
+    sum_sent = end.get("sum_sent") or end.get("sum") or {}
+    streams = end.get("streams") or []
+    first_stream = streams[0] if streams else None
+    receiver_stream = (first_stream or {}).get("receiver") if isinstance(first_stream, dict) else None
+    sender_stream = (first_stream or {}).get("sender") if isinstance(first_stream, dict) else None
+
+    def _metric(*values):
+        for value in values:
+            if value is not None:
+                return value
+        return None
+
+    bits_per_second = _metric(
+        (sum_received or {}).get("bits_per_second"),
+        (receiver_stream or {}).get("bits_per_second") if receiver_stream else None,
+        (sum_sent or {}).get("bits_per_second"),
+        (sender_stream or {}).get("bits_per_second") if sender_stream else None,
+    )
+
+    jitter_ms = _metric(
+        (sum_received or {}).get("jitter_ms"),
+        (sum_sent or {}).get("jitter_ms"),
+        (receiver_stream or {}).get("jitter_ms") if receiver_stream else None,
+        (sender_stream or {}).get("jitter_ms") if sender_stream else None,
+    )
+
+    lost_percent = _metric(
+        (sum_received or {}).get("lost_percent"),
+        (sum_sent or {}).get("lost_percent"),
+        (receiver_stream or {}).get("lost_percent") if receiver_stream else None,
+        (sender_stream or {}).get("lost_percent") if sender_stream else None,
+    )
+
+    if lost_percent is None and sum_received:
+        lost_packets = sum_received.get("lost_packets")
+        packets = sum_received.get("packets")
+        if lost_packets is not None and packets:
+            lost_percent = (lost_packets / packets) * 100
+
+    latency_ms = _metric(
+        (sender_stream or {}).get("mean_rtt") if sender_stream else None,
+        (sender_stream or {}).get("rtt") if sender_stream else None,
+        (receiver_stream or {}).get("mean_rtt") if receiver_stream else None,
+        (receiver_stream or {}).get("rtt") if receiver_stream else None,
+    )
+
+    if latency_ms and latency_ms > 1000:
+        latency_ms = latency_ms / 1000
+
+    return {
+        "bits_per_second": bits_per_second,
+        "jitter_ms": jitter_ms,
+        "lost_percent": lost_percent,
+        "latency_ms": latency_ms,
+    }
 
 
 def _dashboard_token(password: str) -> str:
@@ -167,10 +280,60 @@ def _login_html() -> str:
         <div class=\"card\">
           <div class=\"inline\" style=\"justify-content: space-between; width: 100%;\">
             <h2>Recent Tests</h2>
-            <button id=\"refresh-tests\" style=\"width: auto;\">Refresh</button>
+            <div class=\"inline\" style=\"gap: 8px;\">
+              <button id=\"refresh-tests\" style=\"width: auto;\">Refresh</button>
+              <button id=\"delete-all-tests\" style=\"width: auto; background: #ef4444;\">Delete All</button>
+            </div>
           </div>
           <div id=\"tests-list\" class=\"muted\">No tests yet.</div>
         </div>
+      </div>
+
+      <div class=\"card\">
+        <div class=\"inline\" style=\"justify-content: space-between; width: 100%;\">
+          <h2>Scheduled Tests</h2>
+          <button id=\"refresh-schedules\" style=\"width: auto;\">Refresh</button>
+        </div>
+        <div class=\"grid\">
+          <div>
+            <label>Schedule Name</label>
+            <input id=\"schedule-name\" placeholder=\"nightly tcp baseline\" />
+          </div>
+          <div>
+            <label>Source Node</label>
+            <select id=\"schedule-src\"></select>
+          </div>
+          <div>
+            <label>Destination Node</label>
+            <select id=\"schedule-dst\"></select>
+          </div>
+          <div>
+            <label>Protocol</label>
+            <select id=\"schedule-protocol\"><option value=\"tcp\">TCP</option><option value=\"udp\">UDP</option></select>
+          </div>
+          <div>
+            <label>Duration (s)</label>
+            <input id=\"schedule-duration\" type=\"number\" value=\"10\" />
+          </div>
+          <div>
+            <label>Parallel Streams</label>
+            <input id=\"schedule-parallel\" type=\"number\" value=\"1\" />
+          </div>
+          <div>
+            <label>Port</label>
+            <input id=\"schedule-port\" type=\"number\" value=\"5201\" />
+          </div>
+          <div>
+            <label>Interval (minutes)</label>
+            <input id=\"schedule-interval\" type=\"number\" value=\"60\" />
+          </div>
+          <div>
+            <label>Notes (optional)</label>
+            <input id=\"schedule-notes\" placeholder=\"for weekly report\" />
+          </div>
+        </div>
+        <button id=\"save-schedule\" style=\"margin-top: 12px;\">Save Schedule</button>
+        <div id=\"schedules-list\" class=\"muted\" style=\"margin-top: 12px;\">No schedules yet.</div>
       </div>
     </div>
   </div>
@@ -188,11 +351,23 @@ def _login_html() -> str:
       const nodeDesc = document.getElementById('node-desc');
       const nodesList = document.getElementById('nodes-list');
       const testsList = document.getElementById('tests-list');
+      const schedulesList = document.getElementById('schedules-list');
       const saveNodeBtn = document.getElementById('save-node');
+      const saveScheduleBtn = document.getElementById('save-schedule');
       const srcSelect = document.getElementById('src-select');
       const dstSelect = document.getElementById('dst-select');
+      const scheduleSrcSelect = document.getElementById('schedule-src');
+      const scheduleDstSelect = document.getElementById('schedule-dst');
+      const scheduleProtocol = document.getElementById('schedule-protocol');
+      const scheduleDuration = document.getElementById('schedule-duration');
+      const scheduleParallel = document.getElementById('schedule-parallel');
+      const schedulePort = document.getElementById('schedule-port');
+      const scheduleInterval = document.getElementById('schedule-interval');
+      const scheduleNotes = document.getElementById('schedule-notes');
+      const scheduleName = document.getElementById('schedule-name');
       const addNodeAlert = document.getElementById('add-node-alert');
       const testAlert = document.getElementById('test-alert');
+      const deleteAllTestsBtn = document.getElementById('delete-all-tests');
       const testPortInput = document.getElementById('test-port');
       let nodeCache = [];
       let editingNodeId = null;
@@ -244,6 +419,7 @@ def _login_html() -> str:
           authHint.textContent = 'Authenticated. Use the controls below to manage nodes and run tests.';
           await refreshNodes();
           await refreshTests();
+          await refreshSchedules();
         } else {
           appCard.classList.add('hidden');
           loginCard.classList.remove('hidden');
@@ -302,6 +478,8 @@ def _login_html() -> str:
       nodeCache = await res.json();
       srcSelect.innerHTML = '';
       dstSelect.innerHTML = '';
+      scheduleSrcSelect.innerHTML = '';
+      scheduleDstSelect.innerHTML = '';
       if (!nodeCache.length) {
         nodesList.textContent = 'No nodes yet.';
         return;
@@ -420,6 +598,11 @@ def _login_html() -> str:
         optionB.value = node.id;
         optionB.textContent = `${node.name} (${node.ip} | iperf ${node.iperf_port})`;
         dstSelect.appendChild(optionB);
+
+        const schedSrcOption = optionA.cloneNode(true);
+        const schedDstOption = optionB.cloneNode(true);
+        scheduleSrcSelect.appendChild(schedSrcOption);
+        scheduleDstSelect.appendChild(schedDstOption);
       });
 
       syncTestPort();
@@ -564,6 +747,17 @@ def _login_html() -> str:
     }
 
 
+    async function clearAllTests() {
+      clearAlert(testAlert);
+      const res = await fetch('/tests', { method: 'DELETE' });
+      if (!res.ok) {
+        setAlert(testAlert, 'Failed to delete all tests.');
+        return;
+      }
+      await refreshTests();
+    }
+
+
     async function refreshTests() {
       const res = await fetch('/tests');
       const tests = await res.json();
@@ -607,6 +801,48 @@ def _login_html() -> str:
         block.appendChild(rawTable);
 
         testsList.appendChild(block);
+      });
+    }
+
+
+    async function deleteSchedule(scheduleId) {
+      const res = await fetch(`/schedules/${scheduleId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        setAlert(testAlert, 'Failed to delete schedule.');
+        return;
+      }
+      await refreshSchedules();
+    }
+
+
+    async function refreshSchedules() {
+      const res = await fetch('/schedules');
+      const schedules = await res.json();
+      if (!schedules.length) {
+        schedulesList.textContent = 'No schedules yet.';
+        return;
+      }
+      schedulesList.innerHTML = '';
+      schedules.forEach((schedule) => {
+        const row = document.createElement('div');
+        row.className = 'node-row';
+        const info = document.createElement('div');
+        const intervalMinutes = Math.round(schedule.interval_seconds / 60);
+        info.innerHTML = `<strong>${schedule.name}</strong> · ${schedule.protocol.toUpperCase()} every ${intervalMinutes}m<br/>` +
+          `<span class="muted-sm">${schedule.src_node_id} → ${schedule.dst_node_id}, duration ${schedule.duration}s, parallel ${schedule.parallel}, port ${schedule.port}${schedule.notes ? ' · ' + schedule.notes : ''}</span>`;
+        row.appendChild(info);
+
+        const actions = document.createElement('div');
+        actions.className = 'inline';
+        const delBtn = document.createElement('button');
+        delBtn.textContent = 'Delete';
+        delBtn.style.width = 'auto';
+        delBtn.style.background = '#ef4444';
+        delBtn.onclick = () => deleteSchedule(schedule.id);
+        actions.appendChild(delBtn);
+        row.appendChild(actions);
+
+        schedulesList.appendChild(row);
       });
     }
 
@@ -667,12 +903,46 @@ def _login_html() -> str:
       clearAlert(testAlert);
     }
 
+    async function saveSchedule() {
+      clearAlert(testAlert);
+      const payload = {
+        name: scheduleName.value,
+        src_node_id: Number(scheduleSrcSelect.value),
+        dst_node_id: Number(scheduleDstSelect.value),
+        protocol: scheduleProtocol.value,
+        duration: Number(scheduleDuration.value || 10),
+        parallel: Number(scheduleParallel.value || 1),
+        port: Number(schedulePort.value || 5201),
+        interval_seconds: Number(scheduleInterval.value || 60) * 60,
+        notes: scheduleNotes.value
+      };
+
+      const res = await fetch('/schedules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        setAlert(testAlert, 'Failed to save schedule. Check the fields and try again.');
+        return;
+      }
+
+      scheduleName.value = '';
+      scheduleNotes.value = '';
+      await refreshSchedules();
+      clearAlert(testAlert);
+    }
+
       document.getElementById('login-btn').addEventListener('click', login);
       document.getElementById('logout-btn').addEventListener('click', logout);
       document.getElementById('save-node').addEventListener('click', saveNode);
       document.getElementById('run-test').addEventListener('click', runTest);
+      saveScheduleBtn.addEventListener('click', saveSchedule);
       document.getElementById('refresh-nodes').addEventListener('click', refreshNodes);
       document.getElementById('refresh-tests').addEventListener('click', refreshTests);
+      document.getElementById('refresh-schedules').addEventListener('click', refreshSchedules);
+      deleteAllTestsBtn.addEventListener('click', clearAllTests);
       dstSelect.addEventListener('change', syncTestPort);
       document.getElementById('password').addEventListener('keyup', (e) => { if (e.key === 'Enter') login(); });
 
@@ -779,6 +1049,7 @@ def create_node(node: NodeCreate, db: Session = Depends(get_db)):
     db.add(obj)
     db.commit()
     db.refresh(obj)
+    _persist_state(db)
     return obj
 
 
@@ -800,6 +1071,7 @@ def update_node(node_id: int, payload: NodeUpdate, db: Session = Depends(get_db)
 
     db.commit()
     db.refresh(node)
+    _persist_state(db)
     return node
 
 
@@ -822,6 +1094,7 @@ def delete_node(node_id: int, db: Session = Depends(get_db)):
 
     db.delete(node)
     db.commit()
+    _persist_state(db)
     return {"status": "deleted"}
 
 
@@ -854,16 +1127,20 @@ async def create_test(test: TestCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=response.text)
 
     raw_data = response.json()
+    summary = _summarize_metrics(raw_data)
     obj = TestResult(
         src_node_id=src.id,
         dst_node_id=dst.id,
         protocol=test.protocol,
         params=payload,
         raw_result=raw_data,
+        summary=summary,
+        created_at=datetime.now(timezone.utc),
     )
     db.add(obj)
     db.commit()
     db.refresh(obj)
+    _persist_state(db)
     return obj
 
 
@@ -871,6 +1148,16 @@ async def create_test(test: TestCreate, db: Session = Depends(get_db)):
 def list_tests(db: Session = Depends(get_db)):
     results = db.scalars(select(TestResult)).all()
     return results
+
+
+@app.delete("/tests")
+def delete_all_tests(db: Session = Depends(get_db)):
+    results = db.scalars(select(TestResult)).all()
+    for test in results:
+        db.delete(test)
+    db.commit()
+    _persist_state(db)
+    return {"status": "deleted", "count": len(results)}
 
 
 @app.delete("/tests/{test_id}")
@@ -881,6 +1168,49 @@ def delete_test(test_id: int, db: Session = Depends(get_db)):
 
     db.delete(test)
     db.commit()
+    _persist_state(db)
+    return {"status": "deleted"}
+
+
+def _get_schedule_or_404(schedule_id: int, db: Session) -> TestSchedule:
+    schedule = db.get(TestSchedule, schedule_id)
+    if not schedule:
+        raise HTTPException(status_code=404, detail="schedule not found")
+    return schedule
+
+
+@app.post("/schedules", response_model=TestScheduleRead)
+def create_schedule(schedule: TestScheduleCreate, db: Session = Depends(get_db)):
+    obj = TestSchedule(**schedule.model_dump())
+    db.add(obj)
+    db.commit()
+    db.refresh(obj)
+    _persist_state(db)
+    return obj
+
+
+@app.get("/schedules", response_model=List[TestScheduleRead])
+def list_schedules(db: Session = Depends(get_db)):
+    return db.scalars(select(TestSchedule)).all()
+
+
+@app.put("/schedules/{schedule_id}", response_model=TestScheduleRead)
+def update_schedule(schedule_id: int, payload: TestScheduleUpdate, db: Session = Depends(get_db)):
+    schedule = _get_schedule_or_404(schedule_id, db)
+    for key, value in payload.model_dump(exclude_unset=True).items():
+        setattr(schedule, key, value)
+    db.commit()
+    db.refresh(schedule)
+    _persist_state(db)
+    return schedule
+
+
+@app.delete("/schedules/{schedule_id}")
+def delete_schedule(schedule_id: int, db: Session = Depends(get_db)):
+    schedule = _get_schedule_or_404(schedule_id, db)
+    db.delete(schedule)
+    db.commit()
+    _persist_state(db)
     return {"status": "deleted"}
 
 

@@ -14,10 +14,16 @@ class Settings(BaseSettings):
     dashboard_cookie_name: str = "iperf_dashboard_auth"
     agent_config_path: str = str(Path(__file__).resolve().parent.parent / "agent_configs.json")
     agent_image: str = "iperf-agent:latest"
+    state_file_path: str = str(Path(__file__).resolve().parent.parent / "data" / "master_state.json")
+    state_recent_tests: int = 50
 
     @property
     def agent_config_file(self) -> Path:
         return Path(self.agent_config_path)
+
+    @property
+    def state_file(self) -> Path:
+        return Path(self.state_file_path)
 
 
 settings = Settings()
