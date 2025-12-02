@@ -1266,8 +1266,29 @@ async def create_test(test: TestCreate, db: Session = Depends(get_db)):
             pass
         raise HTTPException(status_code=502, detail=f"agent returned {response.status_code}: {detail}")
 
-    raw_data = response.json()
-    summary = _summarize_metrics(raw_data)
+    try:
+        raw_data = response.json()
+    except ValueError:
+        raise HTTPException(
+            status_code=502, detail="agent response is not valid JSON"
+        )
+
+    if not isinstance(raw_data, dict):
+        detail = response.text[:200]
+        raise HTTPException(
+            status_code=502,
+            detail=f"agent response JSON has unexpected format: {detail}",
+        )
+
+    try:
+        summary = _summarize_metrics(raw_data)
+    except Exception as exc:
+        snippet = response.text[:200]
+        logger.exception("Failed to summarize agent response")
+        raise HTTPException(
+            status_code=502,
+            detail=f"agent response JSON could not be processed: {snippet}",
+        ) from exc
     obj = TestResult(
         src_node_id=src.id,
         dst_node_id=dst.id,
