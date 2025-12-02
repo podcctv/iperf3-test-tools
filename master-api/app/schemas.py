@@ -46,3 +46,39 @@ class TestRead(BaseModel):
 
     class Config:
         orm_mode = True
+
+
+class AgentConfigBase(BaseModel):
+    name: str
+    host: str
+    agent_port: int = Field(default=8000, ge=1, le=65535)
+    iperf_port: int = Field(default=5201, ge=1, le=65535)
+    ssh_port: Optional[int] = Field(default=None, ge=1, le=65535)
+    image: str = "iperf-agent:latest"
+    container_name: str = "iperf-agent"
+    description: Optional[str] = None
+
+
+class AgentConfigCreate(AgentConfigBase):
+    pass
+
+
+class AgentConfigUpdate(BaseModel):
+    name: Optional[str] = None
+    host: Optional[str] = None
+    agent_port: Optional[int] = Field(default=None, ge=1, le=65535)
+    iperf_port: Optional[int] = Field(default=None, ge=1, le=65535)
+    ssh_port: Optional[int] = Field(default=None, ge=1, le=65535)
+    image: Optional[str] = None
+    container_name: Optional[str] = None
+    description: Optional[str] = None
+
+
+class AgentConfigRead(AgentConfigBase):
+    pass
+
+
+class AgentActionResult(BaseModel):
+    status: str
+    message: Optional[str] = None
+    logs: Optional[str] = None
