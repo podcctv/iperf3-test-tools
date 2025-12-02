@@ -191,6 +191,13 @@ def _login_html() -> str:
     .badge { padding: 4px 10px; border-radius: 999px; font-size: 12px; display: inline-block; }
     .badge.online { background: #065f46; color: #d1fae5; }
     .badge.offline { background: #7f1d1d; color: #fee2e2; }
+    .pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; font-size: 13px; font-weight: 700; border: none; cursor: pointer; }
+    .pill.tag { cursor: default; }
+    .pill.success { background: #22c55e; color: #0b1220; }
+    .pill.warn { background: #f59e0b; color: #0b1220; }
+    .pill.info { background: #38bdf8; color: #0b1220; }
+    .pill.danger { background: #ef4444; color: #0b1220; }
+    .pill.muted { background: #475569; color: #e2e8f0; }
     .muted { color: #94a3b8; font-size: 14px; }
     pre { background: #0b1220; padding: 12px; border-radius: 8px; overflow: auto; border: 1px solid #1f2937; }
     .hidden { display: none; }
@@ -211,6 +218,8 @@ def _login_html() -> str:
     .table-scroll { overflow: auto; }
     .raw-table { width: 100%; border-collapse: collapse; }
     .raw-table th, .raw-table td { padding: 6px 8px; border-bottom: 1px solid #1f2937; }
+    .row-list { display: flex; flex-direction: column; gap: 12px; }
+    .config-warning { color: #fbbf24; font-size: 13px; margin-top: 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   </style>
 </head>
 <body>
@@ -269,14 +278,17 @@ def _login_html() -> str:
         </div>
       </div>
 
-      <div class=\"grid\" style=\"margin-top: 16px;\">
+      <div class=\"grid\" style=\"margin-top: 16px; grid-template-columns: 1fr;\">
         <div class=\"card\">
           <div class=\"inline\" style=\"justify-content: space-between; width: 100%;\">
             <h2>Nodes</h2>
             <button id=\"refresh-nodes\" style=\"width: auto;\">Refresh</button>
           </div>
-          <div id=\"nodes-list\" class=\"muted\">No nodes yet.</div>
+          <div id=\"nodes-list\" class=\"muted row-list\">No nodes yet.</div>
         </div>
+      </div>
+
+      <div class=\"grid\" style=\"margin-top: 8px; grid-template-columns: 1fr;\">
         <div class=\"card\">
           <div class=\"inline\" style=\"justify-content: space-between; width: 100%;\">
             <h2>Recent Tests</h2>
@@ -285,7 +297,7 @@ def _login_html() -> str:
               <button id=\"delete-all-tests\" style=\"width: auto; background: #ef4444;\">Delete All</button>
             </div>
           </div>
-          <div id=\"tests-list\" class=\"muted\">No tests yet.</div>
+          <div id=\"tests-list\" class=\"muted row-list\">No tests yet.</div>
         </div>
       </div>
 
@@ -450,7 +462,8 @@ def _login_html() -> str:
     function syncTestPort() {
       const selected = nodeCache.find((n) => n.id === Number(dstSelect.value));
       if (selected && testPortInput) {
-        testPortInput.value = selected.iperf_port || selected.agent_port || 5201;
+        const preferredPort = selected.detected_iperf_port || selected.iperf_port || selected.agent_port || 5201;
+        testPortInput.value = preferredPort;
       }
     }
 
@@ -493,10 +506,15 @@ def _login_html() -> str:
         const item = document.createElement('div');
         item.className = 'node-row';
 
+        const detectedPort = node.detected_iperf_port;
+        const portLabel = detectedPort && detectedPort !== node.iperf_port
+          ? `iperf ${node.iperf_port} • agent reports ${detectedPort}`
+          : `iperf ${node.iperf_port || detectedPort || 'n/a'}`;
+
         const header = document.createElement('div');
         header.className = 'flex-between';
         const info = document.createElement('div');
-        info.innerHTML = `<strong>${node.name}</strong> <span class=\"muted\">(${node.ip}:${node.agent_port}, iperf ${node.iperf_port})</span><br/>` +
+        info.innerHTML = `<strong>${node.name}</strong> <span class=\"muted\">(${node.ip}:${node.agent_port}, ${portLabel})</span><br/>` +
           `<span class=\"muted-sm\">${node.description || 'No description'} | Server: ${server}</span>`;
         header.appendChild(info);
 
@@ -505,7 +523,7 @@ def _login_html() -> str:
         actions.style.gap = '8px';
 
         const statusBadge = document.createElement('span');
-        statusBadge.className = `badge ${node.status}`;
+        statusBadge.className = `pill tag ${node.status === 'online' ? 'success' : 'danger'}`;
         statusBadge.textContent = node.status;
         actions.appendChild(statusBadge);
 
@@ -513,19 +531,34 @@ def _login_html() -> str:
         editBtn.textContent = isEditing ? 'Editing' : 'Edit';
         editBtn.disabled = isEditing;
         editBtn.style.width = 'auto';
-        editBtn.style.background = '#38bdf8';
+        editBtn.className = 'pill info';
         editBtn.onclick = () => { editingNodeId = node.id; refreshNodes(); };
         actions.appendChild(editBtn);
 
         const deleteBtn = document.createElement('button');
         deleteBtn.textContent = 'Delete';
         deleteBtn.style.width = 'auto';
-        deleteBtn.style.background = '#ef4444';
+        deleteBtn.className = 'pill danger';
         deleteBtn.onclick = () => removeNode(node.id);
         actions.appendChild(deleteBtn);
 
         header.appendChild(actions);
         item.appendChild(header);
+
+        if (detectedPort && detectedPort !== node.iperf_port) {
+          const warning = document.createElement('div');
+          warning.className = 'config-warning';
+          warning.textContent = `Agent reports iperf port ${detectedPort}. Configured ${node.iperf_port || 'n/a'}.`;
+
+          const applyBtn = document.createElement('button');
+          applyBtn.className = 'pill warn';
+          applyBtn.style.width = 'auto';
+          applyBtn.textContent = 'Apply detected port';
+          applyBtn.onclick = () => saveNodeInline(node.id, { iperf_port: detectedPort });
+
+          warning.appendChild(applyBtn);
+          item.appendChild(warning);
+        }
 
         if (isEditing) {
           const form = document.createElement('div');
@@ -789,7 +822,7 @@ def _login_html() -> str:
         const deleteBtn = document.createElement('button');
         deleteBtn.textContent = 'Delete';
         deleteBtn.style.width = 'auto';
-        deleteBtn.style.background = '#ef4444';
+        deleteBtn.className = 'pill danger';
         deleteBtn.onclick = () => deleteTestResult(test.id);
         actions.appendChild(deleteBtn);
         header.appendChild(actions);
@@ -885,7 +918,7 @@ def _login_html() -> str:
         protocol: document.getElementById('protocol').value,
         duration: Number(document.getElementById('duration').value),
         parallel: Number(document.getElementById('parallel').value),
-        port: Number(testPortInput.value || (selectedDst ? selectedDst.iperf_port : 5201))
+        port: Number(testPortInput.value || (selectedDst ? (selectedDst.detected_iperf_port || selectedDst.iperf_port) : 5201))
       };
 
       const res = await fetch('/tests', {
@@ -895,7 +928,9 @@ def _login_html() -> str:
       });
 
       if (!res.ok) {
-        setAlert(testAlert, 'Failed to start test. Ensure nodes exist and parameters are valid.');
+        const details = await res.text();
+        const message = details ? `Failed to start test. ${details}` : 'Failed to start test. Ensure nodes exist and parameters are valid.';
+        setAlert(testAlert, message);
         return;
       }
 
@@ -1005,6 +1040,7 @@ async def _check_node_health(node: Node) -> NodeWithStatus:
             response = await client.get(url)
             if response.status_code == 200:
                 data = response.json()
+                detected_port = data.get("port")
                 return NodeWithStatus(
                     id=node.id,
                     name=node.name,
@@ -1015,6 +1051,7 @@ async def _check_node_health(node: Node) -> NodeWithStatus:
                     status="online",
                     server_running=bool(data.get("server_running")),
                     health_timestamp=data.get("timestamp"),
+                    detected_iperf_port=int(detected_port) if detected_port else None,
                 )
     except Exception:
         pass
@@ -1029,6 +1066,7 @@ async def _check_node_health(node: Node) -> NodeWithStatus:
         status="offline",
         server_running=None,
         health_timestamp=None,
+        detected_iperf_port=None,
     )
 
 
