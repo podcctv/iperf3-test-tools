@@ -25,6 +25,13 @@ Build images, start the master API stack, launch a local agent (with iperf3 serv
 ./install_all.sh
 ```
 
+Dedicated entrypoints are also available:
+
+* `./install_master.sh` – install the master API, dashboard, and a local agent on the control node (remote deployment disabled by default). /
+  在主控节点上安装 master API、可视化界面以及本地 agent（默认不部署远端）。
+* `./install_agent.sh` – install an agent-only instance on another host; set `--agent-port`/`--iperf-port` if you need non-default ports. /
+  在其他机器上仅安装 agent，可通过 `--agent-port`/`--iperf-port` 指定端口。
+
 You will be prompted to choose whether to install the **master**, **agent**, or **both**, and to confirm the master/agent ports before installation begins. Use flags to skip prompts in automated environments.
 
 脚本会提示选择安装 **master**、**agent** 或 **both**，并确认端口。自动化环境可使用参数跳过交互。
