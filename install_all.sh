@@ -12,6 +12,7 @@ START_IPERF_SERVER=${START_IPERF_SERVER:-true}
 DEPLOY_REMOTE=${DEPLOY_REMOTE:-true}
 START_LOCAL_AGENT=${START_LOCAL_AGENT:-true}
 DOWNLOAD_LATEST=${DOWNLOAD_LATEST:-false}
+UPDATE_HOSTS_TEMPLATE=${UPDATE_HOSTS_TEMPLATE:-false}
 REPO_URL=${REPO_URL:-"https://github.com/podcctv/iperf3-test-tools/"}
 REPO_REF=${REPO_REF:-"main"}
 REPO_DEST=${REPO_DEST:-""}
@@ -46,6 +47,7 @@ Options:
   --no-local-agent         Skip launching a local agent container
   --no-remote              Skip deploying remote agents via hosts file
   --no-start-server        Do not auto-start iperf3 server on the local agent
+  --update-hosts-template  Copy hosts.txt template locally if missing (no overwrite)
   --uninstall              Remove master API stack, agent container, and built images
   -h, --help               Show this help message
 USAGE
@@ -118,6 +120,10 @@ update_repo_from_git() {
 sync_hosts_template() {
   local source_hosts dest_hosts
 
+  if [ "${UPDATE_HOSTS_TEMPLATE}" != true ]; then
+    return
+  fi
+
   source_hosts="${REPO_ROOT}/hosts.txt"
   dest_hosts="${ORIGINAL_SCRIPT_DIR}/hosts.txt"
 
@@ -126,10 +132,13 @@ sync_hosts_template() {
     return
   fi
 
-  if [ ! -f "${dest_hosts}" ] || ! cmp -s "${source_hosts}" "${dest_hosts}"; then
-    log "Refreshing hosts.txt in ${ORIGINAL_SCRIPT_DIR} from repository copy..."
-    cp "${source_hosts}" "${dest_hosts}"
+  if [ -f "${dest_hosts}" ]; then
+    log "hosts.txt already exists at ${dest_hosts}; not overwriting."
+    return
   fi
+
+  log "Copying hosts.txt template to ${dest_hosts}..."
+  cp "${source_hosts}" "${dest_hosts}"
 }
 
 ensure_repo_ready() {
@@ -173,10 +182,8 @@ ensure_repo_ready() {
       log "Repository updated at ${REPO_ROOT}."
     fi
     resolve_paths
-    sync_hosts_template
   else
     log "Using existing repository at ${REPO_ROOT}."
-    sync_hosts_template
   fi
 }
 
@@ -350,6 +357,8 @@ parse_args() {
         DEPLOY_REMOTE=false; shift ;;
       --no-start-server)
         START_IPERF_SERVER=false; shift ;;
+      --update-hosts-template)
+        UPDATE_HOSTS_TEMPLATE=true; shift ;;
       -h|--help)
         usage; exit 0 ;;
       *)
@@ -469,6 +478,7 @@ main() {
   prompt_ports
   maybe_download_repo
   ensure_repo_ready
+  sync_hosts_template
   resolve_paths
   ensure_docker
   ensure_compose
