@@ -1,4 +1,4 @@
-from typing import Any, List, Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
@@ -12,6 +12,13 @@ class NodeBase(BaseModel):
 
 class NodeCreate(NodeBase):
     pass
+
+
+class NodeUpdate(BaseModel):
+    name: Optional[str] = None
+    ip: Optional[str] = None
+    agent_port: Optional[int] = Field(default=None, ge=1, le=65535)
+    description: Optional[str] = None
 
 
 class NodeRead(NodeBase):
