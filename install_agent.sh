@@ -10,6 +10,7 @@ REPO_REF=${REPO_REF:-""}
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="${SCRIPT_DIR}"
+CACHE_ROOT="${XDG_CACHE_HOME:-$HOME/.cache}/iperf3-test-tools"
 DEFAULT_REPO_URL="$(command -v git >/dev/null 2>&1 && git -C "${REPO_ROOT}" remote get-url origin 2>/dev/null || true)"
 REPO_URL=${REPO_URL:-"${DEFAULT_REPO_URL:-https://github.com/podcctv/iperf3-test-tools.git}"}
 
@@ -40,6 +41,53 @@ update_repo() {
   else
     log "Repository already up to date (${after:0:7})."
   fi
+}
+
+fetch_repo_tarball() {
+  local ref tar_url temp_dir
+  ref="${REPO_REF:-main}"
+  tar_url="${REPO_URL%.git}/archive/refs/heads/${ref}.tar.gz"
+  temp_dir="$1"
+
+  if ! curl -fsSL "${tar_url}" | tar -xz -C "${temp_dir}" --strip-components=1; then
+    log "Failed to download repository tarball from ${tar_url}."
+    return 1
+  fi
+}
+
+ensure_repo_available() {
+  if [ -d "${REPO_ROOT}/agent" ]; then
+    log "Using existing repository at ${REPO_ROOT}."
+    return
+  fi
+
+  mkdir -p "${CACHE_ROOT}"
+  local temp_repo
+  temp_repo="${CACHE_ROOT}/agent-build"
+
+  log "Local agent directory not found; fetching repository into ${temp_repo}..."
+  rm -rf "${temp_repo}"
+
+  if command -v git >/dev/null 2>&1; then
+    if git clone --depth 1 "${REPO_URL}" "${temp_repo}" >/dev/null 2>&1; then
+      if [ -n "${REPO_REF}" ]; then
+        git -C "${temp_repo}" checkout "${REPO_REF}" >/dev/null 2>&1 || log "Checkout ${REPO_REF} failed; using default branch."
+      fi
+      REPO_ROOT="${temp_repo}"
+      return
+    else
+      log "Git clone failed; attempting tarball download..."
+    fi
+  fi
+
+  mkdir -p "${temp_repo}"
+  if fetch_repo_tarball "${temp_repo}"; then
+    REPO_ROOT="${temp_repo}"
+    return
+  fi
+
+  log "Unable to obtain repository; aborting."
+  exit 1
 }
 
 ensure_docker() {
@@ -121,6 +169,7 @@ USAGE
 
 main() {
   parse_args "$@"
+  ensure_repo_available
   update_repo
   ensure_docker
   start_agent

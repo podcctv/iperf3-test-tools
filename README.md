@@ -1,133 +1,104 @@
 # iperf3-test-tools / iperf3 测试工具包
 
-A lightweight **master/agent** toolkit for orchestrating iperf3 tests across multiple servers. The master API keeps track of nodes, triggers tests, stores results, and polls agents for real-time health.
+A lightweight **master/agent** toolkit for orchestrating iperf3 tests across multiple servers. The master API keeps track of nodes, triggers tests, stores results, and polls agents for health and logs.
 
-一个轻量级的 **主控/代理** 工具集，可在多台服务器间编排 iperf3 测试。主控 API 负责管理节点、触发测试、存储结果，并轮询代理获取实时健康状态。
+一个轻量级的 **主控/代理** 工具集，可在多台服务器间编排 iperf3 测试。主控 API 负责管理节点、触发测试、存储结果，并轮询代理获取状态与日志。
 
-## Repository layout / 仓库结构
+## Architecture / 架构概览
 
-```
-agent/          # iperf3 agent container (Flask + iperf3 binary) / iperf3 代理容器
-master-api/     # FastAPI control plane + persistence / FastAPI 控制面与存储
-hosts.txt       # Example inventory file for deploy_agents.sh / 部署清单示例
-deploy_agents.sh
-```
+* **master-api (FastAPI + Postgres)** – central control plane, REST API, embedded dashboard, remote agent lifecycle helpers (redeploy/remove/logs). Runs via Docker Compose with a Postgres service by default.
+* **agent (Flask + iperf3)** – lightweight container exposing control endpoints and the iperf3 server/client binary.
+* **deploy scripts** – `install_master.sh` sets up the master stack (API + dashboard + optional local agent); `install_agent.sh` builds and runs an agent-only container on any host; `deploy_agents.sh` streams the agent image to SSH targets listed in `hosts.txt`.
 
-## Quick start / 快速上手
+## Prerequisites / 先决条件
 
-### Install with auto-update / 自动检测并更新仓库的安装方式
+* Docker & Docker Compose available on the target host(s).
+* Outbound internet access if you want the installers to auto-download the repository or Docker images.
 
-Both installer entrypoints automatically pull repository updates (showing how many commits were fetched) before building images and starting services:
+## Installation / 安装
 
-两个安装入口会在构建镜像并启动服务前自动拉取仓库更新，并展示获取了多少条提交：
-
-* `./install_master.sh` – install the master API, dashboard, and a local agent on the control node (remote deployment disabled by default). /
-  在主控节点上安装 master API、可视化界面以及本地 agent（默认不部署远端）。
-* `./install_agent.sh` – install an agent-only instance on another host; set `--agent-port`/`--iperf-port` if you need non-default ports. /
-  在其他机器上仅安装 agent，可通过 `--agent-port`/`--iperf-port` 指定端口。
-
-Useful flags / 常用参数：
-
-* `./install_master.sh --deploy-remote` – also deploy agents listed in `hosts.txt` using `deploy_agents.sh`. / 通过 `hosts.txt` 触发远程部署。
-* `--no-start-server` – do not auto-start the iperf3 server inside the local agent. / 不自动启动本地 iperf3 server。
-* `--master-port <port>` – override the master API host port (default: `9000`). / 覆盖主控端口。
-* `--web-port <port>` – override the dashboard host port (default: `9100`). / 覆盖网页端口。
-* `--agent-port <port>` – override the agent API host port (default: `8000`). / 覆盖代理端口。
-* `--iperf-port <port>` – override the iperf3 TCP/UDP port (default: `5201`). / 覆盖 iperf3 端口。
-
-### 1) Build images / 构建镜像
+### Master node (API + dashboard + optional local agent) / 主控节点
 
 ```bash
+./install_master.sh [--deploy-remote] [--master-port 9000] [--web-port 9100] [--agent-port 8000] [--iperf-port 5201] [--no-start-server]
+```
+
+* Auto-updates the git checkout when possible, builds the master-api image, brings up Postgres, and starts the dashboard on `http://<host>:9100/web` (password `iperf-pass` by default).
+* With `--deploy-remote`, the script will also call `./deploy_agents.sh` to push the agent image to the SSH hosts listed in `hosts.txt`.
+
+### Agent-only host / 仅部署代理
+
+`install_agent.sh` now works both **inside** the repository and as a standalone file downloaded elsewhere. If no `agent/` directory is found next to the script, it will fetch the repository to `~/.cache/iperf3-test-tools/agent-build` via `git` (or a GitHub tarball as fallback) before building the image.
+
+```bash
+# default ports: agent API 8000, iperf3 5201
+bash ./install_agent.sh [--agent-port 8000] [--iperf-port 5201] [--no-start-server] [--repo-url <url>] [--repo-ref <ref>]
+```
+
+After installation the script prints the URL you can register on the master dashboard, e.g. `http://<agent-ip>:8000` with iperf3 port `5201`.
+
+### Remote agent rollout via SSH / SSH 批量部署
+
+1. Add one host per line to `hosts.txt` (format `user@ip`, optional SSH config).
+2. Build the agent image locally if not present:
+   ```bash
+   docker build -t iperf-agent:latest ./agent
+   ```
+3. Run `./deploy_agents.sh` to stream the image and start containers remotely.
+
+## Running the master stack manually / 手动启动主控服务
+
+```bash
+# Build images
 docker build -t iperf-agent:latest ./agent
 docker-compose build master-api
+
+# Launch API + dashboard + Postgres
+MASTER_API_PORT=9000 MASTER_WEB_PORT=9100 docker-compose up -d
 ```
 
-### 2) Deploy agents / 部署代理
+* API: `http://localhost:9000`
+* Dashboard: `http://localhost:9100/web` (password set by `DASHBOARD_PASSWORD`, default `iperf-pass`).
 
-Create `hosts.txt` with one SSH destination per line (e.g., `root@10.0.0.11`). Then run:
-
-在 `hosts.txt` 中按行写入 SSH 目标（如 `root@10.0.0.11`），然后执行：
-
-```bash
-./deploy_agents.sh
-```
-
-Each agent exposes / 每个代理提供：
-
-* Control API: `http://<agent-ip>:8000`
-* iperf3 server: TCP/UDP `5201` by default (configurable per request) / 默认 TCP/UDP 端口 `5201`，可按请求调整
-
-Key endpoints / 关键接口：
-
-* `GET /health` – returns agent liveness and whether the iperf3 server process is running. / 返回存活与 iperf3 server 运行状态。
-* `POST /start_server` – start iperf3 server (optional body `{ "port": 5201 }`). / 启动 iperf3 server。
-* `POST /stop_server` – stop the iperf3 server. / 停止 iperf3 server。
-* `POST /run_test` – run client test toward another node: `{ "target": "10.0.0.12", "port": 5201, "duration": 10, "protocol": "tcp", "parallel": 1 }`. / 运行指向其他节点的客户端测试。
-
-### 3) Launch the master API / 启动主控 API
-
-```bash
-docker-compose up -d
-```
-
-The API listens on `http://localhost:9000` (port 8000 inside the container) and uses Postgres by default. To use SQLite instead, set `DATABASE_URL=sqlite:///./iperf.db` and run `uvicorn app.main:app` locally.
-
-API 监听 `http://localhost:9000`（容器内 8000 端口），默认使用 Postgres。如需 SQLite，将 `DATABASE_URL=sqlite:///./iperf.db` 并本地运行 `uvicorn app.main:app`。
-
-The built-in dashboard is available at `http://localhost:9100/web` by default (configurable via `--web-port`), protected by a simple password prompt. Set `DASHBOARD_PASSWORD` to override the default `iperf-pass` value before launching.
-
-内置可视化界面默认监听 `http://localhost:9100/web`（可用 `--web-port` 修改），访问时需要输入简单密码。启动前可通过 `DASHBOARD_PASSWORD` 覆盖默认密码 `iperf-pass`。
-
-### 4) Drive the workflow / 操作流程
+## API & dashboard workflow / 使用流程
 
 1. **Register nodes / 注册节点**
-
    ```bash
    curl -X POST http://localhost:9000/nodes \
      -H "Content-Type: application/json" \
-     -d '{"name": "node-a", "ip": "10.0.0.11", "agent_port": 8000}'
+     -d '{"name":"node-a","ip":"10.0.0.11","agent_port":8000,"description":"rack1"}'
    ```
-
-2. **Check real-time status / 查看实时状态**
-
+2. **Check live status / 查看实时状态**
    ```bash
    curl http://localhost:9000/nodes/status
    ```
-
-   The master polls each agent's `/health` endpoint and reports `online/offline`, the agent-reported `server_running` flag, and a timestamp.
-
-   主控轮询各代理的 `/health`，返回 `online/offline`、`server_running` 标记及时间戳。
-
-3. **Create a test / 创建测试**
-
+   The master polls each agent's `/health` endpoint and reports `online/offline`, `server_running`, and a timestamp.
+3. **Run a test / 创建并运行测试**
    ```bash
    curl -X POST http://localhost:9000/tests \
      -H "Content-Type: application/json" \
-     -d '{"src_node_id":1, "dst_node_id":2, "protocol":"tcp", "duration":10, "parallel":1, "port":5201}'
+     -d '{"src_node_id":1,"dst_node_id":2,"protocol":"tcp","duration":10,"parallel":1,"port":5201}'
    ```
-
-   The master calls the source node's agent `/run_test` endpoint, stores the raw iperf3 JSON output, and returns the record.
-
-   主控调用源节点代理的 `/run_test`，保存 iperf3 原始 JSON 输出并返回记录。
-
-4. **List results / 查看结果**
-
+   The master calls the source agent's `/run_test`, stores the raw iperf3 JSON output, and returns the record.
+4. **View results / 查看结果**
    ```bash
    curl http://localhost:9000/tests
    ```
 
+All of these actions are also exposed in the web dashboard (add node, run test, view status, redeploy/remove agents, view agent logs).
+
 ## Environment variables / 环境变量
 
-* `DATABASE_URL` – SQLAlchemy connection string (defaults to SQLite `sqlite:///./iperf.db`). / SQLAlchemy 连接串，默认 SQLite。
-* `REQUEST_TIMEOUT` – HTTP timeout (seconds) used for agent health checks and test dispatch (default 15s). / 健康检查与测试下发的 HTTP 超时时间（秒），默认 15。
-* `DASHBOARD_PASSWORD` – Web dashboard password (default `iperf-pass`). / 网页密码（默认 `iperf-pass`）。
-* `DASHBOARD_SECRET` – Secret used to sign the dashboard auth cookie (default `iperf-dashboard-secret`). / 用于签名认证 Cookie 的密钥。
-* `DASHBOARD_COOKIE_NAME` – Name of the auth cookie (default `iperf_dashboard_auth`). / 认证 Cookie 名称。
-* `AGENT_CONFIG_PATH` – Path to the persisted agent config JSON file (default `./agent_configs.json`). / 远程代理配置 JSON 文件路径，默认 `./agent_configs.json`。
-* `AGENT_IMAGE` – Default Docker image tag used when redeploying agents (default `iperf-agent:latest`). / 远程代理重部署时使用的默认镜像标签，默认 `iperf-agent:latest`。
+* `DATABASE_URL` – SQLAlchemy connection string (default Postgres via Compose, fallback `sqlite:///./iperf.db`).
+* `REQUEST_TIMEOUT` – HTTP timeout for agent health checks and test dispatch (seconds).
+* `DASHBOARD_PASSWORD` – Web dashboard password (default `iperf-pass`).
+* `DASHBOARD_SECRET` – Secret used to sign the dashboard auth cookie (default `iperf-dashboard-secret`).
+* `DASHBOARD_COOKIE_NAME` – Auth cookie name (default `iperf_dashboard_auth`).
+* `AGENT_CONFIG_PATH` – Path where dashboard persists remote agent configs (default `./agent_configs.json`).
+* `AGENT_IMAGE` – Docker image tag used when (re)deploying agents (default `iperf-agent:latest`).
 
 ## Notes / 补充说明
 
-* Real-time agent status is derived from live `/health` probes; if an agent is unreachable, it is marked `offline`. / 在线状态基于实时 `/health` 探测，不可达即视为 offline。
-* `deploy_agents.sh` now streams the local `iperf-agent:latest` image to remote hosts when it is not already present; ensure you build the agent image locally before deploying. / 如果远端缺少 `iperf-agent:latest`，`deploy_agents.sh` 会自动传输本地镜像；请先在本地构建代理镜像。
-* Dashboard-driven remote management actions (redeploy/remove container, view logs) persist their inventory in `agent_configs.json` at the project root by default so settings survive container restarts. / 控制台上的远程管理操作（重新部署、删除容器、查看日志）默认将清单保存在仓库根目录的 `agent_configs.json`，以便容器重启后继续使用。
+* Agent status is derived from live `/health` probes; unreachable nodes show as `offline`.
+* `deploy_agents.sh` streams the local `iperf-agent:latest` image to remote hosts if missing—build it locally first.
+* Dashboard-driven remote management (redeploy/remove container, view logs) persists inventory in `agent_configs.json` so settings survive container restarts.
