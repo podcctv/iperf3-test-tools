@@ -15,37 +15,25 @@ deploy_agents.sh
 
 ## Quick start / 快速上手
 
-### One-click bootstrap / 一键引导
+### Install with auto-update / 自动检测并更新仓库的安装方式
 
-Build images, start the master API stack, launch a local agent (with iperf3 server), and optionally deploy remote agents in one command:
+Both installer entrypoints automatically pull repository updates (showing how many commits were fetched) before building images and starting services:
 
-使用一条命令构建镜像、启动主控 API、运行本地代理（含 iperf3 server），并可选部署远程代理：
-
-```bash
-./install_all.sh
-```
-
-Dedicated entrypoints are also available:
+两个安装入口会在构建镜像并启动服务前自动拉取仓库更新，并展示获取了多少条提交：
 
 * `./install_master.sh` – install the master API, dashboard, and a local agent on the control node (remote deployment disabled by default). /
   在主控节点上安装 master API、可视化界面以及本地 agent（默认不部署远端）。
 * `./install_agent.sh` – install an agent-only instance on another host; set `--agent-port`/`--iperf-port` if you need non-default ports. /
   在其他机器上仅安装 agent，可通过 `--agent-port`/`--iperf-port` 指定端口。
 
-You will be prompted to choose whether to install the **master**, **agent**, or **both**, and to confirm the master/agent ports before installation begins. Use flags to skip prompts in automated environments.
+Useful flags / 常用参数：
 
-脚本会提示选择安装 **master**、**agent** 或 **both**，并确认端口。自动化环境可使用参数跳过交互。
-
-Flags of interest / 常用参数：
-
-* `--install-target <master|agent|all>` – limit installation to a specific component (defaults to interactive prompt). / 指定安装目标。
-* `--no-local-agent` – skip running the local agent container. / 跳过本地代理容器。
+* `./install_master.sh --deploy-remote` – also deploy agents listed in `hosts.txt` using `deploy_agents.sh`. / 通过 `hosts.txt` 触发远程部署。
 * `--no-start-server` – do not auto-start the iperf3 server inside the local agent. / 不自动启动本地 iperf3 server。
-* `--no-remote` – skip remote agent deployment. / 不部署远程代理。
-* `--hosts <file>` – set an alternate inventory file for remote deployment (defaults to `hosts.txt`). / 指定主机清单。
 * `--master-port <port>` – override the master API host port (default: `9000`). / 覆盖主控端口。
 * `--web-port <port>` – override the dashboard host port (default: `9100`). / 覆盖网页端口。
 * `--agent-port <port>` – override the agent API host port (default: `8000`). / 覆盖代理端口。
+* `--iperf-port <port>` – override the iperf3 TCP/UDP port (default: `5201`). / 覆盖 iperf3 端口。
 
 ### 1) Build images / 构建镜像
 
