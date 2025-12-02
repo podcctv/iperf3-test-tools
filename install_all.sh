@@ -433,19 +433,46 @@ prompt_ports() {
   local input
 
   if [ -t 0 ]; then
-    read -rp "Master API port [${MASTER_API_PORT}]: " input || true
-    if [ -n "$input" ]; then
-      MASTER_API_PORT="$input"
+    if [ "${INSTALL_MASTER}" = true ]; then
+      read -rp "Master API port [${MASTER_API_PORT}]: " input || true
+      if [ -n "$input" ]; then
+        MASTER_API_PORT="$input"
+      fi
+
+      read -rp "Dashboard port [${MASTER_WEB_PORT}]: " input || true
+      if [ -n "$input" ]; then
+        MASTER_WEB_PORT="$input"
+      fi
     fi
 
-    read -rp "Dashboard port [${MASTER_WEB_PORT}]: " input || true
-    if [ -n "$input" ]; then
-      MASTER_WEB_PORT="$input"
+    if [ "${INSTALL_AGENT}" = true ]; then
+      read -rp "Agent API port [${AGENT_PORT}]: " input || true
+      if [ -n "$input" ]; then
+        AGENT_PORT="$input"
+      fi
     fi
+  fi
+}
 
-    read -rp "Agent API port [${AGENT_PORT}]: " input || true
-    if [ -n "$input" ]; then
-      AGENT_PORT="$input"
+confirm_agent_reinstall() {
+  if [ "${INSTALL_AGENT}" != true ] || [ "${INSTALL_MASTER}" = true ]; then
+    return
+  fi
+
+  if ! command -v docker >/dev/null 2>&1; then
+    log "Docker not available; skipping agent reinstall check."
+    return
+  fi
+
+  if docker ps -a --format '{{.Names}}' | grep -q '^iperf-agent$'; then
+    if [ -t 0 ]; then
+      read -rp "Agent container 'iperf-agent' detected. Reinstall? [y/N]: " reply || true
+      if [[ ! "$reply" =~ ^[Yy]$ ]]; then
+        log "Agent reinstall cancelled by user."
+        exit 0
+      fi
+    else
+      log "Agent container 'iperf-agent' detected; proceeding with reinstall (non-interactive)."
     fi
   fi
 }
@@ -573,6 +600,7 @@ main() {
   sync_hosts_template
   resolve_paths
   ensure_docker
+  confirm_agent_reinstall
   prevent_agent_when_master_present
   ensure_compose
   build_images
