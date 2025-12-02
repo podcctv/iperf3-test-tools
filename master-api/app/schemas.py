@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any, Optional
 
 from pydantic import BaseModel, Field
@@ -55,7 +56,7 @@ class TestRead(BaseModel):
     params: Any
     raw_result: Any
     summary: Any | None = None
-    created_at: str | None = None
+    created_at: datetime | None = None
 
     class Config:
         orm_mode = True
@@ -93,8 +94,8 @@ class TestScheduleUpdate(BaseModel):
 
 class TestScheduleRead(TestScheduleBase):
     id: int
-    last_run_at: Optional[str] = None
-    next_run_at: Optional[str] = None
+    last_run_at: Optional[datetime] = None
+    next_run_at: Optional[datetime] = None
 
     class Config:
         orm_mode = True
