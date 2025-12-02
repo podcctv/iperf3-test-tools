@@ -12,6 +12,7 @@ DEPLOY_REMOTE=${DEPLOY_REMOTE:-false}
 HOSTS_FILE=${HOSTS_FILE:-""}
 CLEAN_EXISTING=${CLEAN_EXISTING:-false}
 REPO_REF=${REPO_REF:-""}
+PORT_CONFIG_FILE=${PORT_CONFIG_FILE:-""}
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT=""
@@ -19,6 +20,60 @@ DEFAULT_REPO_URL=""
 COMPOSE_CMD=""
 
 log() { printf "[install-master] %s\n" "$*"; }
+
+detect_public_ip() {
+  local ip
+  if command -v curl >/dev/null 2>&1; then
+    ip=$(curl -fsS https://api.ipify.org 2>/dev/null || true)
+  fi
+
+  if [ -z "${ip}" ] && command -v dig >/dev/null 2>&1; then
+    ip=$(dig +short myip.opendns.com @resolver1.opendns.com 2>/dev/null | tail -n1)
+  fi
+
+  echo "${ip:-}"
+}
+
+maybe_load_port_config() {
+  local config_path="${PORT_CONFIG_FILE}" candidate
+
+  if [ -z "${config_path}" ]; then
+    for candidate in "${SCRIPT_DIR}/ports.env" "${PWD}/ports.env"; do
+      if [ -f "${candidate}" ]; then
+        config_path="${candidate}"
+        break
+      fi
+    done
+  fi
+
+  if [ -n "${config_path}" ]; then
+    if [ -f "${config_path}" ]; then
+      # shellcheck disable=SC1090
+      set -a; source "${config_path}"; set +a
+      log "Loaded port configuration from ${config_path}."
+    else
+      log "Port config file ${config_path} not found; continuing with defaults and CLI args."
+    fi
+  fi
+}
+
+preprocess_config_arg() {
+  local expect_path=false arg
+  for arg in "$@"; do
+    if [ "${expect_path}" = true ]; then
+      PORT_CONFIG_FILE="$arg"
+      expect_path=false
+      continue
+    fi
+
+    case "${arg}" in
+      --config)
+        expect_path=true ;;
+      --config=*)
+        PORT_CONFIG_FILE="${arg#--config=}" ;;
+    esac
+  done
+}
 
 detect_repo_root() {
   local git_root="" fallback=""
@@ -253,6 +308,10 @@ deploy_remote_agents() {
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
+      --config)
+        PORT_CONFIG_FILE="$2"; shift 2 ;;
+      --config=*)
+        PORT_CONFIG_FILE="${1#--config=}"; shift 1 ;;
       --deploy-remote)
         DEPLOY_REMOTE=true; shift ;;
       --agent-port)
@@ -276,6 +335,7 @@ parse_args() {
       -h|--help)
         cat <<'USAGE'
   Usage: install_master.sh [options]
+    --config <path>          Source port variables from a file before applying flags
     --deploy-remote          Deploy agents to hosts listed in an inventory file
     --agent-port <port>      Agent API port to expose (default: 8000)
     --iperf-port <port>      iperf3 TCP/UDP port to expose (default: 5201)
@@ -298,6 +358,8 @@ USAGE
 }
 
 main() {
+  preprocess_config_arg "$@"
+  maybe_load_port_config
   parse_args "$@"
   detect_repo_root
   REPO_URL=${REPO_URL:-"${DEFAULT_REPO_URL:-https://github.com/podcctv/iperf3-test-tools.git}"}
@@ -311,10 +373,17 @@ main() {
   start_agent
   deploy_remote_agents
 
+  local public_ip host_display
+  public_ip=$(detect_public_ip)
+  host_display=${public_ip:-localhost}
+
   log "Bootstrap complete."
-  log "  Master API on http://localhost:${MASTER_API_PORT}."
-  log "  Dashboard UI on http://localhost:${MASTER_WEB_PORT}/web."
-  log "  Local agent on http://localhost:${AGENT_PORT}."
+  if [ -z "${public_ip}" ]; then
+    log "  Public IP not detected; falling back to localhost for display."
+  fi
+  log "  Master API on http://${host_display}:${MASTER_API_PORT}."
+  log "  Dashboard UI on http://${host_display}:${MASTER_WEB_PORT}/web."
+  log "  Local agent on http://${host_display}:${AGENT_PORT}."
 }
 
 main "$@"
