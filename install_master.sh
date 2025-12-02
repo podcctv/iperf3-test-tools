@@ -14,12 +14,33 @@ CLEAN_EXISTING=${CLEAN_EXISTING:-false}
 REPO_REF=${REPO_REF:-""}
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="${SCRIPT_DIR}"
-DEFAULT_REPO_URL="$(command -v git >/dev/null 2>&1 && git -C "${REPO_ROOT}" remote get-url origin 2>/dev/null || true)"
-REPO_URL=${REPO_URL:-"${DEFAULT_REPO_URL:-https://github.com/podcctv/iperf3-test-tools.git}"}
+REPO_ROOT=""
+DEFAULT_REPO_URL=""
 COMPOSE_CMD=""
 
 log() { printf "[install-master] %s\n" "$*"; }
+
+detect_repo_root() {
+  local git_root="" fallback=""
+
+  if command -v git >/dev/null 2>&1; then
+    git_root=$(git -C "${SCRIPT_DIR}" rev-parse --show-toplevel 2>/dev/null || true)
+  fi
+
+  if [ -n "${git_root}" ] && [ -d "${git_root}" ]; then
+    REPO_ROOT="${git_root}"
+  elif [ -f "${SCRIPT_DIR}/docker-compose.yml" ]; then
+    REPO_ROOT="${SCRIPT_DIR}"
+  elif [ -f "${PWD}/docker-compose.yml" ]; then
+    REPO_ROOT="${PWD}"
+  else
+    REPO_ROOT="${SCRIPT_DIR}"
+  fi
+
+  if [ -z "${DEFAULT_REPO_URL}" ] && command -v git >/dev/null 2>&1; then
+    DEFAULT_REPO_URL="$(git -C "${REPO_ROOT}" remote get-url origin 2>/dev/null || true)"
+  fi
+}
 
 ensure_command() {
   local bin=$1 pkg=$2
@@ -93,7 +114,8 @@ ensure_compose() {
 ensure_compose_file() {
   local compose_file="${REPO_ROOT}/docker-compose.yml"
   if [ ! -f "${compose_file}" ]; then
-    log "Missing compose file at ${compose_file}. Ensure you are running the installer from a valid checkout."
+    log "Missing compose file at ${compose_file}."
+    log "Ensure you are running the installer from a valid checkout (repo root: ${REPO_ROOT})."
     exit 1
   fi
 }
@@ -242,6 +264,8 @@ USAGE
 
 main() {
   parse_args "$@"
+  detect_repo_root
+  REPO_URL=${REPO_URL:-"${DEFAULT_REPO_URL:-https://github.com/podcctv/iperf3-test-tools.git}"}
   update_repo
   ensure_docker
   ensure_compose
