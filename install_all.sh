@@ -78,6 +78,66 @@ maybe_download_repo() {
   download_repo
 }
 
+is_repo_complete() {
+  [ -d "${REPO_ROOT}/agent" ] && [ -d "${REPO_ROOT}/master-api" ] && [ -f "${REPO_ROOT}/docker-compose.yml" ]
+}
+
+update_repo_from_git() {
+  if [ -z "${REPO_URL}" ] || [ ! -d "${REPO_ROOT}/.git" ]; then
+    return 1
+  fi
+
+  if ! command -v git >/dev/null 2>&1; then
+    log "git is required to update the existing repository automatically."
+    return 1
+  fi
+
+  log "Updating existing repository at ${REPO_ROOT} from ${REPO_URL} (ref: ${REPO_REF})..."
+  git -C "${REPO_ROOT}" remote set-url origin "${REPO_URL}" || true
+  git -C "${REPO_ROOT}" fetch origin
+  git -C "${REPO_ROOT}" checkout "${REPO_REF}"
+  git -C "${REPO_ROOT}" pull --ff-only origin "${REPO_REF}"
+}
+
+ensure_repo_ready() {
+  local needs_refresh=false
+
+  if ! is_repo_complete; then
+    log "Required project files missing at ${REPO_ROOT}."
+    needs_refresh=true
+  fi
+
+  if [ "${needs_refresh}" = false ] && [ -n "${REPO_URL}" ] && [ -d "${REPO_ROOT}/.git" ]; then
+    local current_ref origin_url
+    current_ref=$(git -C "${REPO_ROOT}" rev-parse --abbrev-ref HEAD 2>/dev/null || git -C "${REPO_ROOT}" rev-parse HEAD 2>/dev/null || echo "")
+    origin_url=$(git -C "${REPO_ROOT}" remote get-url origin 2>/dev/null || echo "")
+
+    if [ -n "${origin_url}" ] && [ "${origin_url}" != "${REPO_URL}" ]; then
+      log "Local repository origin (${origin_url}) differs from requested URL (${REPO_URL})."
+      needs_refresh=true
+    elif [ -n "${REPO_REF}" ] && [ -n "${current_ref}" ] && [ "${current_ref}" != "${REPO_REF}" ]; then
+      log "Local repository ref (${current_ref}) differs from requested ref (${REPO_REF})."
+      needs_refresh=true
+    fi
+  fi
+
+  if [ "${needs_refresh}" = true ]; then
+    if ! update_repo_from_git; then
+      if [ -z "${REPO_URL}" ]; then
+        log "Set REPO_URL (and optionally REPO_REF) to allow automatic download/update of the project." >&2
+        exit 1
+      fi
+
+      download_repo
+    else
+      log "Repository updated at ${REPO_ROOT}."
+    fi
+    resolve_paths
+  else
+    log "Using existing repository at ${REPO_ROOT}."
+  fi
+}
+
 ensure_docker() {
   if command -v docker >/dev/null 2>&1; then
     return
@@ -103,17 +163,6 @@ ensure_compose() {
 }
 
 build_images() {
-  if [ ! -d "${REPO_ROOT}/agent" ]; then
-    if [ "${DOWNLOAD_LATEST}" = true ] || [ -n "${REPO_URL}" ]; then
-      log "Agent directory missing at ${REPO_ROOT}/agent; attempting repository download..."
-      download_repo
-      resolve_paths
-    else
-      log "Agent directory missing at ${REPO_ROOT}/agent. Run from a full checkout or provide --download-latest with --repo-url."
-      exit 1
-    fi
-  fi
-
   log "Building agent image (${AGENT_IMAGE})..."
   docker build -t "${AGENT_IMAGE}" "${REPO_ROOT}/agent"
 
@@ -204,6 +253,7 @@ resolve_paths() {
 main() {
   parse_args "$@"
   maybe_download_repo
+  ensure_repo_ready
   resolve_paths
   ensure_docker
   ensure_compose
