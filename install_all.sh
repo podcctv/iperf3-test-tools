@@ -512,6 +512,8 @@ main() {
   if [ "${INSTALL_MASTER}" = true ]; then
     log "  Master API on http://localhost:${MASTER_API_PORT}."
     log "  Dashboard UI on http://localhost:${MASTER_WEB_PORT}/web."
+    local dashboard_password="${DASHBOARD_PASSWORD:-iperf-pass}"
+    log "  Dashboard password: ${dashboard_password}"
   fi
 
   if [ "${INSTALL_AGENT}" = true ]; then
