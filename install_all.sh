@@ -6,6 +6,7 @@ set -euo pipefail
 AGENT_IMAGE=${AGENT_IMAGE:-"iperf-agent:latest"}
 AGENT_PORT=${AGENT_PORT:-8000}
 IPERF_PORT=${IPERF_PORT:-5201}
+MASTER_API_PORT=${MASTER_API_PORT:-9000}
 HOSTS_FILE=${HOSTS_FILE:-"hosts.txt"}
 START_IPERF_SERVER=${START_IPERF_SERVER:-true}
 DEPLOY_REMOTE=${DEPLOY_REMOTE:-true}
@@ -14,6 +15,9 @@ DOWNLOAD_LATEST=${DOWNLOAD_LATEST:-false}
 REPO_URL=${REPO_URL:-""}
 REPO_REF=${REPO_REF:-"main"}
 REPO_DEST=${REPO_DEST:-""}
+INSTALL_TARGET=${INSTALL_TARGET:-""}
+INSTALL_MASTER=${INSTALL_MASTER:-false}
+INSTALL_AGENT=${INSTALL_AGENT:-false}
 
 ORIGINAL_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="${ORIGINAL_SCRIPT_DIR}"
@@ -29,7 +33,9 @@ Options:
   --hosts <path>           Path to hosts inventory for remote deployment (default: hosts.txt)
   --agent-image <name>     Docker image tag for the agent (default: iperf-agent:latest)
   --agent-port <port>      Port to expose the agent API on the host (default: 8000)
+  --master-port <port>     Port to expose the master API on the host (default: 9000)
   --iperf-port <port>      Port to expose iperf3 server TCP/UDP (default: 5201)
+  --install-target <name>  Which components to install: master, agent, or all (default: prompt)
   --download-latest        Download the latest repository before running (requires --repo-url)
   --repo-url <url>         Repository URL to clone (e.g., https://github.com/org/iperf3-test-tools.git)
   --repo-ref <ref>         Branch, tag, or commit to fetch when downloading (default: main)
@@ -163,19 +169,33 @@ ensure_compose() {
 }
 
 build_images() {
-  log "Building agent image (${AGENT_IMAGE})..."
-  docker build -t "${AGENT_IMAGE}" "${REPO_ROOT}/agent"
+  if [ "${INSTALL_AGENT}" = true ]; then
+    log "Building agent image (${AGENT_IMAGE})..."
+    docker build -t "${AGENT_IMAGE}" "${REPO_ROOT}/agent"
+  fi
 
-  log "Building master-api service..."
-  ${COMPOSE_CMD} -f "${REPO_ROOT}/docker-compose.yml" build master-api
+  if [ "${INSTALL_MASTER}" = true ]; then
+    log "Building master-api service..."
+    MASTER_API_PORT="${MASTER_API_PORT}" ${COMPOSE_CMD} -f "${REPO_ROOT}/docker-compose.yml" build master-api
+  fi
 }
 
 start_master() {
+  if [ "${INSTALL_MASTER}" != true ]; then
+    log "Master installation skipped by target selection."
+    return
+  fi
+
   log "Starting master-api (and dependencies) via docker compose..."
-  ${COMPOSE_CMD} -f "${REPO_ROOT}/docker-compose.yml" up -d db master-api
+  MASTER_API_PORT="${MASTER_API_PORT}" ${COMPOSE_CMD} -f "${REPO_ROOT}/docker-compose.yml" up -d db master-api
 }
 
 start_local_agent() {
+  if [ "${INSTALL_AGENT}" != true ]; then
+    log "Local agent installation skipped by target selection."
+    return
+  fi
+
   log "Launching local agent container (ports ${AGENT_PORT} and ${IPERF_PORT})..."
   docker rm -f iperf-agent >/dev/null 2>&1 || true
   docker run -d --name iperf-agent \
@@ -196,6 +216,11 @@ start_local_agent() {
 }
 
 deploy_remote_agents() {
+  if [ "${INSTALL_AGENT}" != true ]; then
+    log "Remote deployment skipped because agent installation was not selected."
+    return
+  fi
+
   if [ "${DEPLOY_REMOTE}" != true ]; then
     log "Remote deployment skipped by flag."
     return
@@ -219,6 +244,8 @@ parse_args() {
         AGENT_IMAGE=$2; shift 2 ;;
       --agent-port)
         AGENT_PORT=$2; shift 2 ;;
+      --master-port)
+        MASTER_API_PORT=$2; shift 2 ;;
       --iperf-port)
         IPERF_PORT=$2; shift 2 ;;
       --download-latest)
@@ -229,6 +256,8 @@ parse_args() {
         REPO_REF=$2; shift 2 ;;
       --repo-dest)
         REPO_DEST=$2; shift 2 ;;
+      --install-target)
+        INSTALL_TARGET=$2; shift 2 ;;
       --no-local-agent)
         START_LOCAL_AGENT=false; shift ;;
       --no-remote)
@@ -250,25 +279,103 @@ resolve_paths() {
   fi
 }
 
+prompt_install_target() {
+  if [ -n "${INSTALL_TARGET}" ] || [ ! -t 0 ]; then
+    return
+  fi
+
+  cat <<'PROMPT'
+Select installation target:
+  1) master (master API only)
+  2) agent (local/remote agents only)
+  3) all (master API and agents)
+PROMPT
+  read -rp "Enter choice [1-3]: " choice
+  case "$choice" in
+    1) INSTALL_TARGET="master" ;;
+    2) INSTALL_TARGET="agent" ;;
+    3) INSTALL_TARGET="all" ;;
+    *)
+      log "Invalid selection. Please choose 1, 2, or 3."
+      prompt_install_target
+      ;;
+  esac
+}
+
+prompt_ports() {
+  local input
+
+  if [ -t 0 ]; then
+    read -rp "Master API port [${MASTER_API_PORT}]: " input || true
+    if [ -n "$input" ]; then
+      MASTER_API_PORT="$input"
+    fi
+
+    read -rp "Agent API port [${AGENT_PORT}]: " input || true
+    if [ -n "$input" ]; then
+      AGENT_PORT="$input"
+    fi
+  fi
+}
+
+set_install_flags() {
+  case "${INSTALL_TARGET}" in
+    master)
+      INSTALL_MASTER=true
+      INSTALL_AGENT=false
+      DEPLOY_REMOTE=false
+      START_LOCAL_AGENT=false
+      ;;
+    agent)
+      INSTALL_MASTER=false
+      INSTALL_AGENT=true
+      ;;
+    all|"")
+      INSTALL_MASTER=true
+      INSTALL_AGENT=true
+      ;;
+    *)
+      log "Unknown installation target: ${INSTALL_TARGET}. Use master, agent, or all."
+      exit 1
+      ;;
+  esac
+}
+
 main() {
   parse_args "$@"
+  prompt_install_target
+  prompt_ports
+  set_install_flags
   maybe_download_repo
   ensure_repo_ready
   resolve_paths
   ensure_docker
   ensure_compose
   build_images
-  start_master
 
-  if [ "${START_LOCAL_AGENT}" = true ]; then
-    start_local_agent
-  else
-    log "Local agent launch skipped by flag."
+  if [ "${INSTALL_MASTER}" = true ]; then
+    start_master
   fi
 
-  deploy_remote_agents
+  if [ "${INSTALL_AGENT}" = true ]; then
+    if [ "${START_LOCAL_AGENT}" = true ]; then
+      start_local_agent
+    else
+      log "Local agent launch skipped by flag."
+    fi
 
-  log "Bootstrap complete. Master API on http://localhost:9000; local agent on http://localhost:${AGENT_PORT}."
+    deploy_remote_agents
+  fi
+
+  log "Bootstrap complete."
+
+  if [ "${INSTALL_MASTER}" = true ]; then
+    log "  Master API on http://localhost:${MASTER_API_PORT}."
+  fi
+
+  if [ "${INSTALL_AGENT}" = true ]; then
+    log "  Local agent on http://localhost:${AGENT_PORT}."
+  fi
 }
 
 main "$@"

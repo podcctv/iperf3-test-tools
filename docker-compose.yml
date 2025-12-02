@@ -17,7 +17,7 @@ services:
       DATABASE_URL: postgresql://iperf:iperf_pass@db:5432/iperf_db
       REQUEST_TIMEOUT: 10
     ports:
-      - "9000:8000"
+      - "${MASTER_API_PORT:-9000}:8000"
     depends_on:
       - db
     restart: unless-stopped
