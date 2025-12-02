@@ -128,8 +128,11 @@ The built-in dashboard is available at `http://localhost:9100/web` by default (c
 * `DASHBOARD_PASSWORD` – Web dashboard password (default `iperf-pass`). / 网页密码（默认 `iperf-pass`）。
 * `DASHBOARD_SECRET` – Secret used to sign the dashboard auth cookie (default `iperf-dashboard-secret`). / 用于签名认证 Cookie 的密钥。
 * `DASHBOARD_COOKIE_NAME` – Name of the auth cookie (default `iperf_dashboard_auth`). / 认证 Cookie 名称。
+* `AGENT_CONFIG_PATH` – Path to the persisted agent config JSON file (default `./agent_configs.json`). / 远程代理配置 JSON 文件路径，默认 `./agent_configs.json`。
+* `AGENT_IMAGE` – Default Docker image tag used when redeploying agents (default `iperf-agent:latest`). / 远程代理重部署时使用的默认镜像标签，默认 `iperf-agent:latest`。
 
 ## Notes / 补充说明
 
 * Real-time agent status is derived from live `/health` probes; if an agent is unreachable, it is marked `offline`. / 在线状态基于实时 `/health` 探测，不可达即视为 offline。
 * `deploy_agents.sh` now streams the local `iperf-agent:latest` image to remote hosts when it is not already present; ensure you build the agent image locally before deploying. / 如果远端缺少 `iperf-agent:latest`，`deploy_agents.sh` 会自动传输本地镜像；请先在本地构建代理镜像。
+* Dashboard-driven remote management actions (redeploy/remove container, view logs) persist their inventory in `agent_configs.json` at the project root by default so settings survive container restarts. / 控制台上的远程管理操作（重新部署、删除容器、查看日志）默认将清单保存在仓库根目录的 `agent_configs.json`，以便容器重启后继续使用。
