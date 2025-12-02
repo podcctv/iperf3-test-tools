@@ -1,2 +1,5 @@
 # Add one SSH destination per line (e.g., root@10.0.0.11)
 # This file is consumed by deploy_agents.sh
+# Example hosts for reference (replace with your real servers):
+# root@192.0.2.10
+# ubuntu@198.51.100.42
