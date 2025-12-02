@@ -6,7 +6,7 @@ from typing import List
 import httpx
 from fastapi import Body, Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from .config import settings
@@ -20,6 +20,7 @@ from .schemas import (
     AgentConfigRead,
     AgentConfigUpdate,
     NodeCreate,
+    NodeUpdate,
     NodeRead,
     NodeWithStatus,
     TestCreate,
@@ -72,6 +73,9 @@ def _login_html() -> str:
     .alert.success { background: #064e3b; color: #bbf7d0; }
     .topbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px; }
     .topbar button { width: auto; padding: 10px 14px; background: #f97316; color: #0b1220; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 8px 10px; border-bottom: 1px solid #1f2937; text-align: left; }
+    th { color: #cbd5e1; font-weight: 700; }
   </style>
 </head>
 <body>
@@ -209,6 +213,7 @@ def _login_html() -> str:
     const nodeDesc = document.getElementById('node-desc');
     const nodesList = document.getElementById('nodes-list');
     const testsList = document.getElementById('tests-list');
+    const saveNodeBtn = document.getElementById('save-node');
     const srcSelect = document.getElementById('src-select');
     const dstSelect = document.getElementById('dst-select');
     const addNodeAlert = document.getElementById('add-node-alert');
@@ -218,12 +223,54 @@ def _login_html() -> str:
     const agentLogs = document.getElementById('agent-logs');
     const agentLogsContent = document.getElementById('agent-logs-content');
     let agentConfigCache = [];
+    let editingNodeId = null;
 
 
     function show(el) { el.classList.remove('hidden'); }
     function hide(el) { el.classList.add('hidden'); }
     function setAlert(el, message) { el.textContent = message; show(el); }
     function clearAlert(el) { el.textContent = ''; hide(el); }
+
+
+    function resetNodeForm() {
+      nodeName.value = '';
+      nodeIp.value = '';
+      nodePort.value = 8000;
+      nodeDesc.value = '';
+      editingNodeId = null;
+      saveNodeBtn.textContent = 'Save Node';
+    }
+
+
+    function beginEditNode(node) {
+      editingNodeId = node.id;
+      nodeName.value = node.name || '';
+      nodeIp.value = node.ip || '';
+      nodePort.value = node.agent_port || 8000;
+      nodeDesc.value = node.description || '';
+      saveNodeBtn.textContent = 'Update Node';
+      addNodeAlert.textContent = '';
+    }
+
+
+    async function removeNode(nodeId) {
+      clearAlert(addNodeAlert);
+      const confirmDelete = confirm('Delete this node and any related tests?');
+      if (!confirmDelete) return;
+
+      const res = await fetch(`/nodes/${nodeId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        setAlert(addNodeAlert, 'Failed to delete node.');
+        return;
+      }
+
+      if (editingNodeId === nodeId) {
+        resetNodeForm();
+      }
+
+      await refreshNodes();
+      await refreshTests();
+    }
 
 
     function fillAgentForm(config) {
@@ -463,6 +510,27 @@ def _login_html() -> str:
           `<div><strong>${node.name}</strong> <span class=\"muted\">(${node.ip}:${node.agent_port})</span><br/>` +
           `<span class=\"muted\">Server: ${server}</span></div>` +
           `${badge}</div>`;
+
+        const actions = document.createElement('div');
+        actions.className = 'inline';
+        actions.style.gap = '8px';
+        actions.style.marginTop = '6px';
+
+        const editBtn = document.createElement('button');
+        editBtn.textContent = 'Edit';
+        editBtn.style.width = 'auto';
+        editBtn.style.background = '#38bdf8';
+        editBtn.onclick = () => beginEditNode(node);
+        actions.appendChild(editBtn);
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.textContent = 'Delete';
+        deleteBtn.style.width = 'auto';
+        deleteBtn.style.background = '#ef4444';
+        deleteBtn.onclick = () => removeNode(node.id);
+        actions.appendChild(deleteBtn);
+
+        item.appendChild(actions);
         nodesList.appendChild(item);
 
         const optionA = document.createElement('option');
@@ -477,6 +545,60 @@ def _login_html() -> str:
       });
     }
 
+    function summarizeTestMetrics(raw) {
+      const end = (raw && raw.end) || {};
+      const sumReceived = end.sum_received || end.sum;
+      const sumSent = end.sum_sent || end.sum;
+      const firstStream = (end.streams && end.streams.length) ? end.streams[0] : null;
+      const receiverStream = firstStream && firstStream.receiver ? firstStream.receiver : null;
+      const senderStream = firstStream && firstStream.sender ? firstStream.sender : null;
+
+      const bitsPerSecond =
+        (sumReceived && sumReceived.bits_per_second) ||
+        (receiverStream && receiverStream.bits_per_second) ||
+        (sumSent && sumSent.bits_per_second) ||
+        (senderStream && senderStream.bits_per_second);
+
+      const jitterMs =
+        (sumReceived && sumReceived.jitter_ms) ||
+        (sumSent && sumSent.jitter_ms) ||
+        (receiverStream && receiverStream.jitter_ms) ||
+        (senderStream && senderStream.jitter_ms);
+
+      const lostPercent =
+        (sumReceived && (sumReceived.lost_percent ?? (sumReceived.lost_packets && sumReceived.packets ? (sumReceived.lost_packets / sumReceived.packets) * 100 : undefined))) ||
+        (sumSent && sumSent.lost_percent) ||
+        (receiverStream && receiverStream.lost_percent) ||
+        (senderStream && senderStream.lost_percent);
+
+      let latencyMs =
+        (senderStream && (senderStream.mean_rtt || senderStream.rtt)) ||
+        (receiverStream && (receiverStream.mean_rtt || receiverStream.rtt));
+      if (latencyMs && latencyMs > 1000) {
+        latencyMs = latencyMs / 1000; // convert microseconds to milliseconds if needed
+      }
+
+      return { bitsPerSecond, jitterMs, lostPercent, latencyMs };
+    }
+
+
+    function formatMetric(value, decimals = 2) {
+      if (value === undefined || value === null || Number.isNaN(value)) return 'N/A';
+      return Number(value).toFixed(decimals);
+    }
+
+
+    async function deleteTestResult(testId) {
+      clearAlert(testAlert);
+      const res = await fetch(`/tests/${testId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        setAlert(testAlert, 'Failed to delete test result.');
+        return;
+      }
+      await refreshTests();
+    }
+
+
     async function refreshTests() {
       const res = await fetch('/tests');
       const tests = await res.json();
@@ -485,16 +607,60 @@ def _login_html() -> str:
         return;
       }
       testsList.innerHTML = '';
-      tests.slice().reverse().forEach((test) => {
-        const div = document.createElement('div');
-        div.style.borderBottom = '1px solid #1f2937';
-        div.style.padding = '8px 0';
-        const created = test.created_at || 'unknown time';
-        div.innerHTML = `<strong>Test #${test.id}</strong> <span class=\"muted\">(${test.protocol.toUpperCase()} @ port ${test.params.port})</span><br/>` +
-          `<span class=\"muted\">Source ID: ${test.src_node_id} → Dest ID: ${test.dst_node_id} | Duration: ${test.params.duration}s | Parallel: ${test.params.parallel}</span><br/>` +
-          `<details style=\"margin-top:6px;\"><summary>Raw result</summary><pre>${JSON.stringify(test.raw_result, null, 2)}</pre></details>`;
-        testsList.appendChild(div);
+
+      const table = document.createElement('table');
+      const header = document.createElement('tr');
+      ['ID', 'Path', 'Protocol', 'Port', 'Duration (s)', 'Rate (Mbps)', 'Latency/Jitter (ms)', 'Loss (%)', 'Actions'].forEach((label) => {
+        const th = document.createElement('th');
+        th.textContent = label;
+        header.appendChild(th);
       });
+      table.appendChild(header);
+
+      tests.slice().reverse().forEach((test) => {
+        const metrics = summarizeTestMetrics(test.raw_result || {});
+        const row = document.createElement('tr');
+        const latencyValue = (metrics.latencyMs !== undefined && metrics.latencyMs !== null)
+          ? metrics.latencyMs
+          : ((metrics.jitterMs !== undefined && metrics.jitterMs !== null) ? metrics.jitterMs : null);
+
+        const cells = [
+          `#${test.id}`,
+          `${test.src_node_id} → ${test.dst_node_id}`,
+          test.protocol.toUpperCase(),
+          test.params.port,
+          test.params.duration,
+          metrics.bitsPerSecond ? formatMetric(metrics.bitsPerSecond / 1e6, 2) : 'N/A',
+          latencyValue !== null ? `${formatMetric(latencyValue)} ms` : 'N/A',
+          metrics.lostPercent !== undefined && metrics.lostPercent !== null ? `${formatMetric(metrics.lostPercent)}%` : 'N/A',
+        ];
+
+        cells.forEach((value) => {
+          const td = document.createElement('td');
+          td.textContent = value;
+          row.appendChild(td);
+        });
+
+        const actionsTd = document.createElement('td');
+        const deleteBtn = document.createElement('button');
+        deleteBtn.textContent = 'Delete';
+        deleteBtn.style.width = 'auto';
+        deleteBtn.style.background = '#ef4444';
+        deleteBtn.onclick = () => deleteTestResult(test.id);
+        actionsTd.appendChild(deleteBtn);
+        row.appendChild(actionsTd);
+
+        table.appendChild(row);
+
+        const detailsRow = document.createElement('tr');
+        const detailsTd = document.createElement('td');
+        detailsTd.colSpan = 9;
+        detailsTd.innerHTML = `<details style=\"margin-top:6px;\"><summary>Raw result</summary><pre>${JSON.stringify(test.raw_result, null, 2)}</pre></details>`;
+        detailsRow.appendChild(detailsTd);
+        table.appendChild(detailsRow);
+      });
+
+      testsList.appendChild(table);
     }
 
     async function saveNode() {
@@ -506,20 +672,22 @@ def _login_html() -> str:
         description: nodeDesc.value
       };
 
-      const res = await fetch('/nodes', {
-        method: 'POST',
+      const method = editingNodeId ? 'PUT' : 'POST';
+      const url = editingNodeId ? `/nodes/${editingNodeId}` : '/nodes';
+
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
 
       if (!res.ok) {
-        setAlert(addNodeAlert, 'Failed to save node. Check the fields and try again.');
+        const msg = editingNodeId ? 'Failed to update node. Check the fields and try again.' : 'Failed to save node. Check the fields and try again.';
+        setAlert(addNodeAlert, msg);
         return;
       }
 
-      nodeName.value = '';
-      nodeIp.value = '';
-      nodeDesc.value = '';
+      resetNodeForm();
       await refreshNodes();
       clearAlert(addNodeAlert);
     }
@@ -668,6 +836,43 @@ def list_nodes(db: Session = Depends(get_db)):
     return nodes
 
 
+@app.put("/nodes/{node_id}", response_model=NodeRead)
+def update_node(node_id: int, payload: NodeUpdate, db: Session = Depends(get_db)):
+    node = db.get(Node, node_id)
+    if not node:
+        raise HTTPException(status_code=404, detail="node not found")
+
+    updates = payload.model_dump(exclude_unset=True)
+    for key, value in updates.items():
+        setattr(node, key, value)
+
+    db.commit()
+    db.refresh(node)
+    return node
+
+
+@app.delete("/nodes/{node_id}")
+def delete_node(node_id: int, db: Session = Depends(get_db)):
+    node = db.get(Node, node_id)
+    if not node:
+        raise HTTPException(status_code=404, detail="node not found")
+
+    related_tests = db.scalars(
+        select(TestResult).where(
+            or_(
+                TestResult.src_node_id == node_id,
+                TestResult.dst_node_id == node_id,
+            )
+        )
+    ).all()
+    for test in related_tests:
+        db.delete(test)
+
+    db.delete(node)
+    db.commit()
+    return {"status": "deleted"}
+
+
 @app.get("/nodes/status", response_model=List[NodeWithStatus])
 async def nodes_with_status(db: Session = Depends(get_db)):
     nodes = db.scalars(select(Node)).all()
@@ -714,6 +919,17 @@ async def create_test(test: TestCreate, db: Session = Depends(get_db)):
 def list_tests(db: Session = Depends(get_db)):
     results = db.scalars(select(TestResult)).all()
     return results
+
+
+@app.delete("/tests/{test_id}")
+def delete_test(test_id: int, db: Session = Depends(get_db)):
+    test = db.get(TestResult, test_id)
+    if not test:
+        raise HTTPException(status_code=404, detail="test not found")
+
+    db.delete(test)
+    db.commit()
+    return {"status": "deleted"}
 
 
 def _normalized_agent_payload(data: dict) -> dict:
