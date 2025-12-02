@@ -296,8 +296,24 @@ deploy_remote_agents() {
     return
   fi
 
-  log "Deploying remote agents using ${HOSTS_FILE}..."
-  HOSTS_FILE="${HOSTS_FILE}" AGENT_PORT="${AGENT_PORT}" IPERF_PORT="${IPERF_PORT}" IMAGE_NAME="${AGENT_IMAGE}" "${REPO_ROOT}/deploy_agents.sh"
+  parse_hosts_file
+
+  if [ ${#HOST_ENTRIES[@]} -eq 0 ]; then
+    log "hosts.txt is present but contains no usable host entries; skipping remote deployment."
+    return
+  fi
+
+  select_hosts_for_deploy
+
+  local hosts_file_to_use="${HOSTS_FILE}"
+
+  if [ ${#SELECTED_HOSTS[@]} -gt 0 ] && [ ${#SELECTED_HOSTS[@]} -lt ${#HOST_ENTRIES[@]} ]; then
+    hosts_file_to_use="$(mktemp)"
+    printf "%s\n" "${SELECTED_HOSTS[@]}" > "${hosts_file_to_use}"
+  fi
+
+  log "Deploying remote agents using ${hosts_file_to_use}..."
+  HOSTS_FILE="${hosts_file_to_use}" AGENT_PORT="${AGENT_PORT}" IPERF_PORT="${IPERF_PORT}" IMAGE_NAME="${AGENT_IMAGE}" "${REPO_ROOT}/deploy_agents.sh"
 }
 
 uninstall_project() {
@@ -463,6 +479,73 @@ set_install_flags() {
   esac
 }
 
+is_master_running() {
+  if ! command -v docker >/dev/null 2>&1; then
+    return 1
+  fi
+
+  docker ps -a --format '{{.Names}}' | grep -q 'master-api'
+}
+
+prevent_agent_when_master_present() {
+  if [ "${INSTALL_AGENT}" != true ] || [ "${INSTALL_MASTER}" = true ]; then
+    return
+  fi
+
+  if is_master_running; then
+    log "Detected existing master installation (container name contains 'master-api'). Agent-only install aborted."
+    log "Use the uninstall option or choose 'all' if you intend to reinstall everything."
+    exit 1
+  fi
+}
+
+parse_hosts_file() {
+  HOST_ENTRIES=()
+
+  while IFS= read -r RAW_LINE; do
+    LINE="${RAW_LINE%%#*}"
+    LINE="${LINE#${LINE%%[![:space:]]*}}"
+    LINE="${LINE%${LINE##*[![:space:]]}}"
+    [ -z "$LINE" ] && continue
+
+    HOST_ENTRIES+=("$LINE")
+  done < "${HOSTS_FILE}"
+}
+
+select_hosts_for_deploy() {
+  SELECTED_HOSTS=()
+
+  if [ ${#HOST_ENTRIES[@]} -eq 0 ]; then
+    return
+  fi
+
+  if [ ! -t 0 ] || [ ${#HOST_ENTRIES[@]} -le 1 ]; then
+    SELECTED_HOSTS=("${HOST_ENTRIES[@]}")
+    return
+  fi
+
+  log "Detected ${#HOST_ENTRIES[@]} remote host entries:"
+  for idx in "${!HOST_ENTRIES[@]}"; do
+    printf "  %s) %s\n" "$((idx + 1))" "${HOST_ENTRIES[$idx]}"
+  done
+  echo "  a) all (default)"
+
+  read -rp "Choose host to deploy [a]: " choice || true
+
+  if [ -z "$choice" ] || [[ "$choice" =~ ^[aA]$ ]]; then
+    SELECTED_HOSTS=("${HOST_ENTRIES[@]}")
+    return
+  fi
+
+  if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le ${#HOST_ENTRIES[@]} ]; then
+    SELECTED_HOSTS=("${HOST_ENTRIES[$((choice - 1))]}")
+    return
+  fi
+
+  log "Invalid selection; deploying to all hosts."
+  SELECTED_HOSTS=("${HOST_ENTRIES[@]}")
+}
+
 main() {
   parse_args "$@"
 
@@ -490,6 +573,7 @@ main() {
   sync_hosts_template
   resolve_paths
   ensure_docker
+  prevent_agent_when_master_present
   ensure_compose
   build_images
 
