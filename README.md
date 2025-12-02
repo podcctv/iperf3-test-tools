@@ -124,4 +124,4 @@ API 监听 `http://localhost:9000`（容器内 8000 端口），默认使用 Pos
 ## Notes / 补充说明
 
 * Real-time agent status is derived from live `/health` probes; if an agent is unreachable, it is marked `offline`. / 在线状态基于实时 `/health` 探测，不可达即视为 offline。
-* `deploy_agents.sh` assumes the `iperf-agent:latest` image is published or locally available on the target hosts. / 远程部署默认目标主机可获取 `iperf-agent:latest` 镜像。
+* `deploy_agents.sh` now streams the local `iperf-agent:latest` image to remote hosts when it is not already present; ensure you build the agent image locally before deploying. / 如果远端缺少 `iperf-agent:latest`，`deploy_agents.sh` 会自动传输本地镜像；请先在本地构建代理镜像。

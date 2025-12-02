@@ -11,6 +11,23 @@ if [ ! -f "$HOSTS_FILE" ]; then
   exit 1
 fi
 
+ensure_image_remote() {
+  local host=$1
+  local ssh_port=$2
+
+  if ssh -o StrictHostKeyChecking=no ${ssh_port:+-p ${ssh_port}} "$host" "docker image inspect ${IMAGE_NAME} >/dev/null 2>&1"; then
+    return 0
+  fi
+
+  echo "Image ${IMAGE_NAME} not found on ${host}; streaming local image..."
+  if ! docker image inspect ${IMAGE_NAME} >/dev/null 2>&1; then
+    echo "Local image ${IMAGE_NAME} is missing. Please build it before running deploy_agents.sh" >&2
+    exit 1
+  fi
+
+  docker save ${IMAGE_NAME} | gzip | ssh -o StrictHostKeyChecking=no ${ssh_port:+-p ${ssh_port}} "$host" "gunzip | docker load"
+}
+
 while IFS= read -r RAW_LINE; do
   LINE="${RAW_LINE%%#*}"
   LINE="${LINE#${LINE%%[![:space:]]*}}"
@@ -36,7 +53,11 @@ while IFS= read -r RAW_LINE; do
   echo "==== Deploying to $HOST (agent port: ${HOST_AGENT_PORT}, iperf3 port: ${HOST_IPERF_PORT}) ===="
 
   ssh -o StrictHostKeyChecking=no ${SSH_PORT:+-p ${SSH_PORT}} "$SSH_HOST" "\
-    command -v docker >/dev/null 2>&1 || curl -fsSL https://get.docker.com | sh && \
+    command -v docker >/dev/null 2>&1 || curl -fsSL https://get.docker.com | sh"
+
+  ensure_image_remote "$SSH_HOST" "$SSH_PORT"
+
+  ssh -o StrictHostKeyChecking=no ${SSH_PORT:+-p ${SSH_PORT}} "$SSH_HOST" "\
     docker rm -f iperf-agent || true && \
     docker run -d --name iperf-agent \
       --restart=always \
