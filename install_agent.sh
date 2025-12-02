@@ -7,6 +7,7 @@ AGENT_PORT=${AGENT_PORT:-8000}
 AGENT_LISTEN_PORT=${AGENT_LISTEN_PORT:-8000}
 IPERF_PORT=${IPERF_PORT:-5201}
 START_IPERF_SERVER=${START_IPERF_SERVER:-true}
+UNINSTALL=${UNINSTALL:-false}
 REPO_REF=${REPO_REF:-""}
 PORT_CONFIG_FILE=${PORT_CONFIG_FILE:-""}
 
@@ -246,6 +247,15 @@ start_agent() {
   fi
 }
 
+uninstall_agent() {
+  ensure_docker
+  log "Removing iperf-agent container and image..."
+  docker rm -f iperf-agent >/dev/null 2>&1 || true
+  docker rmi -f "${AGENT_IMAGE}" >/dev/null 2>&1 || true
+  log "Uninstall complete."
+  exit 0
+}
+
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -261,6 +271,8 @@ parse_args() {
         IPERF_PORT="$2"; shift 2 ;;
       --no-start-server)
         START_IPERF_SERVER=false; shift ;;
+      --uninstall)
+        UNINSTALL=true; shift ;;
       --repo-ref)
         REPO_REF="$2"; shift 2 ;;
       --repo-url)
@@ -273,6 +285,7 @@ Usage: install_agent.sh [options]
   --agent-listen-port <port>  Container port the agent listens on (default: 8000)
   --iperf-port <port>         iperf3 TCP/UDP port to expose (default: 5201)
   --no-start-server           Skip auto-starting iperf3 server inside the agent
+  --uninstall                 Remove iperf-agent container and image
   --repo-url <url>            Git remote URL used for auto-update
   --repo-ref <ref>            Git ref to check out before installing
 USAGE
@@ -288,6 +301,9 @@ main() {
   preprocess_config_arg "$@"
   maybe_load_port_config
   parse_args "$@"
+  if [ "${UNINSTALL}" = true ]; then
+    uninstall_agent
+  fi
   ensure_repo_available
   update_repo
   rerun_if_repo_updated "$@"
