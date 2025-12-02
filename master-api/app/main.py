@@ -787,6 +787,13 @@ def _login_html() -> str:
     }
 
 
+    function formatNodeLabel(nodeId) {
+      const node = nodeCache.find((n) => n.id === Number(nodeId));
+      if (node && node.name) return node.name;
+      return `Node ${nodeId}`;
+    }
+
+
     function renderRawResult(raw) {
       const wrap = document.createElement('div');
       wrap.className = 'table-scroll';
@@ -871,6 +878,41 @@ def _login_html() -> str:
     }
 
 
+    function buildTestDetailsBlock(test, metrics, latencyValue, pathLabel) {
+      const block = document.createElement('div');
+      block.className = 'test-block hidden';
+      block.dataset.testId = test.id;
+
+      const header = document.createElement('div');
+      header.className = 'flex-between';
+
+      const summary = document.createElement('div');
+      summary.innerHTML = `<strong>#${test.id} ${pathLabel}</strong> · ${test.protocol.toUpperCase()} · port ${test.params.port} · duration ${test.params.duration}s<br/>` +
+        `<span class=\"muted-sm\">Rate: ${metrics.bitsPerSecond ? formatMetric(metrics.bitsPerSecond / 1e6, 2) + ' Mbps' : 'N/A'} | Latency: ${latencyValue !== null ? formatMetric(latencyValue) + ' ms' : 'N/A'} | Loss: ${metrics.lostPercent !== undefined && metrics.lostPercent !== null ? formatMetric(metrics.lostPercent) + '%' : 'N/A'}</span>`;
+      header.appendChild(summary);
+
+      const actions = document.createElement('div');
+      actions.className = 'inline';
+      actions.style.gap = '8px';
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.textContent = 'Delete';
+      deleteBtn.style.width = 'auto';
+      deleteBtn.className = 'pill danger';
+      deleteBtn.onclick = () => deleteTestResult(test.id);
+      actions.appendChild(deleteBtn);
+      header.appendChild(actions);
+
+      block.appendChild(header);
+
+      const rawTable = renderRawResult(test.raw_result);
+      rawTable.style.marginTop = '8px';
+      block.appendChild(rawTable);
+
+      return block;
+    }
+
+
     async function deleteTestResult(testId) {
       clearAlert(testAlert);
       const res = await fetch(`/tests/${testId}`, { method: 'DELETE' });
@@ -905,7 +947,7 @@ def _login_html() -> str:
       const summaryTable = document.createElement('table');
       summaryTable.className = 'raw-table tests-summary';
       const headerRow = document.createElement('tr');
-      ['#', 'Path', 'Protocol', 'Port', 'Duration (s)', 'Sender rate (Mbps)', 'Receiver rate (Mbps)', 'Latency (ms)', 'Loss %', 'Status'].forEach((label) => {
+      ['#', 'Path', 'Protocol', 'Port', 'Duration (s)', 'Sender rate (Mbps)', 'Receiver rate (Mbps)', 'Latency (ms)', 'Loss %', 'Status', 'Actions'].forEach((label) => {
         const th = document.createElement('th');
         th.textContent = label;
         headerRow.appendChild(th);
@@ -915,16 +957,31 @@ def _login_html() -> str:
       const detailsContainer = document.createElement('div');
       detailsContainer.className = 'row-list';
 
+      const detailBlocks = new Map();
+
+      const toggleDetail = (testId, btn) => {
+        const block = detailBlocks.get(testId);
+        if (!block) return;
+        const isHidden = block.classList.contains('hidden');
+        if (isHidden) {
+          block.classList.remove('hidden');
+          btn.textContent = 'Hide';
+        } else {
+          block.classList.add('hidden');
+          btn.textContent = 'Details';
+        }
+      };
+
       tests.slice().reverse().forEach((test) => {
         const metrics = summarizeTestMetrics(test.raw_result || {});
         const rateSummary = summarizeRateTable(test.raw_result || {});
         const latencyValue = metrics.latencyMs !== undefined && metrics.latencyMs !== null ? metrics.latencyMs : null;
-        const path = `${test.src_node_id} → ${test.dst_node_id}`;
+        const pathLabel = `${formatNodeLabel(test.src_node_id)} → ${formatNodeLabel(test.dst_node_id)}`;
 
         const row = document.createElement('tr');
         [
           `#${test.id}`,
-          path,
+          pathLabel,
           test.protocol.toUpperCase(),
           test.params.port,
           test.params.duration,
@@ -938,36 +995,19 @@ def _login_html() -> str:
           td.textContent = value;
           row.appendChild(td);
         });
+
+        const actionTd = document.createElement('td');
+        const detailsBtn = document.createElement('button');
+        detailsBtn.textContent = 'Details';
+        detailsBtn.style.width = 'auto';
+        detailsBtn.className = 'pill info';
+        detailsBtn.onclick = () => toggleDetail(test.id, detailsBtn);
+        actionTd.appendChild(detailsBtn);
+        row.appendChild(actionTd);
         summaryTable.appendChild(row);
 
-        const block = document.createElement('div');
-        block.className = 'test-block';
-
-        const header = document.createElement('div');
-        header.className = 'flex-between';
-
-        const summary = document.createElement('div');
-        summary.innerHTML = `<strong>#${test.id} ${path}</strong> · ${test.protocol.toUpperCase()} · port ${test.params.port} · duration ${test.params.duration}s<br/>` +
-          `<span class=\"muted-sm\">Rate: ${metrics.bitsPerSecond ? formatMetric(metrics.bitsPerSecond / 1e6, 2) + ' Mbps' : 'N/A'} | Latency: ${latencyValue !== null ? formatMetric(latencyValue) + ' ms' : 'N/A'} | Loss: ${metrics.lostPercent !== undefined && metrics.lostPercent !== null ? formatMetric(metrics.lostPercent) + '%' : 'N/A'}</span>`;
-        header.appendChild(summary);
-
-        const actions = document.createElement('div');
-        actions.className = 'inline';
-        actions.style.gap = '8px';
-        const deleteBtn = document.createElement('button');
-        deleteBtn.textContent = 'Delete';
-        deleteBtn.style.width = 'auto';
-        deleteBtn.className = 'pill danger';
-        deleteBtn.onclick = () => deleteTestResult(test.id);
-        actions.appendChild(deleteBtn);
-        header.appendChild(actions);
-
-        block.appendChild(header);
-
-        const rawTable = renderRawResult(test.raw_result);
-        rawTable.style.marginTop = '8px';
-        block.appendChild(rawTable);
-
+        const block = buildTestDetailsBlock(test, metrics, latencyValue, pathLabel);
+        detailBlocks.set(test.id, block);
         detailsContainer.appendChild(block);
       });
 
