@@ -115,12 +115,30 @@ update_repo_from_git() {
   git -C "${REPO_ROOT}" pull --ff-only origin "${REPO_REF}"
 }
 
+sync_hosts_template() {
+  local source_hosts dest_hosts
+
+  source_hosts="${REPO_ROOT}/hosts.txt"
+  dest_hosts="${ORIGINAL_SCRIPT_DIR}/hosts.txt"
+
+  if [ ! -f "${source_hosts}" ]; then
+    log "No hosts.txt found in repository at ${source_hosts}; skipping template sync."
+    return
+  fi
+
+  if [ ! -f "${dest_hosts}" ] || ! cmp -s "${source_hosts}" "${dest_hosts}"; then
+    log "Refreshing hosts.txt in ${ORIGINAL_SCRIPT_DIR} from repository copy..."
+    cp "${source_hosts}" "${dest_hosts}"
+  fi
+}
+
 ensure_repo_ready() {
   local needs_refresh=false
 
   if [ "${AUTO_UPDATE_REPO}" = true ] && update_repo_from_git; then
     log "Repository updated from ${REPO_URL}."
     resolve_paths
+    sync_hosts_template
     return
   fi
 
@@ -155,8 +173,10 @@ ensure_repo_ready() {
       log "Repository updated at ${REPO_ROOT}."
     fi
     resolve_paths
+    sync_hosts_template
   else
     log "Using existing repository at ${REPO_ROOT}."
+    sync_hosts_template
   fi
 }
 
