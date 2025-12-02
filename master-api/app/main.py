@@ -304,6 +304,7 @@ def _login_html() -> str:
     .raw-table { width: 100%; border-collapse: collapse; }
     .raw-table th, .raw-table td { padding: 6px 8px; border-bottom: 1px solid #1f2937; }
     .row-list { display: flex; flex-direction: column; gap: 12px; }
+    .tests-summary { margin-bottom: 12px; }
     .config-warning { color: #fbbf24; font-size: 13px; margin-top: 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   </style>
 </head>
@@ -764,6 +765,22 @@ def _login_html() -> str:
     }
 
 
+    function summarizeRateTable(raw) {
+      const result = (raw && raw.iperf_result) || raw || {};
+      const end = result.end || {};
+      const sumSent = end.sum_sent || end.sum || {};
+      const sumReceived = end.sum_received || end.sum || {};
+
+      return {
+        senderRateMbps: sumSent.bits_per_second ? formatMetric(sumSent.bits_per_second / 1e6, 2) : 'N/A',
+        receiverRateMbps: sumReceived.bits_per_second ? formatMetric(sumReceived.bits_per_second / 1e6, 2) : 'N/A',
+        senderCongestion: end.sender_tcp_congestion || 'N/A',
+        receiverCongestion: end.receiver_tcp_congestion || 'N/A',
+        status: raw && raw.status ? raw.status : 'unknown',
+      };
+    }
+
+
     function formatMetric(value, decimals = 2) {
       if (value === undefined || value === null || Number.isNaN(value)) return 'N/A';
       return Number(value).toFixed(decimals);
@@ -785,7 +802,7 @@ def _login_html() -> str:
       const sumReceived = end.sum_received || {};
 
       const summaryTable = document.createElement('table');
-      summaryTable.className = 'raw-table';
+      summaryTable.className = 'raw-table tests-summary';
 
       const addSummaryRow = (label, value) => {
         const row = document.createElement('tr');
@@ -885,10 +902,43 @@ def _login_html() -> str:
       }
       testsList.innerHTML = '';
 
+      const summaryTable = document.createElement('table');
+      summaryTable.className = 'raw-table tests-summary';
+      const headerRow = document.createElement('tr');
+      ['#', 'Path', 'Protocol', 'Port', 'Duration (s)', 'Sender rate (Mbps)', 'Receiver rate (Mbps)', 'Latency (ms)', 'Loss %', 'Status'].forEach((label) => {
+        const th = document.createElement('th');
+        th.textContent = label;
+        headerRow.appendChild(th);
+      });
+      summaryTable.appendChild(headerRow);
+
+      const detailsContainer = document.createElement('div');
+      detailsContainer.className = 'row-list';
+
       tests.slice().reverse().forEach((test) => {
         const metrics = summarizeTestMetrics(test.raw_result || {});
+        const rateSummary = summarizeRateTable(test.raw_result || {});
         const latencyValue = metrics.latencyMs !== undefined && metrics.latencyMs !== null ? metrics.latencyMs : null;
         const path = `${test.src_node_id} → ${test.dst_node_id}`;
+
+        const row = document.createElement('tr');
+        [
+          `#${test.id}`,
+          path,
+          test.protocol.toUpperCase(),
+          test.params.port,
+          test.params.duration,
+          rateSummary.senderRateMbps,
+          rateSummary.receiverRateMbps,
+          latencyValue !== null ? formatMetric(latencyValue) : 'N/A',
+          metrics.lostPercent !== undefined && metrics.lostPercent !== null ? formatMetric(metrics.lostPercent) : 'N/A',
+          rateSummary.status,
+        ].forEach((value) => {
+          const td = document.createElement('td');
+          td.textContent = value;
+          row.appendChild(td);
+        });
+        summaryTable.appendChild(row);
 
         const block = document.createElement('div');
         block.className = 'test-block';
@@ -918,8 +968,11 @@ def _login_html() -> str:
         rawTable.style.marginTop = '8px';
         block.appendChild(rawTable);
 
-        testsList.appendChild(block);
+        detailsContainer.appendChild(block);
       });
+
+      testsList.appendChild(summaryTable);
+      testsList.appendChild(detailsContainer);
     }
 
 
