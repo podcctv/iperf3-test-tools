@@ -10,8 +10,13 @@ HOSTS_FILE=${HOSTS_FILE:-"hosts.txt"}
 START_IPERF_SERVER=${START_IPERF_SERVER:-true}
 DEPLOY_REMOTE=${DEPLOY_REMOTE:-true}
 START_LOCAL_AGENT=${START_LOCAL_AGENT:-true}
+DOWNLOAD_LATEST=${DOWNLOAD_LATEST:-false}
+REPO_URL=${REPO_URL:-""}
+REPO_REF=${REPO_REF:-"main"}
+REPO_DEST=${REPO_DEST:-""}
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ORIGINAL_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="${ORIGINAL_SCRIPT_DIR}"
 COMPOSE_CMD=""
 
 usage() {
@@ -25,6 +30,10 @@ Options:
   --agent-image <name>     Docker image tag for the agent (default: iperf-agent:latest)
   --agent-port <port>      Port to expose the agent API on the host (default: 8000)
   --iperf-port <port>      Port to expose iperf3 server TCP/UDP (default: 5201)
+  --download-latest        Download the latest repository before running (requires --repo-url)
+  --repo-url <url>         Repository URL to clone (e.g., https://github.com/org/iperf3-test-tools.git)
+  --repo-ref <ref>         Branch, tag, or commit to fetch when downloading (default: main)
+  --repo-dest <path>       Destination directory for downloaded repo (default: temporary dir)
   --no-local-agent         Skip launching a local agent container
   --no-remote              Skip deploying remote agents via hosts file
   --no-start-server        Do not auto-start iperf3 server on the local agent
@@ -33,6 +42,41 @@ USAGE
 }
 
 log() { printf "[install-all] %s\n" "$*"; }
+
+download_repo() {
+  if [ -z "${REPO_URL}" ]; then
+    log "--download-latest requires --repo-url (or REPO_URL env var) to be set." >&2
+    exit 1
+  fi
+
+  local target_dir="${REPO_DEST}"
+  if [ -z "${target_dir}" ]; then
+    target_dir="$(mktemp -d)/iperf3-test-tools"
+  fi
+
+  log "Downloading repository from ${REPO_URL} (ref: ${REPO_REF}) to ${target_dir}..."
+  rm -rf "${target_dir}"
+
+  if command -v git >/dev/null 2>&1; then
+    git clone --depth 1 --branch "${REPO_REF}" "${REPO_URL}" "${target_dir}"
+  else
+    local archive_url
+    archive_url="${REPO_URL%.git}/archive/${REPO_REF}.tar.gz"
+    mkdir -p "${target_dir}"
+    curl -fsSL "${archive_url}" | tar -xz --strip-components=1 -C "${target_dir}"
+  fi
+
+  REPO_ROOT="${target_dir}"
+  log "Repository ready at ${REPO_ROOT}."
+}
+
+maybe_download_repo() {
+  if [ "${DOWNLOAD_LATEST}" != true ]; then
+    return
+  fi
+
+  download_repo
+}
 
 ensure_docker() {
   if command -v docker >/dev/null 2>&1; then
@@ -60,15 +104,15 @@ ensure_compose() {
 
 build_images() {
   log "Building agent image (${AGENT_IMAGE})..."
-  docker build -t "${AGENT_IMAGE}" "${SCRIPT_DIR}/agent"
+  docker build -t "${AGENT_IMAGE}" "${REPO_ROOT}/agent"
 
   log "Building master-api service..."
-  ${COMPOSE_CMD} -f "${SCRIPT_DIR}/docker-compose.yml" build master-api
+  ${COMPOSE_CMD} -f "${REPO_ROOT}/docker-compose.yml" build master-api
 }
 
 start_master() {
   log "Starting master-api (and dependencies) via docker compose..."
-  ${COMPOSE_CMD} -f "${SCRIPT_DIR}/docker-compose.yml" up -d db master-api
+  ${COMPOSE_CMD} -f "${REPO_ROOT}/docker-compose.yml" up -d db master-api
 }
 
 start_local_agent() {
@@ -103,7 +147,7 @@ deploy_remote_agents() {
   fi
 
   log "Deploying remote agents using ${HOSTS_FILE}..."
-  HOSTS_FILE="${HOSTS_FILE}" AGENT_PORT="${AGENT_PORT}" IPERF_PORT="${IPERF_PORT}" IMAGE_NAME="${AGENT_IMAGE}" "${SCRIPT_DIR}/deploy_agents.sh"
+  HOSTS_FILE="${HOSTS_FILE}" AGENT_PORT="${AGENT_PORT}" IPERF_PORT="${IPERF_PORT}" IMAGE_NAME="${AGENT_IMAGE}" "${REPO_ROOT}/deploy_agents.sh"
 }
 
 parse_args() {
@@ -117,6 +161,14 @@ parse_args() {
         AGENT_PORT=$2; shift 2 ;;
       --iperf-port)
         IPERF_PORT=$2; shift 2 ;;
+      --download-latest)
+        DOWNLOAD_LATEST=true; shift ;;
+      --repo-url)
+        REPO_URL=$2; shift 2 ;;
+      --repo-ref)
+        REPO_REF=$2; shift 2 ;;
+      --repo-dest)
+        REPO_DEST=$2; shift 2 ;;
       --no-local-agent)
         START_LOCAL_AGENT=false; shift ;;
       --no-remote)
@@ -132,8 +184,16 @@ parse_args() {
   done
 }
 
+resolve_paths() {
+  if [[ "${HOSTS_FILE}" != /* ]]; then
+    HOSTS_FILE="${REPO_ROOT}/${HOSTS_FILE}"
+  fi
+}
+
 main() {
   parse_args "$@"
+  maybe_download_repo
+  resolve_paths
   ensure_docker
   ensure_compose
   build_images
