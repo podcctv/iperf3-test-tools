@@ -90,6 +90,14 @@ ensure_compose() {
   exit 1
 }
 
+ensure_compose_file() {
+  local compose_file="${REPO_ROOT}/docker-compose.yml"
+  if [ ! -f "${compose_file}" ]; then
+    log "Missing compose file at ${compose_file}. Ensure you are running the installer from a valid checkout."
+    exit 1
+  fi
+}
+
 cleanup_existing_services() {
   local project_name existing=""
   project_name=${COMPOSE_PROJECT_NAME:-$(basename "${REPO_ROOT}")}
@@ -237,6 +245,7 @@ main() {
   update_repo
   ensure_docker
   ensure_compose
+  ensure_compose_file
   cleanup_existing_services
   start_master_stack
   start_agent
