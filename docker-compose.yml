@@ -18,6 +18,7 @@ services:
       REQUEST_TIMEOUT: 10
     ports:
       - "${MASTER_API_PORT:-9000}:8000"
+      - "${MASTER_WEB_PORT:-9100}:8000"
     depends_on:
       - db
     restart: unless-stopped

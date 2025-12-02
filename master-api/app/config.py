@@ -7,6 +7,9 @@ class Settings(BaseSettings):
 
     database_url: AnyUrl | str = "sqlite:///./iperf.db"
     request_timeout: int = 15
+    dashboard_password: str = "iperf-pass"
+    dashboard_secret: str = "iperf-dashboard-secret"
+    dashboard_cookie_name: str = "iperf_dashboard_auth"
 
 
 settings = Settings()

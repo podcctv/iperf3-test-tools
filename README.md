@@ -37,6 +37,7 @@ Flags of interest / 常用参数：
 * `--no-remote` – skip remote agent deployment. / 不部署远程代理。
 * `--hosts <file>` – set an alternate inventory file for remote deployment (defaults to `hosts.txt`). / 指定主机清单。
 * `--master-port <port>` – override the master API host port (default: `9000`). / 覆盖主控端口。
+* `--web-port <port>` – override the dashboard host port (default: `9100`). / 覆盖网页端口。
 * `--agent-port <port>` – override the agent API host port (default: `8000`). / 覆盖代理端口。
 
 ### 1) Build images / 构建镜像
@@ -77,6 +78,10 @@ docker-compose up -d
 The API listens on `http://localhost:9000` (port 8000 inside the container) and uses Postgres by default. To use SQLite instead, set `DATABASE_URL=sqlite:///./iperf.db` and run `uvicorn app.main:app` locally.
 
 API 监听 `http://localhost:9000`（容器内 8000 端口），默认使用 Postgres。如需 SQLite，将 `DATABASE_URL=sqlite:///./iperf.db` 并本地运行 `uvicorn app.main:app`。
+
+The built-in dashboard is available at `http://localhost:9100/web` by default (configurable via `--web-port`), protected by a simple password prompt. Set `DASHBOARD_PASSWORD` to override the default `iperf-pass` value before launching.
+
+内置可视化界面默认监听 `http://localhost:9100/web`（可用 `--web-port` 修改），访问时需要输入简单密码。启动前可通过 `DASHBOARD_PASSWORD` 覆盖默认密码 `iperf-pass`。
 
 ### 4) Drive the workflow / 操作流程
 
@@ -120,6 +125,9 @@ API 监听 `http://localhost:9000`（容器内 8000 端口），默认使用 Pos
 
 * `DATABASE_URL` – SQLAlchemy connection string (defaults to SQLite `sqlite:///./iperf.db`). / SQLAlchemy 连接串，默认 SQLite。
 * `REQUEST_TIMEOUT` – HTTP timeout (seconds) used for agent health checks and test dispatch (default 15s). / 健康检查与测试下发的 HTTP 超时时间（秒），默认 15。
+* `DASHBOARD_PASSWORD` – Web dashboard password (default `iperf-pass`). / 网页密码（默认 `iperf-pass`）。
+* `DASHBOARD_SECRET` – Secret used to sign the dashboard auth cookie (default `iperf-dashboard-secret`). / 用于签名认证 Cookie 的密钥。
+* `DASHBOARD_COOKIE_NAME` – Name of the auth cookie (default `iperf_dashboard_auth`). / 认证 Cookie 名称。
 
 ## Notes / 补充说明
 
