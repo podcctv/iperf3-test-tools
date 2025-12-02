@@ -16,6 +16,17 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI(title="iperf3 master api")
 
 
+@app.get("/")
+def root() -> dict:
+    """Provide a simple landing response instead of a 404."""
+
+    return {
+        "message": "iperf3 master api",
+        "docs_url": "/docs",
+        "health_url": "/health",
+    }
+
+
 async def _check_node_health(node: Node) -> NodeWithStatus:
     url = f"http://{node.ip}:{node.agent_port}/health"
     try:

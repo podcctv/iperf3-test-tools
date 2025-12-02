@@ -18,6 +18,7 @@ REPO_DEST=${REPO_DEST:-""}
 INSTALL_TARGET=${INSTALL_TARGET:-""}
 INSTALL_MASTER=${INSTALL_MASTER:-false}
 INSTALL_AGENT=${INSTALL_AGENT:-false}
+UNINSTALL=${UNINSTALL:-false}
 
 ORIGINAL_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="${ORIGINAL_SCRIPT_DIR}"
@@ -43,6 +44,7 @@ Options:
   --no-local-agent         Skip launching a local agent container
   --no-remote              Skip deploying remote agents via hosts file
   --no-start-server        Do not auto-start iperf3 server on the local agent
+  --uninstall              Remove master API stack, agent container, and built images
   -h, --help               Show this help message
 USAGE
 }
@@ -235,6 +237,34 @@ deploy_remote_agents() {
   HOSTS_FILE="${HOSTS_FILE}" AGENT_PORT="${AGENT_PORT}" IPERF_PORT="${IPERF_PORT}" IMAGE_NAME="${AGENT_IMAGE}" "${REPO_ROOT}/deploy_agents.sh"
 }
 
+uninstall_project() {
+  log "Uninstalling iperf3 test tools (containers, images, and volumes)..."
+
+  if [ -f "${REPO_ROOT}/docker-compose.yml" ]; then
+    log "Stopping master-api stack and removing volumes..."
+    MASTER_API_PORT="${MASTER_API_PORT}" ${COMPOSE_CMD} -f "${REPO_ROOT}/docker-compose.yml" down -v || \
+      log "Failed to shut down master-api stack (it may not be running)."
+  else
+    log "docker-compose.yml not found at ${REPO_ROOT}; skipping master-api removal."
+  fi
+
+  log "Removing local agent container if present..."
+  if docker rm -f iperf-agent >/dev/null 2>&1; then
+    log "Removed local agent container."
+  else
+    log "No local agent container found."
+  fi
+
+  log "Removing agent image (${AGENT_IMAGE}) if present..."
+  if docker rmi "${AGENT_IMAGE}" >/dev/null 2>&1; then
+    log "Removed agent image ${AGENT_IMAGE}."
+  else
+    log "Agent image ${AGENT_IMAGE} not found or in use; skipping removal."
+  fi
+
+  log "Uninstall complete."
+}
+
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -258,6 +288,8 @@ parse_args() {
         REPO_DEST=$2; shift 2 ;;
       --install-target)
         INSTALL_TARGET=$2; shift 2 ;;
+      --uninstall)
+        UNINSTALL=true; shift ;;
       --no-local-agent)
         START_LOCAL_AGENT=false; shift ;;
       --no-remote)
@@ -343,6 +375,15 @@ set_install_flags() {
 
 main() {
   parse_args "$@"
+
+  if [ "${UNINSTALL}" = true ]; then
+    ensure_repo_ready
+    ensure_docker
+    ensure_compose
+    uninstall_project
+    exit 0
+  fi
+
   prompt_install_target
   prompt_ports
   set_install_flags
