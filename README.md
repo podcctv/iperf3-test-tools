@@ -13,6 +13,21 @@ deploy_agents.sh
 
 ## Quick start
 
+### One-click bootstrap
+
+To build images, launch the master API stack, start a local agent (with iperf3 server), and optionally deploy remote agents in one command:
+
+```bash
+./install_all.sh
+```
+
+Flags of interest:
+
+* `--no-local-agent` – skip running the local agent container.
+* `--no-start-server` – do not auto-start the iperf3 server inside the local agent.
+* `--no-remote` – skip remote agent deployment.
+* `--hosts <file>` – set an alternate inventory file for remote deployment (defaults to `hosts.txt`).
+
 ### 1) Build images
 
 ```bash
