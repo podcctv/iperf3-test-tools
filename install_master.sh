@@ -11,6 +11,7 @@ START_IPERF_SERVER=${START_IPERF_SERVER:-true}
 DEPLOY_REMOTE=${DEPLOY_REMOTE:-false}
 HOSTS_FILE=${HOSTS_FILE:-""}
 CLEAN_EXISTING=${CLEAN_EXISTING:-false}
+UNINSTALL=${UNINSTALL:-false}
 REPO_REF=${REPO_REF:-""}
 PORT_CONFIG_FILE=${PORT_CONFIG_FILE:-""}
 
@@ -393,6 +394,24 @@ cleanup_existing_services() {
   fi
 }
 
+uninstall_master_stack() {
+  detect_repo_root
+  ensure_docker
+  ensure_compose || true
+
+  log "Removing master stack and local agent containers..."
+
+  if [ -n "${COMPOSE_CMD}" ] && [ -f "${REPO_ROOT}/docker-compose.yml" ]; then
+    MASTER_API_PORT="${MASTER_API_PORT}" MASTER_WEB_PORT="${MASTER_WEB_PORT}" ${COMPOSE_CMD} -f "${REPO_ROOT}/docker-compose.yml" down -v || true
+  else
+    log "Compose command or compose file missing; skipping master stack removal."
+  fi
+
+  docker rm -f iperf-agent >/dev/null 2>&1 || true
+  log "Uninstall complete."
+  exit 0
+}
+
 wait_for_local_agent() {
   local retries=30 delay=2
   for _ in $(seq 1 ${retries}); do
@@ -482,6 +501,8 @@ parse_args() {
         HOSTS_FILE="$2"; shift 2 ;;
       --clean-existing)
         CLEAN_EXISTING=true; shift ;;
+      --uninstall)
+        UNINSTALL=true; shift ;;
       --repo-ref)
         REPO_REF="$2"; shift 2 ;;
       --repo-url)
@@ -500,6 +521,7 @@ parse_args() {
   --no-start-server        Skip auto-starting iperf3 server inside the agent
   --hosts-file <path>      Inventory file for remote agent deployment
   --clean-existing         Stop and remove existing master/api/db + local agent containers before install
+  --uninstall              Remove master/api/db stack and local agent containers
   --repo-url <url>         Git remote URL used for auto-update
   --repo-ref <ref>         Git ref to check out before installing
 USAGE
@@ -515,6 +537,9 @@ main() {
   preprocess_config_arg "$@"
   maybe_load_port_config
   parse_args "$@"
+  if [ "${UNINSTALL}" = true ]; then
+    uninstall_master_stack
+  fi
   detect_repo_root
   REPO_URL=$(normalize_repo_url "${REPO_URL:-${DEFAULT_REPO_URL:-https://github.com/podcctv/iperf3-test-tools.git}}")
   download_repo_if_missing
