@@ -140,7 +140,14 @@ ensure_compose() {
 ensure_compose_file() {
   local compose_file="${REPO_ROOT}/docker-compose.yml"
   if [ ! -f "${compose_file}" ]; then
-    log "Missing compose file at ${compose_file}."
+    log "Missing compose file at ${compose_file}; attempting to download repository..."
+    download_repo_if_missing
+
+    if [ -f "${compose_file}" ]; then
+      return
+    fi
+
+    log "Compose file still not found after download attempt."
     log "Ensure you are running the installer from a valid checkout (repo root: ${REPO_ROOT})."
     exit 1
   fi
