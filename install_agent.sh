@@ -8,6 +8,7 @@ AGENT_LISTEN_PORT=${AGENT_LISTEN_PORT:-8000}
 IPERF_PORT=${IPERF_PORT:-5201}
 START_IPERF_SERVER=${START_IPERF_SERVER:-true}
 REPO_REF=${REPO_REF:-""}
+PORT_CONFIG_FILE=${PORT_CONFIG_FILE:-""}
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="${SCRIPT_DIR}"
@@ -16,6 +17,60 @@ DEFAULT_REPO_URL="$(command -v git >/dev/null 2>&1 && git -C "${REPO_ROOT}" remo
 REPO_URL=${REPO_URL:-"${DEFAULT_REPO_URL:-https://github.com/podcctv/iperf3-test-tools.git}"}
 
 log() { printf "[install-agent] %s\n" "$*"; }
+
+detect_public_ip() {
+  local ip
+  if command -v curl >/dev/null 2>&1; then
+    ip=$(curl -fsS https://api.ipify.org 2>/dev/null || true)
+  fi
+
+  if [ -z "${ip}" ] && command -v dig >/dev/null 2>&1; then
+    ip=$(dig +short myip.opendns.com @resolver1.opendns.com 2>/dev/null | tail -n1)
+  fi
+
+  echo "${ip:-}"
+}
+
+maybe_load_port_config() {
+  local config_path="${PORT_CONFIG_FILE}" candidate
+
+  if [ -z "${config_path}" ]; then
+    for candidate in "${SCRIPT_DIR}/ports.env" "${PWD}/ports.env"; do
+      if [ -f "${candidate}" ]; then
+        config_path="${candidate}"
+        break
+      fi
+    done
+  fi
+
+  if [ -n "${config_path}" ]; then
+    if [ -f "${config_path}" ]; then
+      # shellcheck disable=SC1090
+      set -a; source "${config_path}"; set +a
+      log "Loaded port configuration from ${config_path}."
+    else
+      log "Port config file ${config_path} not found; continuing with defaults and CLI args."
+    fi
+  fi
+}
+
+preprocess_config_arg() {
+  local expect_path=false arg
+  for arg in "$@"; do
+    if [ "${expect_path}" = true ]; then
+      PORT_CONFIG_FILE="$arg"
+      expect_path=false
+      continue
+    fi
+
+    case "${arg}" in
+      --config)
+        expect_path=true ;;
+      --config=*)
+        PORT_CONFIG_FILE="${arg#--config=}" ;;
+    esac
+  done
+}
 
 update_repo() {
   if [ ! -d "${REPO_ROOT}/.git" ] || ! command -v git >/dev/null 2>&1; then
@@ -174,6 +229,10 @@ start_agent() {
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
+      --config)
+        PORT_CONFIG_FILE="$2"; shift 2 ;;
+      --config=*)
+        PORT_CONFIG_FILE="${1#--config=}"; shift 1 ;;
       --agent-port)
         AGENT_PORT="$2"; shift 2 ;;
       --agent-listen-port)
@@ -189,6 +248,7 @@ parse_args() {
       -h|--help)
         cat <<'USAGE'
 Usage: install_agent.sh [options]
+  --config <path>            Source port variables from a file before applying flags
   --agent-port <port>         Host port where the agent API is exposed (default: 8000)
   --agent-listen-port <port>  Container port the agent listens on (default: 8000)
   --iperf-port <port>         iperf3 TCP/UDP port to expose (default: 5201)
@@ -205,16 +265,24 @@ USAGE
 }
 
 main() {
+  preprocess_config_arg "$@"
+  maybe_load_port_config
   parse_args "$@"
   ensure_repo_available
   update_repo
   ensure_docker
   start_agent
 
-  local agent_host
-  agent_host=$(hostname -I 2>/dev/null | awk '{print $1}')
-  if [ -z "${agent_host}" ]; then
-    agent_host="$(hostname -f 2>/dev/null || hostname)"
+  local agent_host public_ip
+  public_ip=$(detect_public_ip)
+  if [ -n "${public_ip}" ]; then
+    agent_host="${public_ip}"
+  else
+    agent_host=$(hostname -I 2>/dev/null | awk '{print $1}')
+    if [ -z "${agent_host}" ]; then
+      agent_host="$(hostname -f 2>/dev/null || hostname)"
+    fi
+    log "Public IP not detected; showing local host identifier instead."
   fi
 
   cat <<INFO
