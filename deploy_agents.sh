@@ -4,10 +4,38 @@ set -euo pipefail
 IMAGE_NAME="iperf-agent:latest"
 AGENT_PORT=8000
 IPERF_PORT=5201
-HOSTS_FILE="hosts.txt"
+HOSTS_FILE=""
 
-if [ ! -f "$HOSTS_FILE" ]; then
-  echo "hosts.txt not found; please create it with one host per line (e.g., user@host)" >&2
+usage() {
+  cat <<'USAGE'
+Usage: deploy_agents.sh --hosts-file <path> [--agent-port 8000] [--iperf-port 5201] [--image iperf-agent:latest]
+
+Deploy the agent image to a list of SSH hosts provided in a newline-delimited inventory file.
+Lines may be formatted as "user@host [agent_port] [iperf_port]" with optional SSH port suffix (user@host:2222).
+USAGE
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --hosts-file|--hosts)
+      HOSTS_FILE="$2"; shift 2 ;;
+    --agent-port)
+      AGENT_PORT="$2"; shift 2 ;;
+    --iperf-port)
+      IPERF_PORT="$2"; shift 2 ;;
+    --image)
+      IMAGE_NAME="$2"; shift 2 ;;
+    -h|--help)
+      usage; exit 0 ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage
+      exit 1 ;;
+  esac
+done
+
+if [ -z "$HOSTS_FILE" ] || [ ! -f "$HOSTS_FILE" ]; then
+  echo "A hosts inventory file is required. Provide it with --hosts-file <path>." >&2
   exit 1
 fi
 

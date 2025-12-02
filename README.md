@@ -8,7 +8,7 @@ A lightweight **master/agent** toolkit for orchestrating iperf3 tests across mul
 
 * **master-api (FastAPI + Postgres)** – central control plane, REST API, embedded dashboard, remote agent lifecycle helpers (redeploy/remove/logs). Runs via Docker Compose with a Postgres service by default.
 * **agent (Flask + iperf3)** – lightweight container exposing control endpoints and the iperf3 server/client binary.
-* **deploy scripts** – `install_master.sh` sets up the master stack (API + dashboard + optional local agent); `install_agent.sh` builds and runs an agent-only container on any host; `deploy_agents.sh` streams the agent image to SSH targets listed in `hosts.txt`.
+* **deploy scripts** – `install_master.sh` sets up the master stack (API + dashboard + optional local agent); `install_agent.sh` builds and runs an agent-only container on any host; `deploy_agents.sh` can stream the agent image to SSH targets listed in a user-provided inventory file.
 
 ## Prerequisites / 先决条件
 
@@ -20,11 +20,12 @@ A lightweight **master/agent** toolkit for orchestrating iperf3 tests across mul
 ### Master node (API + dashboard + optional local agent) / 主控节点
 
 ```bash
-./install_master.sh [--deploy-remote] [--master-port 9000] [--web-port 9100] [--agent-port 8000] [--iperf-port 5201] [--no-start-server]
+./install_master.sh [--deploy-remote] [--clean-existing] [--master-port 9000] [--web-port 9100] [--agent-port 8000] [--iperf-port 5201] [--no-start-server]
 ```
 
 * Auto-updates the git checkout when possible, builds the master-api image, brings up Postgres, and starts the dashboard on `http://<host>:9100/web` (password `iperf-pass` by default).
-* With `--deploy-remote`, the script will also call `./deploy_agents.sh` to push the agent image to the SSH hosts listed in `hosts.txt`.
+* Pass `--clean-existing` to stop/remove any existing master/api/db containers and the local `iperf-agent` container before reinstalling.
+* With `--deploy-remote`, provide an inventory file path via `--hosts-file <path>` to call `./deploy_agents.sh` automatically.
 
 ### Agent-only host / 仅部署代理
 
@@ -39,12 +40,12 @@ After installation the script prints the URL you can register on the master dash
 
 ### Remote agent rollout via SSH / SSH 批量部署
 
-1. Add one host per line to `hosts.txt` (format `user@ip`, optional SSH config).
-2. Build the agent image locally if not present:
-   ```bash
-   docker build -t iperf-agent:latest ./agent
-   ```
-3. Run `./deploy_agents.sh` to stream the image and start containers remotely.
+Use `deploy_agents.sh` with an explicit inventory file (one host per line, format `user@ip [agent_port] [iperf_port]`, SSH port allowed as `user@ip:2222`):
+
+```bash
+docker build -t iperf-agent:latest ./agent
+./deploy_agents.sh --hosts-file /path/to/your/hosts.txt
+```
 
 ## Running the master stack manually / 手动启动主控服务
 
