@@ -122,3 +122,7 @@ curl -X DELETE http://localhost:9000/schedules/1
 * Agent status is derived from live `/health` probes; unreachable nodes show as `offline`.
 * `deploy_agents.sh` streams the local `iperf-agent:latest` image to remote hosts if missing—build it locally first.
 * Dashboard-driven remote management (redeploy/remove container, view logs) persists inventory in `agent_configs.json` so settings survive container restarts.
+
+## Script updates & troubleshooting / 脚本更新与排障
+
+If installer or deployment scripts fail to refresh, follow the steps in [`docs/script-update-guide.md`](docs/script-update-guide.md) for common fixes and an optional auto-update helper (`tools/auto_update.sh`).
