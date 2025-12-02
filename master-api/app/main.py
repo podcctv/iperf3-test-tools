@@ -105,7 +105,10 @@ async def _on_shutdown() -> None:
 
 
 def _persist_state(db: Session) -> None:
-    state_store.persist(db)
+    try:
+        state_store.persist(db)
+    except Exception:
+        logger.exception("Failed to persist state to %s", settings.state_file)
 
 
 def _summarize_metrics(raw: dict | None) -> dict | None:

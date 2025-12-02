@@ -216,6 +216,22 @@ detect_repo_root() {
   fi
 }
 
+normalize_repo_url() {
+  local url=$1
+
+  case "${url}" in
+    git@github.com:*)
+      echo "https://github.com/${url#git@github.com:}"
+      ;;
+    ssh://git@github.com/*)
+      echo "https://github.com/${url#ssh://git@github.com/}"
+      ;;
+    *)
+      echo "${url}"
+      ;;
+  esac
+}
+
 download_repo_if_missing() {
   if [ -f "${REPO_ROOT}/docker-compose.yml" ]; then
     return
@@ -500,7 +516,7 @@ main() {
   maybe_load_port_config
   parse_args "$@"
   detect_repo_root
-  REPO_URL=${REPO_URL:-"${DEFAULT_REPO_URL:-https://github.com/podcctv/iperf3-test-tools.git}"}
+  REPO_URL=$(normalize_repo_url "${REPO_URL:-${DEFAULT_REPO_URL:-https://github.com/podcctv/iperf3-test-tools.git}}")
   download_repo_if_missing
   update_repo
   rerun_if_repo_updated "$@"
