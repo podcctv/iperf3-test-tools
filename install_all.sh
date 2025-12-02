@@ -12,13 +12,15 @@ START_IPERF_SERVER=${START_IPERF_SERVER:-true}
 DEPLOY_REMOTE=${DEPLOY_REMOTE:-true}
 START_LOCAL_AGENT=${START_LOCAL_AGENT:-true}
 DOWNLOAD_LATEST=${DOWNLOAD_LATEST:-false}
-REPO_URL=${REPO_URL:-""}
+REPO_URL=${REPO_URL:-"https://github.com/podcctv/iperf3-test-tools/"}
 REPO_REF=${REPO_REF:-"main"}
 REPO_DEST=${REPO_DEST:-""}
 INSTALL_TARGET=${INSTALL_TARGET:-""}
 INSTALL_MASTER=${INSTALL_MASTER:-false}
 INSTALL_AGENT=${INSTALL_AGENT:-false}
 UNINSTALL=${UNINSTALL:-false}
+AUTO_UPDATE_REPO=${AUTO_UPDATE_REPO:-true}
+UPDATE_ONLY=${UPDATE_ONLY:-false}
 
 ORIGINAL_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="${ORIGINAL_SCRIPT_DIR}"
@@ -37,8 +39,8 @@ Options:
   --master-port <port>     Port to expose the master API on the host (default: 9000)
   --iperf-port <port>      Port to expose iperf3 server TCP/UDP (default: 5201)
   --install-target <name>  Which components to install: master, agent, or all (default: prompt)
-  --download-latest        Download the latest repository before running (requires --repo-url)
-  --repo-url <url>         Repository URL to clone (e.g., https://github.com/org/iperf3-test-tools.git)
+  --download-latest        Download the latest repository before running (uses default repo URL if unset)
+  --repo-url <url>         Repository URL to clone (default: https://github.com/podcctv/iperf3-test-tools/)
   --repo-ref <ref>         Branch, tag, or commit to fetch when downloading (default: main)
   --repo-dest <path>       Destination directory for downloaded repo (default: temporary dir)
   --no-local-agent         Skip launching a local agent container
@@ -52,11 +54,6 @@ USAGE
 log() { printf "[install-all] %s\n" "$*"; }
 
 download_repo() {
-  if [ -z "${REPO_URL}" ]; then
-    log "--download-latest requires --repo-url (or REPO_URL env var) to be set." >&2
-    exit 1
-  fi
-
   local target_dir="${REPO_DEST}"
   if [ -z "${target_dir}" ]; then
     target_dir="$(mktemp -d)/iperf3-test-tools"
@@ -120,6 +117,12 @@ update_repo_from_git() {
 
 ensure_repo_ready() {
   local needs_refresh=false
+
+  if [ "${AUTO_UPDATE_REPO}" = true ] && update_repo_from_git; then
+    log "Repository updated from ${REPO_URL}."
+    resolve_paths
+    return
+  fi
 
   if ! is_repo_complete; then
     log "Required project files missing at ${REPO_ROOT}."
@@ -353,8 +356,9 @@ Select installation target:
   2) agent (local/remote agents only)
   3) all (master API and agents)
   4) uninstall (remove containers and images)
+  5) update repo (refresh local repository)
 PROMPT
-  read -rp "Enter choice [1-4]: " choice
+  read -rp "Enter choice [1-5]: " choice
   case "$choice" in
     1) INSTALL_TARGET="master" ;;
     2) INSTALL_TARGET="agent" ;;
@@ -364,8 +368,13 @@ PROMPT
       UNINSTALL=true
       return
       ;;
+    5)
+      INSTALL_TARGET="update"
+      UPDATE_ONLY=true
+      return
+      ;;
     *)
-      log "Invalid selection. Please choose 1, 2, or 3."
+      log "Invalid selection. Please choose 1, 2, 3, 4, or 5."
       prompt_install_target
       ;;
   esac
@@ -399,6 +408,9 @@ set_install_flags() {
       INSTALL_MASTER=false
       INSTALL_AGENT=true
       ;;
+    update)
+      UPDATE_ONLY=true
+      ;;
     uninstall)
       UNINSTALL=true
       ;;
@@ -418,6 +430,14 @@ main() {
 
   prompt_install_target
 
+  set_install_flags
+
+  if [ "${UPDATE_ONLY}" = true ]; then
+    ensure_repo_ready
+    log "Repository refreshed; exiting."
+    exit 0
+  fi
+
   if [ "${UNINSTALL}" = true ]; then
     ensure_repo_ready
     ensure_docker
@@ -427,7 +447,6 @@ main() {
   fi
 
   prompt_ports
-  set_install_flags
   maybe_download_repo
   ensure_repo_ready
   resolve_paths
