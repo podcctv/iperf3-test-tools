@@ -1,4 +1,4 @@
-from sqlalchemy import Column, ForeignKey, Integer, JSON, String
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, JSON, String, func
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
@@ -27,6 +27,29 @@ class TestResult(Base):
     protocol = Column(String)
     params = Column(JSON)
     raw_result = Column(JSON)
+    summary = Column(JSON)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     src_node = relationship("Node", foreign_keys=[src_node_id], back_populates="outgoing_tests")
     dst_node = relationship("Node", foreign_keys=[dst_node_id], back_populates="incoming_tests")
+
+
+class TestSchedule(Base):
+    __tablename__ = "test_schedules"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    src_node_id = Column(Integer, ForeignKey("nodes.id"))
+    dst_node_id = Column(Integer, ForeignKey("nodes.id"))
+    protocol = Column(String, default="tcp")
+    duration = Column(Integer, default=10)
+    parallel = Column(Integer, default=1)
+    port = Column(Integer, default=5201)
+    interval_seconds = Column(Integer, nullable=False)
+    enabled = Column(Boolean, default=True)
+    last_run_at = Column(DateTime(timezone=True), nullable=True)
+    next_run_at = Column(DateTime(timezone=True), nullable=True)
+    notes = Column(String, nullable=True)
+
+    src_node = relationship("Node", foreign_keys=[src_node_id])
+    dst_node = relationship("Node", foreign_keys=[dst_node_id])

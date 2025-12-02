@@ -89,6 +89,22 @@ MASTER_API_PORT=9000 MASTER_WEB_PORT=9100 docker-compose up -d
 
 All of these actions are also exposed in the web dashboard (add node, run test, view status, redeploy/remove agents, view agent logs).
 
+## Persistence & scheduling / 状态持久化与计划调度
+
+* The master now snapshots **nodes**, the **most recent test results** (default last 50), and **scheduled test definitions** into `data/master_state.json`. This file is mounted outside the container by default (`./data:/app/data` in `docker-compose.yml`) so data survives Docker reinstalls.
+* The dashboard exposes a "Delete All" button under **Recent Tests** to quickly clear stored history while keeping nodes/schedules intact. Individual test rows still support one-by-one deletion.
+* A new "Scheduled Tests" section lets you record recurring test intents (source/destination, interval, protocol, port, notes). The API stores these in the database and state snapshot today so later automation can pick them up for periodic execution and analytics.
+
+Available schedule endpoints:
+
+```bash
+curl -X POST http://localhost:9000/schedules \
+  -H "Content-Type: application/json" \
+  -d '{"name":"nightly","src_node_id":1,"dst_node_id":2,"interval_seconds":3600}'
+curl http://localhost:9000/schedules
+curl -X DELETE http://localhost:9000/schedules/1
+```
+
 ## Environment variables / 环境变量
 
 * `DATABASE_URL` – SQLAlchemy connection string (default Postgres via Compose, fallback `sqlite:///./iperf.db`).
@@ -98,6 +114,8 @@ All of these actions are also exposed in the web dashboard (add node, run test, 
 * `DASHBOARD_COOKIE_NAME` – Auth cookie name (default `iperf_dashboard_auth`).
 * `AGENT_CONFIG_PATH` – Path where dashboard persists remote agent configs (default `./agent_configs.json`).
 * `AGENT_IMAGE` – Docker image tag used when (re)deploying agents (default `iperf-agent:latest`).
+* `STATE_FILE_PATH` – JSON snapshot location for nodes/tests/schedules (default `./data/master_state.json`).
+* `STATE_RECENT_TESTS` – Number of most recent tests to keep in the snapshot file (default `50`).
 
 ## Notes / 补充说明
 

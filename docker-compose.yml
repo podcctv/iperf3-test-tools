@@ -19,6 +19,8 @@ services:
       DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:-iperf-pass}
       AGENT_CONFIG_PATH: /app/agent_configs.json
       AGENT_IMAGE: ${AGENT_IMAGE:-iperf-agent:latest}
+      STATE_FILE_PATH: /app/data/master_state.json
+      STATE_RECENT_TESTS: ${STATE_RECENT_TESTS:-50}
     ports:
       - "${MASTER_API_PORT:-9000}:8000"
       - "${MASTER_WEB_PORT:-9100}:8000"
@@ -27,6 +29,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./agent_configs.json:/app/agent_configs.json
+      - ./data:/app/data
 
 volumes:
   db_data:

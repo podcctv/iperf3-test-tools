@@ -52,6 +52,47 @@ class TestRead(BaseModel):
     protocol: str
     params: Any
     raw_result: Any
+    summary: Any | None = None
+    created_at: str | None = None
+
+    class Config:
+        orm_mode = True
+
+
+class TestScheduleBase(BaseModel):
+    name: str
+    src_node_id: int
+    dst_node_id: int
+    protocol: str = "tcp"
+    duration: int = Field(default=10, gt=0)
+    parallel: int = Field(default=1, gt=0)
+    port: int = Field(default=5201, ge=1, le=65535)
+    interval_seconds: int = Field(default=3600, gt=0)
+    enabled: bool = True
+    notes: Optional[str] = None
+
+
+class TestScheduleCreate(TestScheduleBase):
+    pass
+
+
+class TestScheduleUpdate(BaseModel):
+    name: Optional[str] = None
+    src_node_id: Optional[int] = None
+    dst_node_id: Optional[int] = None
+    protocol: Optional[str] = None
+    duration: Optional[int] = Field(default=None, gt=0)
+    parallel: Optional[int] = Field(default=None, gt=0)
+    port: Optional[int] = Field(default=None, ge=1, le=65535)
+    interval_seconds: Optional[int] = Field(default=None, gt=0)
+    enabled: Optional[bool] = None
+    notes: Optional[str] = None
+
+
+class TestScheduleRead(TestScheduleBase):
+    id: int
+    last_run_at: Optional[str] = None
+    next_run_at: Optional[str] = None
 
     class Config:
         orm_mode = True
