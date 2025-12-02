@@ -34,11 +34,37 @@ detect_repo_root() {
   elif [ -f "${PWD}/docker-compose.yml" ]; then
     REPO_ROOT="${PWD}"
   else
-    REPO_ROOT="${SCRIPT_DIR}"
+    REPO_ROOT="${SCRIPT_DIR}/iperf3-test-tools"
   fi
 
   if [ -z "${DEFAULT_REPO_URL}" ] && command -v git >/dev/null 2>&1; then
     DEFAULT_REPO_URL="$(git -C "${REPO_ROOT}" remote get-url origin 2>/dev/null || true)"
+  fi
+}
+
+download_repo_if_missing() {
+  if [ -f "${REPO_ROOT}/docker-compose.yml" ]; then
+    return
+  fi
+
+  ensure_command git git
+
+  if [ -d "${REPO_ROOT}" ] && [ -n "$(ls -A "${REPO_ROOT}" 2>/dev/null)" ]; then
+    log "Repository directory ${REPO_ROOT} exists but lacks required files; replacing it..."
+    rm -rf "${REPO_ROOT}"
+  fi
+
+  log "Cloning repository from ${REPO_URL} into ${REPO_ROOT}..."
+  mkdir -p "$(dirname "${REPO_ROOT}")"
+  if ! git clone --depth 1 "${REPO_URL}" "${REPO_ROOT}" >/dev/null 2>&1; then
+    log "Failed to clone repository from ${REPO_URL}. Please download it manually and re-run."
+    exit 1
+  fi
+
+  if [ -n "${REPO_REF}" ]; then
+    if git -C "${REPO_ROOT}" fetch origin "${REPO_REF}" >/dev/null 2>&1; then
+      git -C "${REPO_ROOT}" checkout "${REPO_REF}" >/dev/null 2>&1 || true
+    fi
   fi
 }
 
@@ -266,6 +292,7 @@ main() {
   parse_args "$@"
   detect_repo_root
   REPO_URL=${REPO_URL:-"${DEFAULT_REPO_URL:-https://github.com/podcctv/iperf3-test-tools.git}"}
+  download_repo_if_missing
   update_repo
   ensure_docker
   ensure_compose
