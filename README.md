@@ -21,12 +21,17 @@ To build images, launch the master API stack, start a local agent (with iperf3 s
 ./install_all.sh
 ```
 
+You will be prompted to choose whether to install the **master**, **agent**, or **both**, and to confirm the master/agent ports before installation begins. Use flags to skip the prompts in automated environments.
+
 Flags of interest:
 
+* `--install-target <master|agent|all>` – limit installation to a specific component (defaults to interactive prompt).
 * `--no-local-agent` – skip running the local agent container.
 * `--no-start-server` – do not auto-start the iperf3 server inside the local agent.
 * `--no-remote` – skip remote agent deployment.
 * `--hosts <file>` – set an alternate inventory file for remote deployment (defaults to `hosts.txt`).
+* `--master-port <port>` – override the master API host port (default: `9000`).
+* `--agent-port <port>` – override the agent API host port (default: `8000`).
 
 ### 1) Build images
 
