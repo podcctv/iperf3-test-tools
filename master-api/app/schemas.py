@@ -7,6 +7,7 @@ class NodeBase(BaseModel):
     name: str
     ip: str
     agent_port: int = Field(default=8000, ge=1, le=65535)
+    iperf_port: int = Field(default=5201, ge=1, le=65535)
     description: Optional[str] = None
 
 
@@ -18,6 +19,7 @@ class NodeUpdate(BaseModel):
     name: Optional[str] = None
     ip: Optional[str] = None
     agent_port: Optional[int] = Field(default=None, ge=1, le=65535)
+    iperf_port: Optional[int] = Field(default=None, ge=1, le=65535)
     description: Optional[str] = None
 
 

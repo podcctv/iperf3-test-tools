@@ -11,6 +11,7 @@ class Node(Base):
     name = Column(String, nullable=False)
     ip = Column(String, nullable=False)
     agent_port = Column(Integer, default=8000)
+    iperf_port = Column(Integer, default=5201)
     description = Column(String, nullable=True)
 
     outgoing_tests = relationship("TestResult", foreign_keys="TestResult.src_node_id", back_populates="src_node")

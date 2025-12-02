@@ -29,6 +29,20 @@ from .schemas import (
 
 Base.metadata.create_all(bind=engine)
 
+
+def _ensure_iperf_port_column() -> None:
+    if engine.dialect.name != "sqlite":
+        return
+
+    with engine.connect() as connection:
+        columns = connection.exec_driver_sql("PRAGMA table_info(nodes)").fetchall()
+        if not any(col[1] == "iperf_port" for col in columns):
+            connection.exec_driver_sql("ALTER TABLE nodes ADD COLUMN iperf_port INTEGER DEFAULT 5201")
+            connection.commit()
+
+
+_ensure_iperf_port_column()
+
 app = FastAPI(title="iperf3 master api")
 agent_store = AgentConfigStore(settings.agent_config_file)
 
@@ -76,6 +90,14 @@ def _login_html() -> str:
     table { width: 100%; border-collapse: collapse; }
     th, td { padding: 8px 10px; border-bottom: 1px solid #1f2937; text-align: left; }
     th { color: #cbd5e1; font-weight: 700; }
+    .flex-between { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .muted-sm { color: #94a3b8; font-size: 13px; }
+    .node-row { border-bottom: 1px solid #1f2937; padding: 10px 0; }
+    .input-inline { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; width: 100%; }
+    .test-block { border-bottom: 1px solid #1f2937; padding: 10px 0; }
+    .table-scroll { overflow: auto; }
+    .raw-table { width: 100%; border-collapse: collapse; }
+    .raw-table th, .raw-table td { padding: 6px 8px; border-bottom: 1px solid #1f2937; }
   </style>
 </head>
 <body>
@@ -108,6 +130,8 @@ def _login_html() -> str:
           <input id=\"node-ip\" placeholder=\"10.0.0.11\" />
           <label>Agent Port</label>
           <input id=\"node-port\" type=\"number\" value=\"8000\" />
+          <label>iperf Port</label>
+          <input id=\"node-iperf-port\" type=\"number\" value=\"5201\" />
           <label>Description (optional)</label>
           <textarea id=\"node-desc\" rows=\"2\"></textarea>
           <button id=\"save-node\" style=\"margin-top: 12px;\">Save Node</button>
@@ -129,56 +153,6 @@ def _login_html() -> str:
           <label>Port</label>
           <input id=\"test-port\" type=\"number\" value=\"5201\" />
           <button id=\"run-test\" style=\"margin-top: 12px;\">Start Test</button>
-        </div>
-      </div>
-
-      <div class=\"card\" style=\"margin-top: 16px;\">
-        <h2>Remote Agent Configuration</h2>
-        <p class=\"muted\">Manage remote iperf-agent Docker deployments and persist connection details.</p>
-        <div id=\"agent-config-alert\" class=\"alert error hidden\"></div>
-        <div id=\"agent-config-success\" class=\"alert success hidden\"></div>
-        <div class=\"grid\" style=\"grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px;\">
-          <div>
-            <label>Config Name</label>
-            <input id=\"agent-name\" placeholder=\"edge-a\" />
-          </div>
-          <div>
-            <label>SSH Host (user@ip)</label>
-            <input id=\"agent-host\" placeholder=\"ubuntu@10.0.0.15\" />
-          </div>
-          <div>
-            <label>Agent API Port</label>
-            <input id=\"agent-api-port\" type=\"number\" value=\"8000\" />
-          </div>
-          <div>
-            <label>iperf3 Port</label>
-            <input id=\"agent-iperf-port\" type=\"number\" value=\"5201\" />
-          </div>
-          <div>
-            <label>SSH Port (optional)</label>
-            <input id=\"agent-ssh-port\" type=\"number\" placeholder=\"22\" />
-          </div>
-          <div>
-            <label>Docker Image</label>
-            <input id=\"agent-image\" value=\"iperf-agent:latest\" />
-          </div>
-          <div>
-            <label>Container Name</label>
-            <input id=\"agent-container\" value=\"iperf-agent\" />
-          </div>
-          <div>
-            <label>Description</label>
-            <input id=\"agent-description\" placeholder=\"notes for this host\" />
-          </div>
-        </div>
-        <div class=\"inline\" style=\"margin-top: 12px; gap: 12px;\">
-          <button id=\"save-agent-config\" style=\"width: auto;\">Save / Update Config</button>
-          <button id=\"refresh-agent-configs\" style=\"width: auto; background: #0ea5e9; color: #0b1220;\">Refresh List</button>
-        </div>
-        <div id=\"agent-configs-list\" class=\"muted\" style=\"margin-top: 16px;\">No agent configs yet.</div>
-        <div id=\"agent-logs\" class=\"hidden\" style=\"margin-top: 12px;\">
-          <h3>Agent Logs</h3>
-          <pre id=\"agent-logs-content\"></pre>
         </div>
       </div>
 
@@ -207,23 +181,21 @@ def _login_html() -> str:
     const loginAlert = document.getElementById('login-alert');
     const authHint = document.getElementById('auth-hint');
 
-    const nodeName = document.getElementById('node-name');
-    const nodeIp = document.getElementById('node-ip');
-    const nodePort = document.getElementById('node-port');
-    const nodeDesc = document.getElementById('node-desc');
-    const nodesList = document.getElementById('nodes-list');
-    const testsList = document.getElementById('tests-list');
-    const saveNodeBtn = document.getElementById('save-node');
-    const srcSelect = document.getElementById('src-select');
-    const dstSelect = document.getElementById('dst-select');
-    const addNodeAlert = document.getElementById('add-node-alert');
-    const testAlert = document.getElementById('test-alert');
-    const agentConfigAlert = document.getElementById('agent-config-alert');
-    const agentConfigSuccess = document.getElementById('agent-config-success');
-    const agentLogs = document.getElementById('agent-logs');
-    const agentLogsContent = document.getElementById('agent-logs-content');
-    let agentConfigCache = [];
-    let editingNodeId = null;
+      const nodeName = document.getElementById('node-name');
+      const nodeIp = document.getElementById('node-ip');
+      const nodePort = document.getElementById('node-port');
+      const nodeIperf = document.getElementById('node-iperf-port');
+      const nodeDesc = document.getElementById('node-desc');
+      const nodesList = document.getElementById('nodes-list');
+      const testsList = document.getElementById('tests-list');
+      const saveNodeBtn = document.getElementById('save-node');
+      const srcSelect = document.getElementById('src-select');
+      const dstSelect = document.getElementById('dst-select');
+      const addNodeAlert = document.getElementById('add-node-alert');
+      const testAlert = document.getElementById('test-alert');
+      const testPortInput = document.getElementById('test-port');
+      let nodeCache = [];
+      let editingNodeId = null;
 
 
     function show(el) { el.classList.remove('hidden'); }
@@ -236,20 +208,10 @@ def _login_html() -> str:
       nodeName.value = '';
       nodeIp.value = '';
       nodePort.value = 8000;
+      nodeIperf.value = 5201;
       nodeDesc.value = '';
       editingNodeId = null;
       saveNodeBtn.textContent = 'Save Node';
-    }
-
-
-    function beginEditNode(node) {
-      editingNodeId = node.id;
-      nodeName.value = node.name || '';
-      nodeIp.value = node.ip || '';
-      nodePort.value = node.agent_port || 8000;
-      nodeDesc.value = node.description || '';
-      saveNodeBtn.textContent = 'Update Node';
-      addNodeAlert.textContent = '';
     }
 
 
@@ -273,199 +235,19 @@ def _login_html() -> str:
     }
 
 
-    function fillAgentForm(config) {
-      document.getElementById('agent-name').value = config.name || '';
-      document.getElementById('agent-host').value = config.host || '';
-      document.getElementById('agent-api-port').value = config.agent_port || 8000;
-      document.getElementById('agent-iperf-port').value = config.iperf_port || 5201;
-      document.getElementById('agent-ssh-port').value = config.ssh_port || '';
-      document.getElementById('agent-image').value = config.image || 'iperf-agent:latest';
-      document.getElementById('agent-container').value = config.container_name || 'iperf-agent';
-      document.getElementById('agent-description').value = config.description || '';
-    }
-
-    async function refreshAgentConfigs() {
-      clearAlert(agentConfigAlert);
-      clearAlert(agentConfigSuccess);
-      const res = await fetch('/agent-configs');
-      if (!res.ok) {
-        setAlert(agentConfigAlert, 'Failed to load agent configs.');
-        return;
-      }
-      agentConfigCache = await res.json();
-      renderAgentConfigs();
-    }
-
-    function renderAgentConfigs() {
-      const container = document.getElementById('agent-configs-list');
-      if (!agentConfigCache.length) {
-        container.textContent = 'No agent configs yet.';
-        return;
-      }
-
-      container.innerHTML = '';
-      agentConfigCache.forEach((cfg) => {
-        const wrap = document.createElement('div');
-        wrap.style.borderBottom = '1px solid #1f2937';
-        wrap.style.padding = '10px 0';
-        const sshPort = cfg.ssh_port ? `:${cfg.ssh_port}` : '';
-        wrap.innerHTML = `<div class=\"inline\" style=\"justify-content: space-between; width: 100%;\">` +
-          `<div><strong>${cfg.name}</strong> <span class=\"muted\">(${cfg.host}${sshPort})</span><br/>` +
-          `<span class=\"muted\">Agent: ${cfg.agent_port} | iperf: ${cfg.iperf_port} | Container: ${cfg.container_name}</span><br/>` +
-          `<span class=\"muted\">Image: ${cfg.image}${cfg.description ? ` | ${cfg.description}` : ''}</span></div>` +
-          `</div>`;
-
-        const actions = document.createElement('div');
-        actions.className = 'inline';
-        actions.style.gap = '8px';
-        actions.style.marginTop = '6px';
-
-        const deployBtn = document.createElement('button');
-        deployBtn.textContent = 'Redeploy';
-        deployBtn.style.width = 'auto';
-        deployBtn.onclick = () => triggerRedeploy(cfg.name);
-        actions.appendChild(deployBtn);
-
-        const removeBtn = document.createElement('button');
-        removeBtn.textContent = 'Remove Container';
-        removeBtn.style.width = 'auto';
-        removeBtn.style.background = '#f87171';
-        removeBtn.onclick = () => triggerRemoveContainer(cfg.name);
-        actions.appendChild(removeBtn);
-
-        const logBtn = document.createElement('button');
-        logBtn.textContent = 'View Logs';
-        logBtn.style.width = 'auto';
-        logBtn.style.background = '#0ea5e9';
-        logBtn.onclick = () => viewAgentLogs(cfg.name);
-        actions.appendChild(logBtn);
-
-        const editBtn = document.createElement('button');
-        editBtn.textContent = 'Load to Form';
-        editBtn.style.width = 'auto';
-        editBtn.style.background = '#a78bfa';
-        editBtn.onclick = () => fillAgentForm(cfg);
-        actions.appendChild(editBtn);
-
-        const deleteBtn = document.createElement('button');
-        deleteBtn.textContent = 'Delete Config';
-        deleteBtn.style.width = 'auto';
-        deleteBtn.style.background = '#fb7185';
-        deleteBtn.onclick = () => deleteAgentConfig(cfg.name);
-        actions.appendChild(deleteBtn);
-
-        wrap.appendChild(actions);
-        container.appendChild(wrap);
-      });
-    }
-
-    async function saveAgentConfig() {
-      clearAlert(agentConfigAlert);
-      clearAlert(agentConfigSuccess);
-      const payload = {
-        name: document.getElementById('agent-name').value,
-        host: document.getElementById('agent-host').value,
-        agent_port: Number(document.getElementById('agent-api-port').value || 8000),
-        iperf_port: Number(document.getElementById('agent-iperf-port').value || 5201),
-        ssh_port: document.getElementById('agent-ssh-port').value ? Number(document.getElementById('agent-ssh-port').value) : null,
-        image: document.getElementById('agent-image').value || 'iperf-agent:latest',
-        container_name: document.getElementById('agent-container').value || 'iperf-agent',
-        description: document.getElementById('agent-description').value,
-      };
-
-      if (!payload.name || !payload.host) {
-        setAlert(agentConfigAlert, 'Name and SSH host are required.');
-        return;
-      }
-
-      const existing = agentConfigCache.find((c) => c.name === payload.name);
-      const method = existing ? 'PUT' : 'POST';
-      const url = existing ? `/agent-configs/${encodeURIComponent(payload.name)}` : '/agent-configs';
-
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) {
-        setAlert(agentConfigAlert, 'Failed to save agent config.');
-        return;
-      }
-
-      setAlert(agentConfigSuccess, 'Agent config saved.');
-      await refreshAgentConfigs();
-    }
-
-    async function triggerRedeploy(name) {
-      clearAlert(agentConfigAlert);
-      clearAlert(agentConfigSuccess);
-      const res = await fetch(`/agent-configs/${encodeURIComponent(name)}/redeploy`, { method: 'POST' });
-      if (!res.ok) {
-        setAlert(agentConfigAlert, `Redeploy failed for ${name}.`);
-        return;
-      }
-      const data = await res.json();
-      setAlert(agentConfigSuccess, data.message || 'Redeployed.');
-    }
-
-    async function triggerRemoveContainer(name) {
-      clearAlert(agentConfigAlert);
-      clearAlert(agentConfigSuccess);
-      const res = await fetch(`/agent-configs/${encodeURIComponent(name)}/remove-container`, { method: 'POST' });
-      if (!res.ok) {
-        setAlert(agentConfigAlert, `Remove failed for ${name}.`);
-        return;
-      }
-      const data = await res.json();
-      setAlert(agentConfigSuccess, data.message || 'Container removed.');
-    }
-
-    async function viewAgentLogs(name) {
-      clearAlert(agentConfigAlert);
-      clearAlert(agentConfigSuccess);
-      const res = await fetch(`/agent-configs/${encodeURIComponent(name)}/logs`);
-      if (!res.ok) {
-        setAlert(agentConfigAlert, `Could not load logs for ${name}.`);
-        return;
-      }
-      const data = await res.json();
-      agentLogsContent.textContent = data.logs || 'No logs returned.';
-      show(agentLogs);
-      setAlert(agentConfigSuccess, data.message || 'Logs loaded.');
-    }
-
-    async function deleteAgentConfig(name) {
-      clearAlert(agentConfigAlert);
-      clearAlert(agentConfigSuccess);
-      const res = await fetch(`/agent-configs/${encodeURIComponent(name)}`, { method: 'DELETE' });
-      if (!res.ok) {
-        setAlert(agentConfigAlert, `Failed to delete ${name}.`);
-        return;
-      }
-      await refreshAgentConfigs();
-      setAlert(agentConfigSuccess, `${name} deleted.`);
-    }
-
-    function attachAgentHandlers() {
-      document.getElementById('save-agent-config').addEventListener('click', saveAgentConfig);
-      document.getElementById('refresh-agent-configs').addEventListener('click', refreshAgentConfigs);
-    }
-
     async function checkAuth() {
       const res = await fetch('/auth/status');
       const data = await res.json();
-      if (data.authenticated) {
-        loginCard.classList.add('hidden');
-        appCard.classList.remove('hidden');
-        authHint.textContent = 'Authenticated. Use the controls below to manage nodes and run tests.';
-        await refreshNodes();
-        await refreshTests();
-        await refreshAgentConfigs();
-      } else {
-        appCard.classList.add('hidden');
-        loginCard.classList.remove('hidden');
-      }
+        if (data.authenticated) {
+          loginCard.classList.add('hidden');
+          appCard.classList.remove('hidden');
+          authHint.textContent = 'Authenticated. Use the controls below to manage nodes and run tests.';
+          await refreshNodes();
+          await refreshTests();
+        } else {
+          appCard.classList.add('hidden');
+          loginCard.classList.remove('hidden');
+        }
     }
 
     async function login() {
@@ -489,38 +271,72 @@ def _login_html() -> str:
       await checkAuth();
     }
 
+    function syncTestPort() {
+      const selected = nodeCache.find((n) => n.id === Number(dstSelect.value));
+      if (selected && testPortInput) {
+        testPortInput.value = selected.iperf_port || selected.agent_port || 5201;
+      }
+    }
+
+
+    async function saveNodeInline(nodeId, payload) {
+      const res = await fetch(`/nodes/${nodeId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        setAlert(addNodeAlert, 'Failed to update node. Check the fields and try again.');
+        return false;
+      }
+      editingNodeId = null;
+      await refreshNodes();
+      clearAlert(addNodeAlert);
+      return true;
+    }
+
+
     async function refreshNodes() {
       const res = await fetch('/nodes/status');
-      const nodes = await res.json();
+      nodeCache = await res.json();
       srcSelect.innerHTML = '';
       dstSelect.innerHTML = '';
-      if (!nodes.length) {
+      if (!nodeCache.length) {
         nodesList.textContent = 'No nodes yet.';
         return;
       }
 
       nodesList.innerHTML = '';
-      nodes.forEach((node) => {
+      nodeCache.forEach((node) => {
         const badge = `<span class=\"badge ${node.status}\">${node.status}</span>`;
         const server = node.server_running ? 'running' : 'stopped';
+        const isEditing = editingNodeId === node.id;
         const item = document.createElement('div');
-        item.style.borderBottom = '1px solid #1f2937';
-        item.style.padding = '8px 0';
-        item.innerHTML = `<div class=\"inline\" style=\"justify-content: space-between; width: 100%;\">` +
-          `<div><strong>${node.name}</strong> <span class=\"muted\">(${node.ip}:${node.agent_port})</span><br/>` +
-          `<span class=\"muted\">Server: ${server}</span></div>` +
-          `${badge}</div>`;
+        item.className = 'node-row';
+
+        const header = document.createElement('div');
+        header.className = 'flex-between';
+        const info = document.createElement('div');
+        info.innerHTML = `<strong>${node.name}</strong> <span class=\"muted\">(${node.ip}:${node.agent_port}, iperf ${node.iperf_port})</span><br/>` +
+          `<span class=\"muted-sm\">${node.description || 'No description'} | Server: ${server}</span>`;
+        header.appendChild(info);
 
         const actions = document.createElement('div');
         actions.className = 'inline';
         actions.style.gap = '8px';
-        actions.style.marginTop = '6px';
+
+        const statusBadge = document.createElement('span');
+        statusBadge.className = `badge ${node.status}`;
+        statusBadge.textContent = node.status;
+        actions.appendChild(statusBadge);
 
         const editBtn = document.createElement('button');
-        editBtn.textContent = 'Edit';
+        editBtn.textContent = isEditing ? 'Editing' : 'Edit';
+        editBtn.disabled = isEditing;
         editBtn.style.width = 'auto';
         editBtn.style.background = '#38bdf8';
-        editBtn.onclick = () => beginEditNode(node);
+        editBtn.onclick = () => { editingNodeId = node.id; refreshNodes(); };
         actions.appendChild(editBtn);
 
         const deleteBtn = document.createElement('button');
@@ -530,23 +346,88 @@ def _login_html() -> str:
         deleteBtn.onclick = () => removeNode(node.id);
         actions.appendChild(deleteBtn);
 
-        item.appendChild(actions);
+        header.appendChild(actions);
+        item.appendChild(header);
+
+        if (isEditing) {
+          const form = document.createElement('div');
+          form.className = 'input-inline';
+
+          const nameInput = document.createElement('input');
+          nameInput.value = node.name || '';
+          nameInput.placeholder = 'Name';
+
+          const ipInput = document.createElement('input');
+          ipInput.value = node.ip || '';
+          ipInput.placeholder = 'IP';
+
+          const agentPortInput = document.createElement('input');
+          agentPortInput.type = 'number';
+          agentPortInput.value = node.agent_port || 8000;
+          agentPortInput.placeholder = 'Agent port';
+
+          const iperfPortInput = document.createElement('input');
+          iperfPortInput.type = 'number';
+          iperfPortInput.value = node.iperf_port || 5201;
+          iperfPortInput.placeholder = 'iperf port';
+
+          const descInput = document.createElement('input');
+          descInput.value = node.description || '';
+          descInput.placeholder = 'Description';
+
+          form.appendChild(nameInput);
+          form.appendChild(ipInput);
+          form.appendChild(agentPortInput);
+          form.appendChild(iperfPortInput);
+          form.appendChild(descInput);
+          item.appendChild(form);
+
+          const buttonBar = document.createElement('div');
+          buttonBar.className = 'inline';
+          buttonBar.style.gap = '10px';
+          buttonBar.style.marginTop = '8px';
+
+          const saveBtn = document.createElement('button');
+          saveBtn.textContent = 'Save';
+          saveBtn.style.width = 'auto';
+          saveBtn.onclick = () => saveNodeInline(node.id, {
+            name: nameInput.value,
+            ip: ipInput.value,
+            agent_port: Number(agentPortInput.value || 8000),
+            iperf_port: Number(iperfPortInput.value || 5201),
+            description: descInput.value,
+          });
+          buttonBar.appendChild(saveBtn);
+
+          const cancelBtn = document.createElement('button');
+          cancelBtn.textContent = 'Cancel';
+          cancelBtn.style.width = 'auto';
+          cancelBtn.style.background = '#64748b';
+          cancelBtn.onclick = () => { editingNodeId = null; refreshNodes(); };
+          buttonBar.appendChild(cancelBtn);
+
+          item.appendChild(buttonBar);
+        }
+
         nodesList.appendChild(item);
 
         const optionA = document.createElement('option');
         optionA.value = node.id;
-        optionA.textContent = `${node.name} (${node.ip})`;
+        optionA.textContent = `${node.name} (${node.ip} | iperf ${node.iperf_port})`;
         srcSelect.appendChild(optionA);
 
         const optionB = document.createElement('option');
         optionB.value = node.id;
-        optionB.textContent = `${node.name} (${node.ip})`;
+        optionB.textContent = `${node.name} (${node.ip} | iperf ${node.iperf_port})`;
         dstSelect.appendChild(optionB);
       });
+
+      syncTestPort();
     }
 
     function summarizeTestMetrics(raw) {
-      const end = (raw && raw.end) || {};
+      const body = (raw && raw.iperf_result) || raw || {};
+      const end = (body && body.end) || {};
       const sumReceived = end.sum_received || end.sum;
       const sumSent = end.sum_sent || end.sum;
       const firstStream = (end.streams && end.streams.length) ? end.streams[0] : null;
@@ -588,6 +469,90 @@ def _login_html() -> str:
     }
 
 
+    function renderRawResult(raw) {
+      const wrap = document.createElement('div');
+      wrap.className = 'table-scroll';
+
+      if (!raw) {
+        wrap.textContent = 'No raw result available.';
+        return wrap;
+      }
+
+      const result = raw.iperf_result || raw;
+      const end = result.end || {};
+      const sumSent = end.sum_sent || {};
+      const sumReceived = end.sum_received || {};
+
+      const summaryTable = document.createElement('table');
+      summaryTable.className = 'raw-table';
+
+      const addSummaryRow = (label, value) => {
+        const row = document.createElement('tr');
+        const l = document.createElement('th');
+        l.textContent = label;
+        const v = document.createElement('td');
+        v.textContent = value;
+        row.appendChild(l);
+        row.appendChild(v);
+        summaryTable.appendChild(row);
+      };
+
+      addSummaryRow('Status', raw.status || 'unknown');
+      addSummaryRow('Sender rate (Mbps)', sumSent.bits_per_second ? formatMetric(sumSent.bits_per_second / 1e6) : 'N/A');
+      addSummaryRow('Receiver rate (Mbps)', sumReceived.bits_per_second ? formatMetric(sumReceived.bits_per_second / 1e6) : 'N/A');
+      addSummaryRow('Sender congestion', end.sender_tcp_congestion || 'N/A');
+      addSummaryRow('Receiver congestion', end.receiver_tcp_congestion || 'N/A');
+      wrap.appendChild(summaryTable);
+
+      const intervals = result.intervals || [];
+      if (!intervals.length) {
+        const fallback = document.createElement('pre');
+        fallback.textContent = JSON.stringify(result, null, 2);
+        wrap.appendChild(fallback);
+        return wrap;
+      }
+
+      const intervalTable = document.createElement('table');
+      intervalTable.className = 'raw-table';
+      const headerRow = document.createElement('tr');
+      ['Interval (s)', 'Rate (Mbps)', 'Retrans', 'RTT (ms)', 'CWND', 'Window'].forEach((label) => {
+        const th = document.createElement('th');
+        th.textContent = label;
+        headerRow.appendChild(th);
+      });
+      intervalTable.appendChild(headerRow);
+
+      intervals.forEach((interval, idx) => {
+        const stream = (interval.streams && interval.streams[0]) || interval.sum || {};
+        const start = stream.start ?? 0;
+        const endTime = stream.end ?? (stream.seconds ? start + stream.seconds : start);
+        const rate = stream.bits_per_second ? `${formatMetric(stream.bits_per_second / 1e6)} Mbps` : 'N/A';
+        let rtt = stream.rtt ?? stream.mean_rtt;
+        if (rtt && rtt > 1000) rtt = rtt / 1000;
+
+        const cells = [
+          `${formatMetric(start, 3)} - ${formatMetric(endTime, 3)}`,
+          rate,
+          stream.retransmits ?? 'N/A',
+          rtt ? `${formatMetric(rtt)}` : 'N/A',
+          stream.snd_cwnd ? `${stream.snd_cwnd}` : 'N/A',
+          stream.snd_wnd ? `${stream.snd_wnd}` : 'N/A',
+        ];
+
+        const row = document.createElement('tr');
+        cells.forEach((value) => {
+          const td = document.createElement('td');
+          td.textContent = value;
+          row.appendChild(td);
+        });
+        intervalTable.appendChild(row);
+      });
+
+      wrap.appendChild(intervalTable);
+      return wrap;
+    }
+
+
     async function deleteTestResult(testId) {
       clearAlert(testAlert);
       const res = await fetch(`/tests/${testId}`, { method: 'DELETE' });
@@ -608,59 +573,41 @@ def _login_html() -> str:
       }
       testsList.innerHTML = '';
 
-      const table = document.createElement('table');
-      const header = document.createElement('tr');
-      ['ID', 'Path', 'Protocol', 'Port', 'Duration (s)', 'Rate (Mbps)', 'Latency/Jitter (ms)', 'Loss (%)', 'Actions'].forEach((label) => {
-        const th = document.createElement('th');
-        th.textContent = label;
-        header.appendChild(th);
-      });
-      table.appendChild(header);
-
       tests.slice().reverse().forEach((test) => {
         const metrics = summarizeTestMetrics(test.raw_result || {});
-        const row = document.createElement('tr');
-        const latencyValue = (metrics.latencyMs !== undefined && metrics.latencyMs !== null)
-          ? metrics.latencyMs
-          : ((metrics.jitterMs !== undefined && metrics.jitterMs !== null) ? metrics.jitterMs : null);
+        const latencyValue = metrics.latencyMs !== undefined && metrics.latencyMs !== null ? metrics.latencyMs : null;
+        const path = `${test.src_node_id} → ${test.dst_node_id}`;
 
-        const cells = [
-          `#${test.id}`,
-          `${test.src_node_id} → ${test.dst_node_id}`,
-          test.protocol.toUpperCase(),
-          test.params.port,
-          test.params.duration,
-          metrics.bitsPerSecond ? formatMetric(metrics.bitsPerSecond / 1e6, 2) : 'N/A',
-          latencyValue !== null ? `${formatMetric(latencyValue)} ms` : 'N/A',
-          metrics.lostPercent !== undefined && metrics.lostPercent !== null ? `${formatMetric(metrics.lostPercent)}%` : 'N/A',
-        ];
+        const block = document.createElement('div');
+        block.className = 'test-block';
 
-        cells.forEach((value) => {
-          const td = document.createElement('td');
-          td.textContent = value;
-          row.appendChild(td);
-        });
+        const header = document.createElement('div');
+        header.className = 'flex-between';
 
-        const actionsTd = document.createElement('td');
+        const summary = document.createElement('div');
+        summary.innerHTML = `<strong>#${test.id} ${path}</strong> · ${test.protocol.toUpperCase()} · port ${test.params.port} · duration ${test.params.duration}s<br/>` +
+          `<span class=\"muted-sm\">Rate: ${metrics.bitsPerSecond ? formatMetric(metrics.bitsPerSecond / 1e6, 2) + ' Mbps' : 'N/A'} | Latency: ${latencyValue !== null ? formatMetric(latencyValue) + ' ms' : 'N/A'} | Loss: ${metrics.lostPercent !== undefined && metrics.lostPercent !== null ? formatMetric(metrics.lostPercent) + '%' : 'N/A'}</span>`;
+        header.appendChild(summary);
+
+        const actions = document.createElement('div');
+        actions.className = 'inline';
+        actions.style.gap = '8px';
         const deleteBtn = document.createElement('button');
         deleteBtn.textContent = 'Delete';
         deleteBtn.style.width = 'auto';
         deleteBtn.style.background = '#ef4444';
         deleteBtn.onclick = () => deleteTestResult(test.id);
-        actionsTd.appendChild(deleteBtn);
-        row.appendChild(actionsTd);
+        actions.appendChild(deleteBtn);
+        header.appendChild(actions);
 
-        table.appendChild(row);
+        block.appendChild(header);
 
-        const detailsRow = document.createElement('tr');
-        const detailsTd = document.createElement('td');
-        detailsTd.colSpan = 9;
-        detailsTd.innerHTML = `<details style=\"margin-top:6px;\"><summary>Raw result</summary><pre>${JSON.stringify(test.raw_result, null, 2)}</pre></details>`;
-        detailsRow.appendChild(detailsTd);
-        table.appendChild(detailsRow);
+        const rawTable = renderRawResult(test.raw_result);
+        rawTable.style.marginTop = '8px';
+        block.appendChild(rawTable);
+
+        testsList.appendChild(block);
       });
-
-      testsList.appendChild(table);
     }
 
     async function saveNode() {
@@ -669,6 +616,7 @@ def _login_html() -> str:
         name: nodeName.value,
         ip: nodeIp.value,
         agent_port: Number(nodePort.value || 8000),
+        iperf_port: Number(nodeIperf.value || 5201),
         description: nodeDesc.value
       };
 
@@ -694,13 +642,14 @@ def _login_html() -> str:
 
     async function runTest() {
       clearAlert(testAlert);
+      const selectedDst = nodeCache.find((n) => n.id === Number(dstSelect.value));
       const payload = {
         src_node_id: Number(srcSelect.value),
         dst_node_id: Number(dstSelect.value),
         protocol: document.getElementById('protocol').value,
         duration: Number(document.getElementById('duration').value),
         parallel: Number(document.getElementById('parallel').value),
-        port: Number(document.getElementById('test-port').value)
+        port: Number(testPortInput.value || (selectedDst ? selectedDst.iperf_port : 5201))
       };
 
       const res = await fetch('/tests', {
@@ -718,18 +667,18 @@ def _login_html() -> str:
       clearAlert(testAlert);
     }
 
-    document.getElementById('login-btn').addEventListener('click', login);
-    document.getElementById('logout-btn').addEventListener('click', logout);
-    document.getElementById('save-node').addEventListener('click', saveNode);
-    document.getElementById('run-test').addEventListener('click', runTest);
-    document.getElementById('refresh-nodes').addEventListener('click', refreshNodes);
-    document.getElementById('refresh-tests').addEventListener('click', refreshTests);
-    document.getElementById('password').addEventListener('keyup', (e) => { if (e.key === 'Enter') login(); });
+      document.getElementById('login-btn').addEventListener('click', login);
+      document.getElementById('logout-btn').addEventListener('click', logout);
+      document.getElementById('save-node').addEventListener('click', saveNode);
+      document.getElementById('run-test').addEventListener('click', runTest);
+      document.getElementById('refresh-nodes').addEventListener('click', refreshNodes);
+      document.getElementById('refresh-tests').addEventListener('click', refreshTests);
+      dstSelect.addEventListener('change', syncTestPort);
+      document.getElementById('password').addEventListener('keyup', (e) => { if (e.key === 'Enter') login(); });
 
-    attachAgentHandlers();
-    checkAuth();
-  </script>
-</body>
+      checkAuth();
+    </script>
+  </body>
 </html>
     """
 
@@ -792,6 +741,7 @@ async def _check_node_health(node: Node) -> NodeWithStatus:
                     ip=node.ip,
                     agent_port=node.agent_port,
                     description=node.description,
+                    iperf_port=node.iperf_port,
                     status="online",
                     server_running=bool(data.get("server_running")),
                     health_timestamp=data.get("timestamp"),
@@ -804,6 +754,7 @@ async def _check_node_health(node: Node) -> NodeWithStatus:
         name=node.name,
         ip=node.ip,
         agent_port=node.agent_port,
+        iperf_port=node.iperf_port,
         description=node.description,
         status="offline",
         server_running=None,
@@ -822,6 +773,7 @@ def create_node(node: NodeCreate, db: Session = Depends(get_db)):
         name=node.name,
         ip=node.ip,
         agent_port=node.agent_port,
+        iperf_port=node.iperf_port,
         description=node.description,
     )
     db.add(obj)
