@@ -1,4 +1,5 @@
 import json
+import os
 import shlex
 import subprocess
 import threading
@@ -11,6 +12,7 @@ from flask import Flask, jsonify, request
 app = Flask(__name__)
 
 DEFAULT_IPERF_PORT = int(Path("/app").joinpath("IPERF_PORT").read_text().strip()) if Path("/app/IPERF_PORT").exists() else 5201
+AGENT_API_PORT = int(os.environ.get("AGENT_API_PORT", "8000"))
 
 server_process: subprocess.Popen | None = None
 server_lock = threading.Lock()
@@ -111,4 +113,4 @@ def run_test() -> Any:
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8000)
+    app.run(host="0.0.0.0", port=AGENT_API_PORT)
