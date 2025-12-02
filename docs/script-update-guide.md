@@ -30,7 +30,7 @@ This guide collects common reasons why the installer or deployment scripts fail 
 
 ## Automating `.sh` updates / 自动更新脚本
 
-Use `tools/auto_update.sh` to pull the latest scripts and re-apply permissions. It aborts if the working tree has local changes to avoid overwriting edits.
+Use `tools/auto_update.sh` to pull the latest scripts and re-apply permissions. It aborts if the working tree has local changes to avoid overwriting edits. Set `AUTO_UPDATE_DIRTY_MODE=stash` to temporarily stash and re-apply local edits, or `AUTO_UPDATE_DIRTY_MODE=reset` to discard them automatically.
 
 ```bash
 # Update the current branch in-place
@@ -38,6 +38,9 @@ Use `tools/auto_update.sh` to pull the latest scripts and re-apply permissions. 
 
 # Specify a repo path or branch explicitly
 ./tools/auto_update.sh /path/to/iperf3-test-tools main
+
+# Auto-stash local edits during unattended runs
+AUTO_UPDATE_DIRTY_MODE=stash ./tools/auto_update.sh
 ```
 
 Integrate with cron or a systemd timer for unattended updates, e.g. `0 3 * * * /path/to/tools/auto_update.sh >> /var/log/iperf3-tools-update.log 2>&1`.
