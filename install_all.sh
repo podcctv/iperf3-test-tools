@@ -7,6 +7,7 @@ AGENT_IMAGE=${AGENT_IMAGE:-"iperf-agent:latest"}
 AGENT_PORT=${AGENT_PORT:-8000}
 IPERF_PORT=${IPERF_PORT:-5201}
 MASTER_API_PORT=${MASTER_API_PORT:-9000}
+MASTER_WEB_PORT=${MASTER_WEB_PORT:-9100}
 HOSTS_FILE=${HOSTS_FILE:-"hosts.txt"}
 START_IPERF_SERVER=${START_IPERF_SERVER:-true}
 DEPLOY_REMOTE=${DEPLOY_REMOTE:-true}
@@ -38,6 +39,7 @@ Options:
   --agent-image <name>     Docker image tag for the agent (default: iperf-agent:latest)
   --agent-port <port>      Port to expose the agent API on the host (default: 8000)
   --master-port <port>     Port to expose the master API on the host (default: 9000)
+  --web-port <port>        Port to expose the web dashboard on the host (default: 9100)
   --iperf-port <port>      Port to expose iperf3 server TCP/UDP (default: 5201)
   --install-target <name>  Which components to install: master, agent, or all (default: prompt)
   --download-latest        Download the latest repository before running (uses default repo URL if unset)
@@ -219,7 +221,7 @@ build_images() {
 
   if [ "${INSTALL_MASTER}" = true ]; then
     log "Building master-api service..."
-    MASTER_API_PORT="${MASTER_API_PORT}" ${COMPOSE_CMD} -f "${REPO_ROOT}/docker-compose.yml" build master-api
+    MASTER_API_PORT="${MASTER_API_PORT}" MASTER_WEB_PORT="${MASTER_WEB_PORT}" ${COMPOSE_CMD} -f "${REPO_ROOT}/docker-compose.yml" build master-api
   fi
 }
 
@@ -230,7 +232,7 @@ start_master() {
   fi
 
   log "Starting master-api (and dependencies) via docker compose..."
-  MASTER_API_PORT="${MASTER_API_PORT}" ${COMPOSE_CMD} -f "${REPO_ROOT}/docker-compose.yml" up -d db master-api
+  MASTER_API_PORT="${MASTER_API_PORT}" MASTER_WEB_PORT="${MASTER_WEB_PORT}" ${COMPOSE_CMD} -f "${REPO_ROOT}/docker-compose.yml" up -d db master-api
 }
 
 start_local_agent() {
@@ -303,7 +305,7 @@ uninstall_project() {
 
   if [ -f "${REPO_ROOT}/docker-compose.yml" ]; then
     log "Stopping master-api stack and removing volumes..."
-    MASTER_API_PORT="${MASTER_API_PORT}" ${COMPOSE_CMD} -f "${REPO_ROOT}/docker-compose.yml" down -v || \
+    MASTER_API_PORT="${MASTER_API_PORT}" MASTER_WEB_PORT="${MASTER_WEB_PORT}" ${COMPOSE_CMD} -f "${REPO_ROOT}/docker-compose.yml" down -v || \
       log "Failed to shut down master-api stack (it may not be running)."
   else
     log "docker-compose.yml not found at ${REPO_ROOT}; skipping master-api removal."
@@ -337,6 +339,8 @@ parse_args() {
         AGENT_PORT=$2; shift 2 ;;
       --master-port)
         MASTER_API_PORT=$2; shift 2 ;;
+      --web-port)
+        MASTER_WEB_PORT=$2; shift 2 ;;
       --iperf-port)
         IPERF_PORT=$2; shift 2 ;;
       --download-latest)
@@ -416,6 +420,11 @@ prompt_ports() {
     read -rp "Master API port [${MASTER_API_PORT}]: " input || true
     if [ -n "$input" ]; then
       MASTER_API_PORT="$input"
+    fi
+
+    read -rp "Dashboard port [${MASTER_WEB_PORT}]: " input || true
+    if [ -n "$input" ]; then
+      MASTER_WEB_PORT="$input"
     fi
 
     read -rp "Agent API port [${AGENT_PORT}]: " input || true
@@ -502,6 +511,7 @@ main() {
 
   if [ "${INSTALL_MASTER}" = true ]; then
     log "  Master API on http://localhost:${MASTER_API_PORT}."
+    log "  Dashboard UI on http://localhost:${MASTER_WEB_PORT}/web."
   fi
 
   if [ "${INSTALL_AGENT}" = true ]; then
