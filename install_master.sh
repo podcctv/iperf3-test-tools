@@ -40,15 +40,37 @@ port_in_use() {
   fi
 
   "${py}" - "$port" <<'PY'
-import socket, sys
+import errno, socket, sys
 
 port = int(sys.argv[1])
-try:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.bind(("0.0.0.0", port))
-except OSError:
+
+def can_bind(family, address):
+    try:
+        with socket.socket(family, socket.SOCK_STREAM) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.bind((address, port))
+        return False
+    except OSError as exc:
+        if exc.errno == errno.EADDRINUSE:
+            return True
+
+        # If binding fails for another reason (e.g., IPv6 unavailable), log it
+        # and allow the installer to continue with the user's chosen port.
+        print(f"[install-master] Port probe on {address}:{port} skipped: {exc}", file=sys.stderr)
+        return False
+
+
+# Check IPv4 and IPv6 independently; a conflict on either means the port is in use.
+if can_bind(socket.AF_INET, "0.0.0.0"):
     sys.exit(1)
+
+try:
+    if can_bind(socket.AF_INET6, "::"):
+        sys.exit(1)
+except OSError:
+    # IPv6 may be unavailable; ignore and continue.
+    pass
+
 sys.exit(0)
 PY
 }
