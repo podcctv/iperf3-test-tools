@@ -49,45 +49,71 @@ fetch_repo_tarball() {
   tar_url="${REPO_URL%.git}/archive/refs/heads/${ref}.tar.gz"
   temp_dir="$1"
 
-  if ! curl -fsSL "${tar_url}" | tar -xz -C "${temp_dir}" --strip-components=1; then
+  if command -v curl >/dev/null 2>&1; then
+    downloader=(curl -fsSL "${tar_url}")
+  elif command -v wget >/dev/null 2>&1; then
+    downloader=(wget -qO- "${tar_url}")
+  else
+    log "Neither curl nor wget is available to fetch repository tarball."
+    return 1
+  fi
+
+  if ! "${downloader[@]}" | tar -xz -C "${temp_dir}" --strip-components=1; then
     log "Failed to download repository tarball from ${tar_url}."
     return 1
   fi
 }
 
-ensure_repo_available() {
-  if [ -d "${REPO_ROOT}/agent" ]; then
-    log "Using existing repository at ${REPO_ROOT}."
+ensure_download_prereqs() {
+  if command -v curl >/dev/null 2>&1 || command -v wget >/dev/null 2>&1; then
     return
   fi
 
-  mkdir -p "${CACHE_ROOT}"
-  local temp_repo
-  temp_repo="${CACHE_ROOT}/agent-build"
+  if command -v apt-get >/dev/null 2>&1; then
+    log "Installing curl (download prerequisite)..."
+    apt-get update -y >/dev/null 2>&1 && apt-get install -y curl >/dev/null 2>&1 && return
+  fi
 
-  log "Local agent directory not found; fetching repository into ${temp_repo}..."
-  rm -rf "${temp_repo}"
+  log "Unable to install download prerequisites automatically (curl/wget missing)."
+  return 1
+}
 
-  if command -v git >/dev/null 2>&1; then
-    if git clone --depth 1 "${REPO_URL}" "${temp_repo}" >/dev/null 2>&1; then
-      if [ -n "${REPO_REF}" ]; then
-        git -C "${temp_repo}" checkout "${REPO_REF}" >/dev/null 2>&1 || log "Checkout ${REPO_REF} failed; using default branch."
+ensure_repo_available() {
+  local initial_repo_root="${REPO_ROOT}" temp_repo
+
+  if [ -d "${REPO_ROOT}/agent" ]; then
+    log "Using existing repository at ${REPO_ROOT}."
+  else
+    mkdir -p "${CACHE_ROOT}"
+    temp_repo="${CACHE_ROOT}/agent-build"
+
+    log "Local agent directory not found; fetching repository into ${temp_repo}..."
+    rm -rf "${temp_repo}"
+
+    if command -v git >/dev/null 2>&1; then
+      if git clone --depth 1 "${REPO_URL}" "${temp_repo}" >/dev/null 2>&1; then
+        if [ -n "${REPO_REF}" ]; then
+          git -C "${temp_repo}" checkout "${REPO_REF}" >/dev/null 2>&1 || log "Checkout ${REPO_REF} failed; using default branch."
+        fi
+        REPO_ROOT="${temp_repo}"
+      else
+        log "Git clone failed; attempting tarball download..."
       fi
-      REPO_ROOT="${temp_repo}"
-      return
-    else
-      log "Git clone failed; attempting tarball download..."
+    fi
+
+    if [ "${REPO_ROOT}" = "${initial_repo_root}" ] || [ ! -d "${REPO_ROOT}/agent" ]; then
+      ensure_download_prereqs || true
+      mkdir -p "${temp_repo}"
+      if fetch_repo_tarball "${temp_repo}"; then
+        REPO_ROOT="${temp_repo}"
+      fi
     fi
   fi
 
-  mkdir -p "${temp_repo}"
-  if fetch_repo_tarball "${temp_repo}"; then
-    REPO_ROOT="${temp_repo}"
-    return
+  if [ ! -d "${REPO_ROOT}/agent" ]; then
+    log "Unable to obtain repository; aborting."
+    exit 1
   fi
-
-  log "Unable to obtain repository; aborting."
-  exit 1
 }
 
 ensure_docker() {
@@ -95,6 +121,7 @@ ensure_docker() {
     return
   fi
 
+  ensure_download_prereqs || true
   log "Docker not found; attempting installation via get.docker.com..."
   curl -fsSL https://get.docker.com | sh
 }
@@ -111,6 +138,11 @@ wait_for_local_agent() {
 }
 
 start_agent() {
+  if [ ! -d "${REPO_ROOT}/agent" ]; then
+    log "Agent directory missing at ${REPO_ROOT}/agent; download may have failed."
+    exit 1
+  fi
+
   log "Building agent image (${AGENT_IMAGE})..."
   docker build -t "${AGENT_IMAGE}" "${REPO_ROOT}/agent"
 
