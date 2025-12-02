@@ -79,11 +79,22 @@ download_repo() {
 }
 
 maybe_download_repo() {
-  if [ "${DOWNLOAD_LATEST}" != true ]; then
+  if [ "${DOWNLOAD_LATEST}" = true ]; then
+    download_repo
     return
   fi
 
-  download_repo
+  if [ -n "${REPO_URL}" ]; then
+    local origin_url=""
+    if command -v git >/dev/null 2>&1 && [ -d "${REPO_ROOT}/.git" ]; then
+      origin_url=$(git -C "${REPO_ROOT}" remote get-url origin 2>/dev/null || echo "")
+    fi
+
+    if [ ! -d "${REPO_ROOT}" ] || [ "${origin_url}" != "${REPO_URL}" ]; then
+      log "Repository download requested implicitly via REPO_URL; fetching latest from ${REPO_URL}."
+      download_repo
+    fi
+  fi
 }
 
 is_repo_complete() {
@@ -208,13 +219,33 @@ start_local_agent() {
     "${AGENT_IMAGE}"
 
   if [ "${START_IPERF_SERVER}" = true ]; then
-    log "Starting iperf3 server inside local agent..."
-    curl -sSf -X POST "http://localhost:${AGENT_PORT}/start_server" \
-      -H "Content-Type: application/json" \
-      -d "{\"port\": ${IPERF_PORT}}" >/dev/null
+    if wait_for_local_agent; then
+      log "Starting iperf3 server inside local agent..."
+      if ! curl -sSf -X POST "http://localhost:${AGENT_PORT}/start_server" \
+        -H "Content-Type: application/json" \
+        -d "{\"port\": ${IPERF_PORT}}" >/dev/null; then
+        log "Failed to start iperf3 server via agent API."
+      fi
+    else
+      log "Local agent did not become ready in time; skipping iperf3 server start."
+    fi
   else
     log "Skipping iperf3 server auto-start (requested)."
   fi
+}
+
+wait_for_local_agent() {
+  local retries=30
+  local delay=2
+
+  for _ in $(seq 1 ${retries}); do
+    if curl -sf "http://localhost:${AGENT_PORT}/health" >/dev/null; then
+      return 0
+    fi
+    sleep "${delay}"
+  done
+
+  return 1
 }
 
 deploy_remote_agents() {
@@ -321,12 +352,18 @@ Select installation target:
   1) master (master API only)
   2) agent (local/remote agents only)
   3) all (master API and agents)
+  4) uninstall (remove containers and images)
 PROMPT
-  read -rp "Enter choice [1-3]: " choice
+  read -rp "Enter choice [1-4]: " choice
   case "$choice" in
     1) INSTALL_TARGET="master" ;;
     2) INSTALL_TARGET="agent" ;;
     3) INSTALL_TARGET="all" ;;
+    4)
+      INSTALL_TARGET="uninstall"
+      UNINSTALL=true
+      return
+      ;;
     *)
       log "Invalid selection. Please choose 1, 2, or 3."
       prompt_install_target
@@ -362,6 +399,9 @@ set_install_flags() {
       INSTALL_MASTER=false
       INSTALL_AGENT=true
       ;;
+    uninstall)
+      UNINSTALL=true
+      ;;
     all|"")
       INSTALL_MASTER=true
       INSTALL_AGENT=true
@@ -376,6 +416,8 @@ set_install_flags() {
 main() {
   parse_args "$@"
 
+  prompt_install_target
+
   if [ "${UNINSTALL}" = true ]; then
     ensure_repo_ready
     ensure_docker
@@ -384,7 +426,6 @@ main() {
     exit 0
   fi
 
-  prompt_install_target
   prompt_ports
   set_install_flags
   maybe_download_repo
