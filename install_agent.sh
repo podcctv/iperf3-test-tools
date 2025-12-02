@@ -15,6 +15,7 @@ REPO_ROOT="${SCRIPT_DIR}"
 CACHE_ROOT="${XDG_CACHE_HOME:-$HOME/.cache}/iperf3-test-tools"
 DEFAULT_REPO_URL="$(command -v git >/dev/null 2>&1 && git -C "${REPO_ROOT}" remote get-url origin 2>/dev/null || true)"
 REPO_URL=${REPO_URL:-"${DEFAULT_REPO_URL:-https://github.com/podcctv/iperf3-test-tools.git}"}
+REPO_UPDATED=false
 
 log() { printf "[install-agent] %s\n" "$*"; }
 
@@ -92,11 +93,30 @@ update_repo() {
   fi
 
   if [ "${before}" != "${after}" ]; then
+    REPO_UPDATED=true
     commit_delta=$(git -C "${REPO_ROOT}" rev-list --count "${before}..${after}" 2>/dev/null || echo "?")
     log "Repository updated: ${commit_delta} new commit(s) applied (${before:0:7} -> ${after:0:7})."
   else
     log "Repository already up to date (${after:0:7})."
   fi
+}
+
+rerun_if_repo_updated() {
+  if [ "${REPO_UPDATED}" != true ]; then
+    return
+  fi
+
+  if [ "${INSTALL_AGENT_UPDATED:-0}" -eq 1 ]; then
+    return
+  fi
+
+  if [ ! -x "${REPO_ROOT}/install_agent.sh" ]; then
+    log "Updated repository detected but installer not found at ${REPO_ROOT}; continuing without restart."
+    return
+  fi
+
+  log "Repository updated; re-running installer with latest version..."
+  INSTALL_AGENT_UPDATED=1 exec "${REPO_ROOT}/install_agent.sh" "$@"
 }
 
 fetch_repo_tarball() {
@@ -270,6 +290,7 @@ main() {
   parse_args "$@"
   ensure_repo_available
   update_repo
+  rerun_if_repo_updated "$@"
   ensure_docker
   start_agent
 

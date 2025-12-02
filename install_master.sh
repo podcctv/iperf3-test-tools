@@ -17,6 +17,7 @@ PORT_CONFIG_FILE=${PORT_CONFIG_FILE:-""}
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT=""
 DEFAULT_REPO_URL=""
+REPO_UPDATED=false
 COMPOSE_CMD=""
 
 log() { printf "[install-master] %s\n" "$*"; }
@@ -277,11 +278,30 @@ update_repo() {
   fi
 
   if [ "${before}" != "${after}" ]; then
+    REPO_UPDATED=true
     commit_delta=$(git -C "${REPO_ROOT}" rev-list --count "${before}..${after}" 2>/dev/null || echo "?")
     log "Repository updated: ${commit_delta} new commit(s) applied (${before:0:7} -> ${after:0:7})."
   else
     log "Repository already up to date (${after:0:7})."
   fi
+}
+
+rerun_if_repo_updated() {
+  if [ "${REPO_UPDATED}" != true ]; then
+    return
+  fi
+
+  if [ "${INSTALL_MASTER_UPDATED:-0}" -eq 1 ]; then
+    return
+  fi
+
+  if [ ! -x "${REPO_ROOT}/install_master.sh" ]; then
+    log "Updated repository detected but installer not found at ${REPO_ROOT}; continuing without restart."
+    return
+  fi
+
+  log "Repository updated; re-running installer with latest version..."
+  INSTALL_MASTER_UPDATED=1 exec "${REPO_ROOT}/install_master.sh" "$@"
 }
 
 ensure_docker() {
@@ -483,6 +503,7 @@ main() {
   REPO_URL=${REPO_URL:-"${DEFAULT_REPO_URL:-https://github.com/podcctv/iperf3-test-tools.git}"}
   download_repo_if_missing
   update_repo
+  rerun_if_repo_updated "$@"
   ensure_docker
   ensure_compose
   ensure_compose_file
