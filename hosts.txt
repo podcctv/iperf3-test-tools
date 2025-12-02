@@ -1,7 +1,0 @@
-# Add one SSH destination per line along with optional agent/iperf ports.
-# Format: <ssh_host> [<agent_api_port> <iperf3_port>]
-# Lines starting with # are comments. Blank lines are ignored.
-# This file is consumed by deploy_agents.sh and install_master.sh --deploy-remote
-# Example hosts for reference (replace with your real servers):
-# root@192.0.2.10 8001 5202
-# ubuntu@198.51.100.42 9000 5300

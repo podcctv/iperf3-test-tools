@@ -9,7 +9,8 @@ MASTER_API_PORT=${MASTER_API_PORT:-9000}
 MASTER_WEB_PORT=${MASTER_WEB_PORT:-9100}
 START_IPERF_SERVER=${START_IPERF_SERVER:-true}
 DEPLOY_REMOTE=${DEPLOY_REMOTE:-false}
-HOSTS_FILE=${HOSTS_FILE:-"hosts.txt"}
+HOSTS_FILE=${HOSTS_FILE:-""}
+CLEAN_EXISTING=${CLEAN_EXISTING:-false}
 REPO_REF=${REPO_REF:-""}
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -19,6 +20,22 @@ REPO_URL=${REPO_URL:-"${DEFAULT_REPO_URL:-https://github.com/podcctv/iperf3-test
 COMPOSE_CMD=""
 
 log() { printf "[install-master] %s\n" "$*"; }
+
+ensure_command() {
+  local bin=$1 pkg=$2
+  if command -v "$bin" >/dev/null 2>&1; then
+    return
+  fi
+
+  if command -v apt-get >/dev/null 2>&1; then
+    log "Installing missing dependency: ${pkg}..."
+    apt-get update -y >/dev/null 2>&1
+    apt-get install -y "$pkg" >/dev/null 2>&1
+  else
+    log "Missing required command: ${bin}. Please install ${pkg} and re-run."
+    exit 1
+  fi
+}
 
 update_repo() {
   if [ ! -d "${REPO_ROOT}/.git" ] || ! command -v git >/dev/null 2>&1; then
@@ -48,6 +65,8 @@ update_repo() {
 }
 
 ensure_docker() {
+  ensure_command curl curl
+
   if command -v docker >/dev/null 2>&1; then
     return
   fi
@@ -69,6 +88,37 @@ ensure_compose() {
 
   log "Docker Compose is required. Install docker-compose or the Docker Compose plugin and re-run."
   exit 1
+}
+
+cleanup_existing_services() {
+  local project_name existing=""
+  project_name=${COMPOSE_PROJECT_NAME:-$(basename "${REPO_ROOT}")}
+
+  if docker ps -a --format '{{.Names}}' | grep -q "^iperf-agent$"; then
+    existing+=" iperf-agent"
+  fi
+
+  if docker ps -a --format '{{.Names}}' | grep -Eq "^${project_name}-master-api-[0-9]+$"; then
+    existing+=" ${project_name}-master-api"
+  fi
+
+  if docker ps -a --format '{{.Names}}' | grep -Eq "^${project_name}-db-[0-9]+$"; then
+    existing+=" ${project_name}-db"
+  fi
+
+  if [ -z "${existing}" ]; then
+    return
+  fi
+
+  log "Detected existing services:${existing}"
+
+  if [ "${CLEAN_EXISTING}" = true ]; then
+    log "Removing existing master stack and local agent containers..."
+    MASTER_API_PORT="${MASTER_API_PORT}" MASTER_WEB_PORT="${MASTER_WEB_PORT}" ${COMPOSE_CMD} -f "${REPO_ROOT}/docker-compose.yml" down -v || true
+    docker rm -f iperf-agent >/dev/null 2>&1 || true
+  else
+    log "Re-run with --clean-existing to automatically remove them before reinstalling."
+  fi
 }
 
 wait_for_local_agent() {
@@ -122,8 +172,14 @@ deploy_remote_agents() {
     return
   fi
 
+  if [ -z "${HOSTS_FILE}" ]; then
+    log "No hosts file provided; skipping remote agent deployment."
+    log "Run deploy_agents.sh manually with --hosts-file <path> or set HOSTS_FILE to enable automation."
+    return
+  fi
+
   if [ ! -f "${HOSTS_FILE}" ] || [ ! -s "${HOSTS_FILE}" ]; then
-    log "No remote hosts file found at ${HOSTS_FILE}; skipping remote agent deployment."
+    log "Remote hosts file not found or empty at ${HOSTS_FILE}; skipping remote agent deployment."
     return
   fi
 
@@ -146,8 +202,10 @@ parse_args() {
         MASTER_WEB_PORT="$2"; shift 2 ;;
       --no-start-server)
         START_IPERF_SERVER=false; shift ;;
-      --hosts)
+      --hosts|--hosts-file)
         HOSTS_FILE="$2"; shift 2 ;;
+      --clean-existing)
+        CLEAN_EXISTING=true; shift ;;
       --repo-ref)
         REPO_REF="$2"; shift 2 ;;
       --repo-url)
@@ -155,13 +213,14 @@ parse_args() {
       -h|--help)
         cat <<'USAGE'
 Usage: install_master.sh [options]
-  --deploy-remote          Deploy agents to hosts listed in hosts.txt
+  --deploy-remote          Deploy agents to hosts listed in an inventory file
   --agent-port <port>      Agent API port to expose (default: 8000)
   --iperf-port <port>      iperf3 TCP/UDP port to expose (default: 5201)
   --master-port <port>     Master API host port (default: 9000)
   --web-port <port>        Dashboard host port (default: 9100)
   --no-start-server        Skip auto-starting iperf3 server inside the agent
-  --hosts <path>           Inventory file for remote agent deployment (default: hosts.txt)
+  --hosts-file <path>      Inventory file for remote agent deployment
+  --clean-existing         Stop and remove existing master/api/db + local agent containers before install
   --repo-url <url>         Git remote URL used for auto-update
   --repo-ref <ref>         Git ref to check out before installing
 USAGE
@@ -178,6 +237,7 @@ main() {
   update_repo
   ensure_docker
   ensure_compose
+  cleanup_existing_services
   start_master_stack
   start_agent
   deploy_remote_agents
