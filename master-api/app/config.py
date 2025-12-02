@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     agent_image: str = "iperf-agent:latest"
     state_file_path: str = str(Path(__file__).resolve().parent.parent / "data" / "master_state.json")
     state_recent_tests: int = 50
+    health_check_interval: int = 30
 
     @property
     def agent_config_file(self) -> Path:
