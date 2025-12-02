@@ -103,6 +103,17 @@ ensure_compose() {
 }
 
 build_images() {
+  if [ ! -d "${REPO_ROOT}/agent" ]; then
+    if [ "${DOWNLOAD_LATEST}" = true ] || [ -n "${REPO_URL}" ]; then
+      log "Agent directory missing at ${REPO_ROOT}/agent; attempting repository download..."
+      download_repo
+      resolve_paths
+    else
+      log "Agent directory missing at ${REPO_ROOT}/agent. Run from a full checkout or provide --download-latest with --repo-url."
+      exit 1
+    fi
+  fi
+
   log "Building agent image (${AGENT_IMAGE})..."
   docker build -t "${AGENT_IMAGE}" "${REPO_ROOT}/agent"
 
