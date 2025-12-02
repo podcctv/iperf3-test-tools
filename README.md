@@ -33,7 +33,7 @@ A lightweight **master/agent** toolkit for orchestrating iperf3 tests across mul
 
 ```bash
 # default ports: agent API 8000, iperf3 5201
-bash ./install_agent.sh [--agent-port 8000] [--iperf-port 5201] [--no-start-server] [--repo-url <url>] [--repo-ref <ref>]
+bash ./install_agent.sh [--agent-port 8000] [--agent-listen-port 8000] [--iperf-port 5201] [--no-start-server] [--repo-url <url>] [--repo-ref <ref>]
 ```
 
 After installation the script prints the URL you can register on the master dashboard, e.g. `http://<agent-ip>:8000` with iperf3 port `5201`.

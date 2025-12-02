@@ -4,6 +4,7 @@ set -euo pipefail
 
 AGENT_IMAGE=${AGENT_IMAGE:-"iperf-agent:latest"}
 AGENT_PORT=${AGENT_PORT:-8000}
+AGENT_LISTEN_PORT=${AGENT_LISTEN_PORT:-8000}
 IPERF_PORT=${IPERF_PORT:-5201}
 START_IPERF_SERVER=${START_IPERF_SERVER:-true}
 REPO_REF=${REPO_REF:-""}
@@ -146,13 +147,14 @@ start_agent() {
   log "Building agent image (${AGENT_IMAGE})..."
   docker build -t "${AGENT_IMAGE}" "${REPO_ROOT}/agent"
 
-  log "Launching local agent container (ports ${AGENT_PORT} and ${IPERF_PORT})..."
+  log "Launching local agent container (host port ${AGENT_PORT} -> container port ${AGENT_LISTEN_PORT}; iperf port ${IPERF_PORT})..."
   docker rm -f iperf-agent >/dev/null 2>&1 || true
   docker run -d --name iperf-agent \
     --restart=always \
-    -p "${AGENT_PORT}:8000" \
+    -p "${AGENT_PORT}:${AGENT_LISTEN_PORT}" \
     -p "${IPERF_PORT}:${IPERF_PORT}/tcp" \
     -p "${IPERF_PORT}:${IPERF_PORT}/udp" \
+    -e "AGENT_API_PORT=${AGENT_LISTEN_PORT}" \
     "${AGENT_IMAGE}"
 
   if [ "${START_IPERF_SERVER}" = true ]; then
@@ -174,6 +176,8 @@ parse_args() {
     case "$1" in
       --agent-port)
         AGENT_PORT="$2"; shift 2 ;;
+      --agent-listen-port)
+        AGENT_LISTEN_PORT="$2"; shift 2 ;;
       --iperf-port)
         IPERF_PORT="$2"; shift 2 ;;
       --no-start-server)
@@ -185,11 +189,12 @@ parse_args() {
       -h|--help)
         cat <<'USAGE'
 Usage: install_agent.sh [options]
-  --agent-port <port>     Agent API port to expose (default: 8000)
-  --iperf-port <port>     iperf3 TCP/UDP port to expose (default: 5201)
-  --no-start-server       Skip auto-starting iperf3 server inside the agent
-  --repo-url <url>        Git remote URL used for auto-update
-  --repo-ref <ref>        Git ref to check out before installing
+  --agent-port <port>         Host port where the agent API is exposed (default: 8000)
+  --agent-listen-port <port>  Container port the agent listens on (default: 8000)
+  --iperf-port <port>         iperf3 TCP/UDP port to expose (default: 5201)
+  --no-start-server           Skip auto-starting iperf3 server inside the agent
+  --repo-url <url>            Git remote URL used for auto-update
+  --repo-ref <ref>            Git ref to check out before installing
 USAGE
         exit 0 ;;
       *)
