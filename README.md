@@ -13,6 +13,31 @@ deploy_agents.sh
 
 ## Quick start
 
+### One-click bootstrap
+
+If you only want to download a single script, grab `install_all.sh` and let it pull the rest of the project automatically:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/podcctv/iperf3-test-tools/main/install_all.sh
+chmod +x install_all.sh
+./install_all.sh --repo podcctv/iperf3-test-tools --ref main
+```
+
+To build images, launch the master API stack, start a local agent (with iperf3 server), and optionally deploy remote agents in one command:
+
+```bash
+./install_all.sh
+```
+
+Flags of interest:
+
+* `--no-local-agent` – skip running the local agent container.
+* `--no-start-server` – do not auto-start the iperf3 server inside the local agent.
+* `--no-remote` – skip remote agent deployment.
+* `--hosts <file>` – set an alternate inventory file for remote deployment (defaults to `hosts.txt`).
+* `--download-url <url>` – explicitly set a tarball URL if the script needs to download the project files.
+* `--repo <owner/name>` and `--ref <branch/tag>` – control which GitHub repo/ref is fetched when project files are missing.
+
 ### 1) Build images
 
 ```bash
