@@ -10,12 +10,8 @@ HOSTS_FILE=${HOSTS_FILE:-"hosts.txt"}
 START_IPERF_SERVER=${START_IPERF_SERVER:-true}
 DEPLOY_REMOTE=${DEPLOY_REMOTE:-true}
 START_LOCAL_AGENT=${START_LOCAL_AGENT:-true}
-PAYLOAD_REF=${PAYLOAD_REF:-"main"}
-PAYLOAD_REPO=${PAYLOAD_REPO:-"podcctv/iperf3-test-tools"}
-PAYLOAD_URL=${PAYLOAD_URL:-""}
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="${SCRIPT_DIR}"
 COMPOSE_CMD=""
 
 usage() {
@@ -29,9 +25,6 @@ Options:
   --agent-image <name>     Docker image tag for the agent (default: iperf-agent:latest)
   --agent-port <port>      Port to expose the agent API on the host (default: 8000)
   --iperf-port <port>      Port to expose iperf3 server TCP/UDP (default: 5201)
-  --download-url <url>     Tar.gz URL for downloading project payload when files are missing
-  --repo <owner/name>      GitHub repo slug for auto-downloads (default: podcctv/iperf3-test-tools)
-  --ref <branch/tag>       Git ref/branch used for downloads (default: main)
   --no-local-agent         Skip launching a local agent container
   --no-remote              Skip deploying remote agents via hosts file
   --no-start-server        Do not auto-start iperf3 server on the local agent
@@ -40,47 +33,6 @@ USAGE
 }
 
 log() { printf "[install-all] %s\n" "$*"; }
-
-compute_download_url() {
-  if [ -n "${PAYLOAD_URL}" ]; then
-    echo "${PAYLOAD_URL}"
-  else
-    echo "https://codeload.github.com/${PAYLOAD_REPO}/tar.gz/${PAYLOAD_REF}"
-  fi
-}
-
-ensure_payload() {
-  local required missing=false
-  for required in agent master-api docker-compose.yml deploy_agents.sh; do
-    if [ ! -e "${PROJECT_ROOT}/${required}" ]; then
-      missing=true
-      break
-    fi
-  done
-
-  if [ "${missing}" = false ]; then
-    return
-  fi
-
-  local url tmp archive extracted_root
-  url="$(compute_download_url)"
-  tmp="$(mktemp -d)"
-  archive="${tmp}/payload.tar.gz"
-
-  log "Project files not found; downloading from ${url}..."
-  curl -fsSL "${url}" -o "${archive}"
-
-  tar -xzf "${archive}" -C "${tmp}"
-  extracted_root="$(find "${tmp}" -maxdepth 1 -type d -name "*iperf3-test-tools*" | head -n 1)"
-
-  if [ -z "${extracted_root}" ]; then
-    log "Failed to locate extracted project directory from archive." >&2
-    exit 1
-  fi
-
-  PROJECT_ROOT="${extracted_root}"
-  log "Using downloaded payload at ${PROJECT_ROOT}."
-}
 
 ensure_docker() {
   if command -v docker >/dev/null 2>&1; then
@@ -108,15 +60,15 @@ ensure_compose() {
 
 build_images() {
   log "Building agent image (${AGENT_IMAGE})..."
-  docker build -t "${AGENT_IMAGE}" "${PROJECT_ROOT}/agent"
+  docker build -t "${AGENT_IMAGE}" "${SCRIPT_DIR}/agent"
 
   log "Building master-api service..."
-  ${COMPOSE_CMD} -f "${PROJECT_ROOT}/docker-compose.yml" build master-api
+  ${COMPOSE_CMD} -f "${SCRIPT_DIR}/docker-compose.yml" build master-api
 }
 
 start_master() {
   log "Starting master-api (and dependencies) via docker compose..."
-  ${COMPOSE_CMD} -f "${PROJECT_ROOT}/docker-compose.yml" up -d db master-api
+  ${COMPOSE_CMD} -f "${SCRIPT_DIR}/docker-compose.yml" up -d db master-api
 }
 
 start_local_agent() {
@@ -151,7 +103,7 @@ deploy_remote_agents() {
   fi
 
   log "Deploying remote agents using ${HOSTS_FILE}..."
-  HOSTS_FILE="${HOSTS_FILE}" AGENT_PORT="${AGENT_PORT}" IPERF_PORT="${IPERF_PORT}" IMAGE_NAME="${AGENT_IMAGE}" "${PROJECT_ROOT}/deploy_agents.sh"
+  HOSTS_FILE="${HOSTS_FILE}" AGENT_PORT="${AGENT_PORT}" IPERF_PORT="${IPERF_PORT}" IMAGE_NAME="${AGENT_IMAGE}" "${SCRIPT_DIR}/deploy_agents.sh"
 }
 
 parse_args() {
@@ -165,12 +117,6 @@ parse_args() {
         AGENT_PORT=$2; shift 2 ;;
       --iperf-port)
         IPERF_PORT=$2; shift 2 ;;
-      --download-url)
-        PAYLOAD_URL=$2; shift 2 ;;
-      --repo)
-        PAYLOAD_REPO=$2; shift 2 ;;
-      --ref)
-        PAYLOAD_REF=$2; shift 2 ;;
       --no-local-agent)
         START_LOCAL_AGENT=false; shift ;;
       --no-remote)
@@ -188,10 +134,6 @@ parse_args() {
 
 main() {
   parse_args "$@"
-  ensure_payload
-  if [[ "${HOSTS_FILE}" != /* ]]; then
-    HOSTS_FILE="${PROJECT_ROOT}/${HOSTS_FILE}"
-  fi
   ensure_docker
   ensure_compose
   build_images
