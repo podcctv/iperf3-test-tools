@@ -91,17 +91,6 @@ _bootstrap_state()
 
 app = FastAPI(title="iperf3 master api")
 agent_store = AgentConfigStore(settings.agent_config_file)
-health_monitor = NodeHealthMonitor(settings.health_check_interval)
-
-
-@app.on_event("startup")
-async def _on_startup() -> None:
-    await health_monitor.start()
-
-
-@app.on_event("shutdown")
-async def _on_shutdown() -> None:
-    await health_monitor.stop()
 
 
 def _persist_state(db: Session) -> None:
@@ -251,6 +240,19 @@ class NodeHealthMonitor:
         status.checked_at = int(datetime.now(timezone.utc).timestamp())
         self._cache[node.id] = status
         return status
+
+
+health_monitor = NodeHealthMonitor(settings.health_check_interval)
+
+
+@app.on_event("startup")
+async def _on_startup() -> None:
+    await health_monitor.start()
+
+
+@app.on_event("shutdown")
+async def _on_shutdown() -> None:
+    await health_monitor.stop()
 
 
 def _login_html() -> str:
