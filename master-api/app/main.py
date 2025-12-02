@@ -1,8 +1,9 @@
 import asyncio
 import hashlib
 import hmac
+import logging
 from datetime import datetime, timezone
-from typing import List
+from typing import Dict, List
 
 import httpx
 from fastapi import Body, Depends, FastAPI, HTTPException, Request, Response
@@ -75,6 +76,7 @@ _ensure_iperf_port_column()
 _ensure_test_result_columns()
 
 state_store = StateStore(settings.state_file, settings.state_recent_tests)
+logger = logging.getLogger(__name__)
 
 
 def _bootstrap_state() -> None:
@@ -89,6 +91,17 @@ _bootstrap_state()
 
 app = FastAPI(title="iperf3 master api")
 agent_store = AgentConfigStore(settings.agent_config_file)
+health_monitor = NodeHealthMonitor(settings.health_check_interval)
+
+
+@app.on_event("startup")
+async def _on_startup() -> None:
+    await health_monitor.start()
+
+
+@app.on_event("shutdown")
+async def _on_shutdown() -> None:
+    await health_monitor.stop()
 
 
 def _persist_state(db: Session) -> None:
@@ -168,6 +181,73 @@ def _dashboard_token(password: str) -> str:
 def _is_authenticated(request: Request) -> bool:
     stored = request.cookies.get(settings.dashboard_cookie_name)
     return stored == _dashboard_token(settings.dashboard_password)
+
+
+class NodeHealthMonitor:
+    def __init__(self, interval_seconds: int = 30) -> None:
+        self.interval_seconds = interval_seconds
+        self._task: asyncio.Task | None = None
+        self._cache: Dict[int, NodeWithStatus] = {}
+        self._lock = asyncio.Lock()
+
+    async def start(self) -> None:
+        if self._task:
+            return
+
+        await self.refresh()
+        self._task = asyncio.create_task(self._run())
+
+    async def stop(self) -> None:
+        if self._task:
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
+            self._task = None
+
+    async def _run(self) -> None:
+        while True:
+            try:
+                await self.refresh()
+            except Exception:
+                logger.exception("Failed to refresh node health")
+            await asyncio.sleep(self.interval_seconds)
+
+    async def refresh(self, nodes: List[Node] | None = None) -> List[NodeWithStatus]:
+        async with self._lock:
+            if nodes is None:
+                db = SessionLocal()
+                try:
+                    nodes = db.scalars(select(Node)).all()
+                finally:
+                    db.close()
+
+            statuses = await asyncio.gather(*[_check_node_health(node) for node in nodes])
+            now_ts = int(datetime.now(timezone.utc).timestamp())
+            for status in statuses:
+                status.checked_at = now_ts
+            self._cache = {status.id: status for status in statuses}
+            return statuses
+
+    async def get_statuses(self) -> List[NodeWithStatus]:
+        db = SessionLocal()
+        try:
+            nodes = db.scalars(select(Node)).all()
+        finally:
+            db.close()
+
+        cached_ids = set(self._cache.keys())
+        current_ids = {node.id for node in nodes}
+        if not self._cache or cached_ids != current_ids:
+            return await self.refresh(nodes)
+        return list(self._cache.values())
+
+    async def check_node(self, node: Node) -> NodeWithStatus:
+        status = await _check_node_health(node)
+        status.checked_at = int(datetime.now(timezone.utc).timestamp())
+        self._cache[node.id] = status
+        return status
 
 
 def _login_html() -> str:
@@ -1035,6 +1115,7 @@ def root() -> dict:
 
 async def _check_node_health(node: Node) -> NodeWithStatus:
     url = f"http://{node.ip}:{node.agent_port}/health"
+    checked_at = int(datetime.now(timezone.utc).timestamp())
     try:
         async with httpx.AsyncClient(timeout=settings.request_timeout) as client:
             response = await client.get(url)
@@ -1051,6 +1132,7 @@ async def _check_node_health(node: Node) -> NodeWithStatus:
                     status="online",
                     server_running=bool(data.get("server_running")),
                     health_timestamp=data.get("timestamp"),
+                    checked_at=checked_at,
                     detected_iperf_port=int(detected_port) if detected_port else None,
                 )
     except Exception:
@@ -1066,6 +1148,7 @@ async def _check_node_health(node: Node) -> NodeWithStatus:
         status="offline",
         server_running=None,
         health_timestamp=None,
+        checked_at=checked_at,
         detected_iperf_port=None,
     )
 
@@ -1138,9 +1221,7 @@ def delete_node(node_id: int, db: Session = Depends(get_db)):
 
 @app.get("/nodes/status", response_model=List[NodeWithStatus])
 async def nodes_with_status(db: Session = Depends(get_db)):
-    nodes = db.scalars(select(Node)).all()
-    results = await asyncio.gather(*[_check_node_health(node) for node in nodes])
-    return results
+    return await health_monitor.get_statuses()
 
 
 @app.post("/tests", response_model=TestRead)
@@ -1149,6 +1230,16 @@ async def create_test(test: TestCreate, db: Session = Depends(get_db)):
     dst = db.get(Node, test.dst_node_id)
     if not src or not dst:
         raise HTTPException(status_code=404, detail="node not found")
+
+    src_status = await health_monitor.check_node(src)
+    if src_status.status != "online":
+        raise HTTPException(status_code=503, detail="source node is offline or unreachable")
+
+    dst_status = await health_monitor.check_node(dst)
+    if dst_status.status != "online":
+        raise HTTPException(status_code=503, detail="destination node is offline or unreachable")
+    if dst_status.server_running is False:
+        raise HTTPException(status_code=503, detail="destination iperf server is not running")
 
     agent_url = f"http://{src.ip}:{src.agent_port}/run_test"
     payload = {
@@ -1159,10 +1250,21 @@ async def create_test(test: TestCreate, db: Session = Depends(get_db)):
         "parallel": test.parallel,
     }
 
-    async with httpx.AsyncClient(timeout=test.duration + settings.request_timeout) as client:
-        response = await client.post(agent_url, json=payload)
+    try:
+        async with httpx.AsyncClient(timeout=test.duration + settings.request_timeout) as client:
+            response = await client.post(agent_url, json=payload)
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=502, detail=f"failed to reach source agent: {exc}")
+
     if response.status_code != 200:
-        raise HTTPException(status_code=500, detail=response.text)
+        detail = response.text
+        try:
+            parsed = response.json()
+            if isinstance(parsed, dict) and parsed.get("error"):
+                detail = parsed.get("error")
+        except Exception:
+            pass
+        raise HTTPException(status_code=502, detail=f"agent returned {response.status_code}: {detail}")
 
     raw_data = response.json()
     summary = _summarize_metrics(raw_data)

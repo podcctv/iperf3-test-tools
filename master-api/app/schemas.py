@@ -34,6 +34,7 @@ class NodeWithStatus(NodeRead):
     status: str
     server_running: bool | None = None
     health_timestamp: int | None = None
+    checked_at: int | None = None
     detected_iperf_port: int | None = None
 
 
