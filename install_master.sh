@@ -259,9 +259,9 @@ parse_args() {
         AGENT_PORT="$2"; shift 2 ;;
       --iperf-port)
         IPERF_PORT="$2"; shift 2 ;;
-      --master-port)
+      --master-port|--master-api-port)
         MASTER_API_PORT="$2"; shift 2 ;;
-      --web-port)
+      --web-port|--dashboard-port)
         MASTER_WEB_PORT="$2"; shift 2 ;;
       --no-start-server)
         START_IPERF_SERVER=false; shift ;;
@@ -275,12 +275,14 @@ parse_args() {
         REPO_URL="$2"; shift 2 ;;
       -h|--help)
         cat <<'USAGE'
-Usage: install_master.sh [options]
-  --deploy-remote          Deploy agents to hosts listed in an inventory file
-  --agent-port <port>      Agent API port to expose (default: 8000)
-  --iperf-port <port>      iperf3 TCP/UDP port to expose (default: 5201)
-  --master-port <port>     Master API host port (default: 9000)
-  --web-port <port>        Dashboard host port (default: 9100)
+  Usage: install_master.sh [options]
+    --deploy-remote          Deploy agents to hosts listed in an inventory file
+    --agent-port <port>      Agent API port to expose (default: 8000)
+    --iperf-port <port>      iperf3 TCP/UDP port to expose (default: 5201)
+    --master-port <port>     Master API host port (default: 9000)
+    --master-api-port <port> Same as --master-port for convenience
+    --web-port <port>        Dashboard host port (default: 9100)
+    --dashboard-port <port>  Same as --web-port for convenience
   --no-start-server        Skip auto-starting iperf3 server inside the agent
   --hosts-file <path>      Inventory file for remote agent deployment
   --clean-existing         Stop and remove existing master/api/db + local agent containers before install

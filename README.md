@@ -26,6 +26,7 @@ A lightweight **master/agent** toolkit for orchestrating iperf3 tests across mul
 * Auto-updates the git checkout when possible, builds the master-api image, brings up Postgres, and starts the dashboard on `http://<host>:9100/web` (password `iperf-pass` by default).
 * Pass `--clean-existing` to stop/remove any existing master/api/db containers and the local `iperf-agent` container before reinstalling.
 * With `--deploy-remote`, provide an inventory file path via `--hosts-file <path>` to call `./deploy_agents.sh` automatically.
+* You can avoid host port conflicts by overriding the defaults: `./install_master.sh --master-port 19000 --web-port 19100 --agent-port 18000 --iperf-port 15201`. The aliases `--master-api-port` and `--dashboard-port` are also accepted for the master and dashboard ports.
 
 ### Agent-only host / 仅部署代理
 
