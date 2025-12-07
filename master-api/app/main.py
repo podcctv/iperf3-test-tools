@@ -7,7 +7,7 @@ from typing import Dict, List
 
 import httpx
 from fastapi import Body, Depends, FastAPI, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from sqlalchemy import or_, select, text
 from sqlalchemy.orm import Session
 
@@ -332,21 +332,38 @@ def _login_html() -> str:
             </div>
           </div>
 
-          <div id=\"app-card\" class=\"hidden space-y-8\"> 
-            <div class=\"flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between\"> 
-              <div> 
+          <div id=\"app-card\" class=\"hidden space-y-8\">
+            <div class=\"flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between\">
+              <div>
                 <p class=\"text-sm uppercase tracking-[0.25em] text-sky-300/80\">Control plane</p>
                 <h2 class=\"text-2xl font-semibold text-white\">iperf3 Master Dashboard</h2>
                 <p class=\"text-sm text-slate-400\" id=\"auth-hint\"></p>
               </div>
               <div class=\"flex flex-wrap items-center gap-3\">
                 <button data-refresh-nodes class=\"rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200\">Refresh nodes</button>
+                <button id=\"jump-schedules\" class=\"rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-100 shadow-sm transition hover:bg-emerald-500/25\">Scheduled tests</button>
                 <button id=\"logout-btn\" class=\"rounded-lg border border-rose-500/40 bg-rose-500/15 px-4 py-2 text-sm font-semibold text-rose-100 shadow-sm transition hover:bg-rose-500/25\">Logout</button>
               </div>
             </div>
 
-            <div class=\"grid gap-4 lg:grid-cols-2\"> 
-              <div class=\"panel-card rounded-2xl p-5 space-y-4\"> 
+            <div class=\"panel-card rounded-2xl p-5 space-y-3\">
+              <div class=\"flex flex-wrap items-center justify-between gap-3\">
+                <div>
+                  <h3 class=\"text-lg font-semibold text-white\">Agent config file</h3>
+                  <p class=\"text-sm text-slate-400\">Import or export the saved agent_configs.json inventory.</p>
+                </div>
+                <div class=\"flex flex-wrap items-center gap-2\">
+                  <input id=\"config-file-input\" type=\"file\" accept=\"application/json\" class=\"hidden\" />
+                  <button id=\"export-configs\" class=\"rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200\">Export</button>
+                  <button id=\"import-configs\" class=\"rounded-lg border border-sky-500/40 bg-sky-500/15 px-4 py-2 text-sm font-semibold text-sky-100 shadow-sm transition hover:bg-sky-500/25\">Import</button>
+                </div>
+              </div>
+              <div id=\"config-alert\" class=\"hidden rounded-xl border border-slate-700 bg-slate-800/60 px-4 py-3 text-sm text-slate-100\"></div>
+              <p class=\"text-xs text-slate-500\">Use these controls to move agent configs between installations while keeping backups.</p>
+            </div>
+
+            <div class=\"grid gap-4 lg:grid-cols-2\">
+              <div class=\"panel-card rounded-2xl p-5 space-y-4\">
                 <div class=\"flex items-center justify-between gap-2\">
                   <h3 class=\"text-lg font-semibold text-white\">Add node</h3>
                   <span class=\"rounded-full bg-slate-800/70 px-3 py-1 text-xs font-semibold text-slate-300 ring-1 ring-slate-700\">Agent registry</span>
@@ -442,7 +459,7 @@ def _login_html() -> str:
               </div>
             </div>
 
-            <div class=\"panel-card rounded-2xl p-5 space-y-4\"> 
+            <div id=\"scheduled-tests-section\" class=\"panel-card rounded-2xl p-5 space-y-4\">
               <div class=\"flex flex-wrap items-center justify-between gap-3\"> 
                 <div>
                   <h3 class=\"text-lg font-semibold text-white\">Scheduled tests</h3>
@@ -502,6 +519,12 @@ def _login_html() -> str:
     const appCard = document.getElementById('app-card');
     const loginAlert = document.getElementById('login-alert');
     const authHint = document.getElementById('auth-hint');
+    const configAlert = document.getElementById('config-alert');
+    const importConfigsBtn = document.getElementById('import-configs');
+    const exportConfigsBtn = document.getElementById('export-configs');
+    const configFileInput = document.getElementById('config-file-input');
+    const scheduledTestsSection = document.getElementById('scheduled-tests-section');
+    const jumpSchedulesBtn = document.getElementById('jump-schedules');
 
       const nodeName = document.getElementById('node-name');
       const nodeIp = document.getElementById('node-ip');
@@ -552,6 +575,62 @@ def _login_html() -> str:
     function hide(el) { el.classList.add('hidden'); }
     function setAlert(el, message) { el.textContent = message; show(el); }
     function clearAlert(el) { el.textContent = ''; hide(el); }
+
+
+    async function exportAgentConfigs() {
+      clearAlert(configAlert);
+      const res = await fetch('/agent-configs/export');
+      if (!res.ok) {
+        setAlert(configAlert, 'Failed to export agent configs.');
+        return;
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'agent_configs.json';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+
+
+    async function importAgentConfigs(file) {
+      clearAlert(configAlert);
+      if (!file) return;
+
+      let payload;
+      try {
+        payload = JSON.parse(await file.text());
+      } catch (err) {
+        setAlert(configAlert, 'Invalid JSON file.');
+        return;
+      }
+
+      const res = await fetch('/agent-configs/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const msg = await res.text();
+        setAlert(configAlert, msg || 'Failed to import agent configs.');
+        return;
+      }
+
+      const imported = await res.json();
+      setAlert(configAlert, `Imported ${imported.length} agent configs from file.`);
+    }
+
+
+    function scrollToSchedules() {
+      if (scheduledTestsSection) {
+        scheduledTestsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
 
 
     function resetNodeForm() {
@@ -1233,6 +1312,16 @@ def _login_html() -> str:
       document.getElementById('save-node').addEventListener('click', saveNode);
       document.getElementById('run-test').addEventListener('click', runTest);
       saveScheduleBtn.addEventListener('click', saveSchedule);
+      if (exportConfigsBtn) exportConfigsBtn.addEventListener('click', exportAgentConfigs);
+      if (importConfigsBtn && configFileInput) {
+        importConfigsBtn.addEventListener('click', () => configFileInput.click());
+        configFileInput.addEventListener('change', (event) => {
+          const [file] = event.target.files || [];
+          if (file) importAgentConfigs(file);
+          event.target.value = '';
+        });
+      }
+      if (jumpSchedulesBtn) jumpSchedulesBtn.addEventListener('click', scrollToSchedules);
       document.querySelectorAll('[data-refresh-nodes]').forEach((btn) => btn.addEventListener('click', refreshNodes));
       document.getElementById('refresh-tests').addEventListener('click', refreshTests);
       document.getElementById('refresh-schedules').addEventListener('click', refreshSchedules);
@@ -1568,6 +1657,33 @@ def _get_agent_or_404(name: str) -> AgentConfigRead:
     if not config:
         raise HTTPException(status_code=404, detail="agent config not found")
     return config
+
+
+@app.get("/agent-configs/export")
+def export_agent_configs() -> FileResponse:
+    return FileResponse(
+        agent_store.path,
+        media_type="application/json",
+        filename="agent_configs.json",
+    )
+
+
+@app.post("/agent-configs/import", response_model=List[AgentConfigRead])
+def import_agent_configs(configs: List[AgentConfigCreate]) -> List[AgentConfigRead]:
+    seen: set[str] = set()
+    normalized: List[AgentConfigCreate] = []
+    for config in configs:
+        if config.name in seen:
+            raise HTTPException(status_code=400, detail="duplicate agent config names not allowed")
+        seen.add(config.name)
+        normalized.append(
+            AgentConfigCreate(**_normalized_agent_payload(config.model_dump()))
+        )
+
+    try:
+        return agent_store.replace_all(normalized)
+    except ValueError as exc:  # pragma: no cover - defensive
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/agent-configs", response_model=List[AgentConfigRead])
