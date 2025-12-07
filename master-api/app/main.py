@@ -613,13 +613,6 @@ def _login_html() -> str:
                     <div id="streaming-progress-bar" class="h-2 w-0 rounded-full bg-gradient-to-r from-emerald-500 to-sky-500 transition-all duration-300"></div>
                   </div>
                 </div>
-                <div id="zhejiang-latency" class="space-y-2 rounded-xl border border-slate-800 bg-slate-900/50 p-3 text-sm text-slate-300">
-                  <div class="flex items-center justify-between">
-                    <span class="font-semibold">三网到浙江链路延迟</span>
-                    <span class="text-xs text-slate-500">每分钟自动刷新</span>
-                  </div>
-                  <div class="text-xs text-slate-500">正在加载链路状态...</div>
-                </div>
                 <div id="nodes-list" class="text-sm text-slate-400 space-y-3">暂无节点。</div>
               </div>
 
@@ -750,7 +743,6 @@ def _login_html() -> str:
     const nodeIperf = document.getElementById('node-iperf-port');
     const nodeDesc = document.getElementById('node-desc');
     const nodesList = document.getElementById('nodes-list');
-    const zhejiangLatencyBox = document.getElementById('zhejiang-latency');
     const streamingProgress = document.getElementById('streaming-progress');
     const streamingProgressBar = document.getElementById('streaming-progress-bar');
     const streamingProgressLabel = document.getElementById('streaming-progress-label');
@@ -784,10 +776,8 @@ def _login_html() -> str:
     ];
     let streamingStatusCache = {};
     let isStreamingTestRunning = false;
-    let zhejiangLatencyCache = [];
-    let zhejiangLatencyTimer = null;
     const styles = {
-      rowCard: 'rounded-xl border border-slate-800/70 bg-slate-900/60 p-4 shadow-sm shadow-black/30 space-y-3',
+      rowCard: 'flex flex-col gap-3 rounded-xl border border-slate-800/70 bg-slate-900/60 p-5 shadow-sm shadow-black/30',
       inline: 'flex flex-wrap items-center gap-3',
       badgeOnline: 'inline-flex items-center gap-2 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300 ring-1 ring-emerald-500/40',
       badgeOffline: 'inline-flex items-center gap-2 rounded-full bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-200 ring-1 ring-rose-500/40',
@@ -883,69 +873,6 @@ def _login_html() -> str:
         .join('');
     }
 
-    function renderZhejiangLatency() {
-      if (!zhejiangLatencyBox) return;
-      const header = `<div class="flex items-center justify-between"><span class="font-semibold">三网到浙江链路延迟</span><span class="text-xs text-slate-500">每分钟自动刷新</span></div>`;
-
-      if (!zhejiangLatencyCache.length) {
-        zhejiangLatencyBox.innerHTML = `${header}<div class="text-xs text-slate-500">暂无链路数据。</div>`;
-        return;
-      }
-
-      const grid = zhejiangLatencyCache
-        .map((item) => {
-          const ok = item.latency_ms !== undefined && item.latency_ms !== null;
-          const latencyText = ok ? `${formatMetric(item.latency_ms, 1)} ms` : '不可达';
-          const chip = ok
-            ? 'bg-emerald-500/10 text-emerald-200 border-emerald-500/40'
-            : 'bg-rose-500/10 text-rose-200 border-rose-500/40';
-          const detail = item.detail ? `<p class="text-[11px] text-slate-500">${item.detail}</p>` : '';
-          return `<div class="space-y-1 rounded-lg border border-slate-800/70 bg-slate-900/70 p-3">
-            <div class="flex items-center justify-between text-sm font-semibold text-white">
-              <span>${item.name}</span>
-              <span class="rounded-full border px-2 py-0.5 text-[11px] ${chip}">${latencyText}</span>
-            </div>
-            <p class="text-[11px] text-slate-500">${item.host}:${item.port}</p>
-            ${detail}
-          </div>`;
-        })
-        .join('');
-
-      zhejiangLatencyBox.innerHTML = `${header}<div class="grid gap-2 sm:grid-cols-3">${grid}</div>`;
-    }
-
-    async function refreshZhejiangLatency() {
-      if (!zhejiangLatencyBox) return;
-      try {
-        const res = await fetch('/latency/zhejiang');
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}`);
-        }
-        zhejiangLatencyCache = await res.json();
-        renderZhejiangLatency();
-      } catch (err) {
-        zhejiangLatencyBox.innerHTML = `<div class="flex items-center justify-between"><span class="font-semibold">三网到浙江链路延迟</span><span class="text-xs text-amber-300">链路刷新失败：${err?.message || err}</span></div>`;
-      }
-    }
-
-    function startLatencyPolling() {
-      if (zhejiangLatencyTimer) {
-        clearInterval(zhejiangLatencyTimer);
-      }
-      refreshZhejiangLatency();
-      zhejiangLatencyTimer = setInterval(refreshZhejiangLatency, 60 * 1000);
-    }
-
-    function stopLatencyPolling(message = '未登录或未开始刷新') {
-      if (zhejiangLatencyTimer) {
-        clearInterval(zhejiangLatencyTimer);
-        zhejiangLatencyTimer = null;
-      }
-      if (zhejiangLatencyBox) {
-        zhejiangLatencyBox.innerHTML = `<div class="flex items-center justify-between"><span class="font-semibold">三网到浙江链路延迟</span><span class="text-xs text-slate-500">${message}</span></div>`;
-      }
-    }
-
     async function exportAgentConfigs() {
       clearAlert(configAlert);
       const res = await fetch('/agent-configs/export');
@@ -1034,11 +961,9 @@ def _login_html() -> str:
         authHint.textContent = '已通过认证，可管理节点与测速任务。';
         await refreshNodes();
         await refreshTests();
-        startLatencyPolling();
       } else {
         appCard.classList.add('hidden');
         loginCard.classList.remove('hidden');
-        stopLatencyPolling('等待登录');
       }
     }
 
@@ -1084,30 +1009,34 @@ def _login_html() -> str:
       }
 
       nodes.forEach((node) => {
-        const latencyText = formatBackboneLatency(node.backbone_latency);
-        const onlineLabel = latencyText ? `在线 | ${latencyText}` : '在线';
         const statusBadge = node.status === 'online'
-          ? `<span class="${styles.badgeOnline}"><span class=\"h-2 w-2 rounded-full bg-emerald-400\"></span> ${onlineLabel}</span>`
+          ? `<span class="${styles.badgeOnline}"><span class=\"h-2 w-2 rounded-full bg-emerald-400\"></span> 在线</span>`
           : `<span class="${styles.badgeOffline}"><span class=\"h-2 w-2 rounded-full bg-rose-400\"></span> 离线</span>`;
 
         const ports = node.detected_iperf_port ? `${node.detected_iperf_port}` : `${node.iperf_port}`;
         const streamingBadges = renderStreamingBadges(node.id);
+        const backboneBadges = renderBackboneBadges(node.backbone_latency);
 
         const item = document.createElement('div');
         item.className = styles.rowCard;
         item.innerHTML = `
-          <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div>
-          <div class="flex flex-wrap items-center gap-2">${statusBadge}<span class="text-base font-semibold text-white">${node.name}</span>${streamingBadges}</div>
-          <p class="${styles.textMuted}">${node.ip}:${node.agent_port} · iperf ${ports}${node.description ? ' · ' + node.description : ''}</p>
-        </div>
-        <div class="flex flex-wrap gap-2">
-          <button class="${styles.pillInfo}" onclick="runStreamingCheck(${node.id})">流媒体解锁测试</button>
-          <button class="${styles.pillInfo}" onclick="editNode(${node.id})">编辑</button>
-          <button class="${styles.pillDanger}" onclick="removeNode(${node.id})">删除</button>
-        </div>
-      </div>
-      `;
+          <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div class="flex-1 space-y-2">
+              <div class="flex flex-wrap items-center gap-2">
+                ${statusBadge}
+                <span class="text-base font-semibold text-white">${node.name}</span>
+                ${backboneBadges ? `<div class=\"flex flex-wrap items-center gap-2\">${backboneBadges}</div>` : ''}
+              </div>
+              ${streamingBadges ? `<div class=\"flex flex-wrap items-center gap-2\">${streamingBadges}</div>` : ''}
+              <p class="${styles.textMuted}">${node.ip}:${node.agent_port} · iperf ${ports}${node.description ? ' · ' + node.description : ''}</p>
+            </div>
+            <div class="flex flex-wrap items-center justify-start gap-2 lg:flex-col lg:items-end lg:justify-center lg:min-w-[170px]">
+              <button class="${styles.pillInfo}" onclick="runStreamingCheck(${node.id})">流媒体解锁测试</button>
+              <button class="${styles.pillInfo}" onclick="editNode(${node.id})">编辑</button>
+              <button class="${styles.pillDanger}" onclick="removeNode(${node.id})">删除</button>
+            </div>
+          </div>
+        `;
         nodesList.appendChild(item);
 
         const optionA = document.createElement('option');
@@ -1511,18 +1440,21 @@ def _login_html() -> str:
       return Number(value).toFixed(decimals);
     }
 
-    function formatBackboneLatency(entries) {
+    function renderBackboneBadges(entries) {
       if (!entries || !entries.length) return '';
+
       const labelMap = { zj_cu: 'CU', zj_ct: 'CT', zj_cm: 'CM' };
       return entries
         .map((item) => {
           const label = labelMap[item.key] || (item.name || item.key || '').slice(0, 2).toUpperCase();
-          if (item.latency_ms === undefined || item.latency_ms === null) {
-            return `${label} 不可达`;
-          }
-          return `${label} ${formatMetric(item.latency_ms, 0)}ms`;
+          const hasLatency = item.latency_ms !== undefined && item.latency_ms !== null;
+          const chipStyle = hasLatency
+            ? 'bg-sky-500/10 text-sky-100 border-sky-500/40'
+            : 'bg-rose-500/15 text-rose-200 border-rose-500/40';
+          const latencyLabel = hasLatency ? `${formatMetric(item.latency_ms, 0)} ms` : '不可达';
+          return `<span class="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${chipStyle}">${label}<span class=\"text-[10px] text-slate-300\">${latencyLabel}</span></span>`;
         })
-        .join(' | ');
+        .join('');
     }
 
     function formatNodeLabel(nodeId) {
