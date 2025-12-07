@@ -1084,8 +1084,10 @@ def _login_html() -> str:
       }
 
       nodes.forEach((node) => {
+        const latencyText = formatBackboneLatency(node.backbone_latency);
+        const onlineLabel = latencyText ? `在线 | ${latencyText}` : '在线';
         const statusBadge = node.status === 'online'
-          ? `<span class="${styles.badgeOnline}"><span class=\"h-2 w-2 rounded-full bg-emerald-400\"></span> 在线</span>`
+          ? `<span class="${styles.badgeOnline}"><span class=\"h-2 w-2 rounded-full bg-emerald-400\"></span> ${onlineLabel}</span>`
           : `<span class="${styles.badgeOffline}"><span class=\"h-2 w-2 rounded-full bg-rose-400\"></span> 离线</span>`;
 
         const ports = node.detected_iperf_port ? `${node.detected_iperf_port}` : `${node.iperf_port}`;
@@ -1507,6 +1509,20 @@ def _login_html() -> str:
     function formatMetric(value, decimals = 2) {
       if (value === undefined || value === null || Number.isNaN(value)) return 'N/A';
       return Number(value).toFixed(decimals);
+    }
+
+    function formatBackboneLatency(entries) {
+      if (!entries || !entries.length) return '';
+      const labelMap = { zj_cu: 'CU', zj_ct: 'CT', zj_cm: 'CM' };
+      return entries
+        .map((item) => {
+          const label = labelMap[item.key] || (item.name || item.key || '').slice(0, 2).toUpperCase();
+          if (item.latency_ms === undefined || item.latency_ms === null) {
+            return `${label} 不可达`;
+          }
+          return `${label} ${formatMetric(item.latency_ms, 0)}ms`;
+        })
+        .join(' | ');
     }
 
     function formatNodeLabel(nodeId) {
@@ -2005,6 +2021,10 @@ async def _check_node_health(node: Node) -> NodeWithStatus:
             if response.status_code == 200:
                 data = response.json()
                 detected_port = data.get("port")
+                latency_payload = data.get("backbone_latency") or []
+                backbone_latency = [
+                    BackboneLatency(**item) for item in latency_payload if isinstance(item, dict)
+                ]
                 return NodeWithStatus(
                     id=node.id,
                     name=node.name,
@@ -2017,6 +2037,7 @@ async def _check_node_health(node: Node) -> NodeWithStatus:
                     health_timestamp=data.get("timestamp"),
                     checked_at=checked_at,
                     detected_iperf_port=int(detected_port) if detected_port else None,
+                    backbone_latency=backbone_latency or None,
                 )
     except Exception:
         pass
