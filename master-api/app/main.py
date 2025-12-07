@@ -652,6 +652,7 @@ def _login_html() -> str:
       { key: 'hbo', label: 'HBO', icon: 'H', color: 'text-purple-300', bg: 'border-purple-500/40 bg-purple-500/10' },
     ];
     let streamingStatusCache = {};
+    let isStreamingTestRunning = false;
     const styles = {
       rowCard: 'rounded-xl border border-slate-800/70 bg-slate-900/60 p-4 shadow-sm shadow-black/30 space-y-3',
       inline: 'flex flex-wrap items-center gap-3',
@@ -704,6 +705,9 @@ def _login_html() -> str:
 
     function renderStreamingBadges(nodeId) {
       const cache = streamingStatusCache[nodeId];
+      if (isStreamingTestRunning && (!cache || cache.inProgress)) {
+        return '<span class="text-xs text-emerald-300">流媒体测试中...</span>';
+      }
       if (!cache) {
         return '<span class="text-xs text-slate-500">未检测</span>';
       }
@@ -891,48 +895,61 @@ def _login_html() -> str:
       });
 
       syncTestPort();
+
+      const missingStreamingStatus = nodeCache.some((node) => !streamingStatusCache[node.id]);
+      if (nodeCache.length && missingStreamingStatus && !isStreamingTestRunning) {
+        runStreamingChecks();
+      }
     }
 
     async function runStreamingChecks() {
+      if (isStreamingTestRunning) return;
       if (!nodeCache.length) {
         setAlert(addNodeAlert, '请先添加节点再进行解锁检测。');
         return;
       }
 
+      isStreamingTestRunning = true;
+      streamingProgressLabel.textContent = '流媒体测试中...';
       const expectedMs = Math.max(nodeCache.length * 3500, 2000);
       const stopProgress = startProgressBar(streamingProgress, streamingProgressBar, streamingProgressLabel, expectedMs, '准备发起检测...', false);
 
-      for (let i = 0; i < nodeCache.length; i++) {
-        const node = nodeCache[i];
-        streamingProgressLabel.textContent = `${node.name} (${i + 1}/${nodeCache.length}) 测试中`;
-        try {
-          const res = await fetch(`/nodes/${node.id}/streaming-test`, { method: 'POST' });
-          if (!res.ok) {
-            streamingStatusCache[node.id] = streamingStatusCache[node.id] || {};
-            streamingStatusCache[node.id].error = true;
-            streamingStatusCache[node.id].message = `请求失败 (${res.status})`;
-            continue;
-          }
-
-          const data = await res.json();
-          const byService = {};
-          (data.services || []).forEach((svc) => {
-            const key = normalizeServiceKey(svc.key, svc.service);
-            byService[key] = { unlocked: !!svc.unlocked, detail: svc.detail, service: svc.service };
-          });
-          streamingServices.forEach((svc) => {
-            if (!byService[svc.key]) {
-              byService[svc.key] = { unlocked: false, detail: '未检测' };
+      try {
+        for (let i = 0; i < nodeCache.length; i++) {
+          const node = nodeCache[i];
+          streamingStatusCache[node.id] = { inProgress: true };
+          streamingProgressLabel.textContent = `${node.name} (${i + 1}/${nodeCache.length}) 测试中`;
+          try {
+            const res = await fetch(`/nodes/${node.id}/streaming-test`, { method: 'POST' });
+            if (!res.ok) {
+              streamingStatusCache[node.id] = streamingStatusCache[node.id] || {};
+              streamingStatusCache[node.id].error = true;
+              streamingStatusCache[node.id].message = `请求失败 (${res.status})`;
+              continue;
             }
-          });
-          streamingStatusCache[node.id] = byService;
-        } catch (err) {
-          streamingStatusCache[node.id] = { error: true, message: err?.message || '请求异常' };
-        }
-      }
 
-      stopProgress('检测完成');
-      await refreshNodes();
+            const data = await res.json();
+            const byService = {};
+            (data.services || []).forEach((svc) => {
+              const key = normalizeServiceKey(svc.key, svc.service);
+              byService[key] = { unlocked: !!svc.unlocked, detail: svc.detail, service: svc.service };
+            });
+            streamingServices.forEach((svc) => {
+              if (!byService[svc.key]) {
+                byService[svc.key] = { unlocked: false, detail: '未检测' };
+              }
+            });
+            streamingStatusCache[node.id] = byService;
+          } catch (err) {
+            streamingStatusCache[node.id] = { error: true, message: err?.message || '请求异常' };
+          }
+        }
+
+        stopProgress('检测完成');
+        await refreshNodes();
+      } finally {
+        isStreamingTestRunning = false;
+      }
     }
 
     function editNode(nodeId) {
