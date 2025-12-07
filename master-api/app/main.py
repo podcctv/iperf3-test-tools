@@ -923,8 +923,8 @@ def _login_html() -> str:
     let nodeRefreshInterval = null;
     let isRefreshingNodes = false;
     const streamingServices = [
-      { key: 'youtube', label: 'YouTube', icon: '▶', color: 'text-rose-300', bg: 'border-rose-500/30 bg-rose-500/10' },
-      { key: 'prime_video', label: 'Prime', icon: '🛒', color: 'text-amber-300', bg: 'border-amber-400/40 bg-amber-500/10' },
+      { key: 'youtube', label: 'YouTube Premium', icon: '▶', color: 'text-rose-300', bg: 'border-rose-500/30 bg-rose-500/10' },
+      { key: 'prime_video', label: 'Prime Video', icon: '🎬', color: 'text-amber-300', bg: 'border-amber-400/40 bg-amber-500/10' },
       { key: 'netflix', label: 'Netflix', icon: 'N', color: 'text-red-400', bg: 'border-red-500/40 bg-red-500/10' },
       { key: 'disney_plus', label: 'Disney+', icon: '★', color: 'text-sky-300', bg: 'border-sky-500/40 bg-sky-500/10' },
       { key: 'hbo', label: 'HBO', icon: 'H', color: 'text-purple-300', bg: 'border-purple-500/40 bg-purple-500/10' },
@@ -1037,9 +1037,9 @@ def _login_html() -> str:
     function isPrivateIp(ip) {
       if (!ip) return false;
       return (
-        /^10\\./.test(ip) ||
-        /^192\\.168\\./.test(ip) ||
-        /^172\\.(1[6-9]|2\\d|3[0-1])\\./.test(ip) ||
+        /^10\./.test(ip) ||
+        /^192\.168\./.test(ip) ||
+        /^172\.(1[6-9]|2\d|3[0-1])\./.test(ip) ||
         ip === '127.0.0.1'
       );
     }
@@ -1047,21 +1047,48 @@ def _login_html() -> str:
     function resolveLocalFlag(node) {
       const codeFromDescription = extractCountryCode(node.description);
       const codeFromName = extractCountryCode(node.name);
-      const flag = countryCodeToFlag(codeFromDescription || codeFromName);
-      return flag || '🌐';
+      const code = codeFromDescription || codeFromName || null;
+      const flag = countryCodeToFlag(code) || '🌐';
+      return { flag, code };
+    }
+
+    function renderFlagHtml(info) {
+      const flag = (info?.flag || '🌐').replace(/'/g, '');
+      const code = info?.code;
+      if (code) {
+        const url = `https://flagcdn.com/24x18/${code.toLowerCase()}.png`;
+        return `<img src=\"${url}\" alt=\"${code} flag\" class=\"h-4 w-6 rounded-sm border border-white/10 bg-slate-800/50 shadow-sm\" loading=\"lazy\" onerror=\"this.replaceWith(document.createTextNode('${flag}'))\">`;
+      }
+      return flag;
+    }
+
+    function renderFlagSlot(nodeId, info, extraClass = '', title = '') {
+      const classAttr = extraClass ? ` ${extraClass}` : '';
+      const titleAttr = title ? ` title=\"${title}\"` : '';
+      const codeAttr = info?.code ? ` data-flag-code=\"${info.code}\"` : '';
+      return `<span class=\"inline-flex items-center${classAttr}\" data-node-flag=\"${nodeId}\"${codeAttr}${titleAttr}>${renderFlagHtml(info)}</span>`;
+    }
+
+    function updateFlagElement(el, info) {
+      if (!el || !info) return;
+      if (info.code) {
+        el.dataset.flagCode = info.code;
+      }
+      el.innerHTML = renderFlagHtml(info);
     }
 
     async function getNodeFlag(node) {
       const now = Date.now();
-      const cached = flagCache[node.ip];
+      const cacheKey = node.ip || node.id;
+      const cached = flagCache[cacheKey];
       if (cached && now - cached.timestamp < FLAG_CACHE_TTL) {
-        return cached.flag;
+        return cached;
       }
 
       const fallback = resolveLocalFlag(node);
       if (!node.ip || isPrivateIp(node.ip)) {
-        flagCache[node.ip || node.id] = { flag: fallback, timestamp: now };
-        return fallback;
+        flagCache[cacheKey] = { ...fallback, timestamp: now };
+        return flagCache[cacheKey];
       }
 
       try {
@@ -1070,22 +1097,27 @@ def _login_html() -> str:
           throw new Error('geo lookup failed');
         }
         const data = await res.json();
-        const flag = countryCodeToFlag(data?.country_code) || fallback;
-        flagCache[node.ip] = { flag, timestamp: now };
-        return flag;
+        const code = (data?.country_code || '').toUpperCase() || fallback.code;
+        const flag = countryCodeToFlag(code) || fallback.flag;
+        flagCache[cacheKey] = { flag, code, timestamp: now };
+        return flagCache[cacheKey];
       } catch (error) {
         console.warn('无法获取 IP 归属地国旗，将使用回退旗帜。', error);
         return fallback;
       }
     }
 
-    function attachFlagUpdater(node, el) {
-      if (!el) return;
-      el.textContent = resolveLocalFlag(node);
-      getNodeFlag(node).then((flag) => {
-        if (flag && flag !== el.textContent) {
-          el.textContent = flag;
-        }
+    function attachFlagUpdater(node, elements) {
+      if (!elements) return;
+      const targets = elements instanceof NodeList ? Array.from(elements) : [elements];
+      if (!targets.length) return;
+
+      const fallback = resolveLocalFlag(node);
+      targets.forEach((el) => updateFlagElement(el, fallback));
+
+      getNodeFlag(node).then((info) => {
+        if (!info) return;
+        targets.forEach((el) => updateFlagElement(el, info));
       });
     }
 
@@ -1327,9 +1359,10 @@ def _login_html() -> str:
           cacheStreamingFromNode(node);
 
           const privacyEnabled = !!ipPrivacyState[node.id];
+          const flagInfo = resolveLocalFlag(node);
           const statusBadge = node.status === 'online'
-            ? `<span class="${styles.badgeOnline}"><span class=\"h-2 w-2 rounded-full bg-emerald-400\"></span> 在线</span>`
-            : `<span class="${styles.badgeOffline}"><span class=\"h-2 w-2 rounded-full bg-rose-400\"></span> 离线</span>`;
+            ? `<span class="${styles.badgeOnline}">${renderFlagSlot(node.id, flagInfo, 'text-base')}<span class=\"h-2 w-2 rounded-full bg-emerald-400\"></span><span>在线</span></span>`
+            : `<span class="${styles.badgeOffline}">${renderFlagSlot(node.id, flagInfo, 'text-base')}<span class=\"h-2 w-2 rounded-full bg-rose-400\"></span><span>离线</span></span>`;
 
           const ports = node.detected_iperf_port ? `${node.detected_iperf_port}` : `${node.iperf_port}`;
           const agentPortDisplay = maskPort(node.agent_port, privacyEnabled);
@@ -1337,7 +1370,7 @@ def _login_html() -> str:
           const streamingBadges = renderStreamingBadges(node.id);
           const backboneBadges = renderBackboneBadges(node.backbone_latency);
           const ipMasked = maskIp(node.ip, privacyEnabled);
-          const flagPlaceholder = resolveLocalFlag(node);
+          const flagPlaceholder = renderFlagSlot(node.id, flagInfo, 'text-lg font-semibold drop-shadow-sm', '服务器所在地区');
 
           const item = document.createElement('div');
           item.className = styles.rowCard;
@@ -1358,7 +1391,7 @@ def _login_html() -> str:
               ${backboneBadges ? `<div class=\"flex flex-wrap items-center gap-2\">${backboneBadges}</div>` : ''}
               <div class="flex flex-wrap items-center gap-2" data-streaming-badges="${node.id}">${streamingBadges || ''}</div>
               <p class="${styles.textMuted} flex items-center gap-2">
-                <span class="text-lg font-semibold drop-shadow-sm" data-node-flag="${node.id}" title="服务器所在地区">${flagPlaceholder}</span>
+                ${flagPlaceholder}
                 <span class="font-mono" data-node-ip-display="${node.id}">${ipMasked}</span>
                 <span class="text-slate-500" data-node-agent-port="${node.id}">:${agentPortDisplay}</span>
                 <span data-node-iperf-display="${node.id}">· iperf ${iperfPortDisplay}${node.description ? ' · ' + node.description : ''}</span>
@@ -1375,7 +1408,7 @@ def _login_html() -> str:
 
         const toggleBtn = item.querySelector('[data-privacy-toggle]');
         const ipDisplay = item.querySelector(`[data-node-ip-display="${node.id}"]`);
-        const flagDisplay = item.querySelector(`[data-node-flag="${node.id}"]`);
+        const flagDisplay = item.querySelectorAll(`[data-node-flag="${node.id}"]`);
         const agentPortSpan = item.querySelector(`[data-node-agent-port="${node.id}"]`);
         const iperfPortSpan = item.querySelector(`[data-node-iperf-display="${node.id}"]`);
         toggleBtn?.addEventListener('click', () => {
