@@ -488,8 +488,8 @@ def _login_html() -> str:
               <p class="text-xs text-slate-500">可在不同实例之间迁移配置，便于备份。</p>
             </div>
 
-            <div class="grid gap-4 lg:grid-cols-2">
-              <div class="panel-card rounded-2xl p-5 space-y-4">
+            <div class="grid gap-4 lg:grid-cols-3">
+              <div id="add-node-card" class="panel-card rounded-2xl p-5 space-y-4">
                 <div class="flex items-center justify-between gap-2">
                   <h3 class="text-lg font-semibold text-white">添加节点</h3>
                   <span class="rounded-full bg-slate-800/70 px-3 py-1 text-xs font-semibold text-slate-300 ring-1 ring-slate-700">Agent 注册表</span>
@@ -520,7 +520,7 @@ def _login_html() -> str:
                 <button id="save-node" class="w-full rounded-xl bg-gradient-to-r from-emerald-500 to-sky-500 px-4 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-500/20 transition hover:scale-[1.01] hover:shadow-xl">保存节点</button>
               </div>
 
-              <div class="panel-card rounded-2xl p-5 space-y-4">
+              <div class="panel-card rounded-2xl p-5 space-y-4 lg:col-span-3">
                 <div class="flex items-center justify-between gap-2">
                   <h3 class="text-lg font-semibold text-white">发起测试</h3>
                   <span class="rounded-full bg-slate-800/70 px-3 py-1 text-xs font-semibold text-slate-300 ring-1 ring-slate-700">快速启动</span>
@@ -552,6 +552,13 @@ def _login_html() -> str:
                     <input id="test-port" type="number" value="5201" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
                   </div>
                 </div>
+                <div class="flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/50 px-3 py-2">
+                  <label for="reverse" class="flex items-center gap-2 text-sm font-medium text-slate-200">
+                    <input id="reverse" type="checkbox" class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-sky-500 focus:ring-sky-500" />
+                    反向测试 (-R)
+                  </label>
+                  <p class="text-xs text-slate-500">在源节点上发起反向流量测试。</p>
+                </div>
                 <button id="run-test" class="w-full rounded-xl bg-gradient-to-r from-sky-500 to-indigo-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-sky-500/20 transition hover:scale-[1.01] hover:shadow-xl">开始测试</button>
                 <div id="test-progress" class="hidden mt-2 space-y-2">
                   <div class="flex items-center justify-between text-xs text-slate-400">
@@ -574,6 +581,7 @@ def _login_html() -> str:
                   </div>
                   <div class="flex flex-wrap gap-2">
                     <button data-refresh-nodes class="rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200">刷新</button>
+                    <button id="open-add-node" class="rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-100 shadow-sm transition hover:bg-emerald-500/25">添加节点</button>
                   </div>
                 </div>
                 <div id="streaming-progress" class="hidden space-y-2 rounded-xl border border-slate-800 bg-slate-900/50 p-3">
@@ -640,6 +648,9 @@ def _login_html() -> str:
     const testProgress = document.getElementById('test-progress');
     const testProgressBar = document.getElementById('test-progress-bar');
     const testProgressLabel = document.getElementById('test-progress-label');
+    const reverseToggle = document.getElementById('reverse');
+    const addNodeCard = document.getElementById('add-node-card');
+    const openAddNodeBtn = document.getElementById('open-add-node');
     let nodeCache = [];
     let editingNodeId = null;
     const streamingServices = [
@@ -648,6 +659,8 @@ def _login_html() -> str:
       { key: 'netflix', label: 'Netflix', icon: 'N', color: 'text-red-400', bg: 'border-red-500/40 bg-red-500/10' },
       { key: 'disney_plus', label: 'Disney+', icon: '★', color: 'text-sky-300', bg: 'border-sky-500/40 bg-sky-500/10' },
       { key: 'hbo', label: 'HBO', icon: 'H', color: 'text-purple-300', bg: 'border-purple-500/40 bg-purple-500/10' },
+      { key: 'openai', label: 'OpenAI', icon: '∞', color: 'text-emerald-300', bg: 'border-emerald-500/40 bg-emerald-500/10' },
+      { key: 'gemini', label: 'Gemini', icon: 'G', color: 'text-sky-200', bg: 'border-sky-400/40 bg-sky-400/10' },
     ];
     let streamingStatusCache = {};
     let isStreamingTestRunning = false;
@@ -876,7 +889,7 @@ def _login_html() -> str:
           <p class="${styles.textMuted}">${node.ip}:${node.agent_port} · iperf ${ports}${node.description ? ' · ' + node.description : ''}</p>
         </div>
         <div class="flex flex-wrap gap-2">
-          <button class="${styles.pillInfo}" onclick="runStreamingCheck(${node.id})">流媒体解锁</button>
+          <button class="${styles.pillInfo}" onclick="runStreamingCheck(${node.id})">流媒体解锁测试</button>
           <button class="${styles.pillInfo}" onclick="editNode(${node.id})">编辑</button>
           <button class="${styles.pillDanger}" onclick="removeNode(${node.id})">删除</button>
         </div>
@@ -1012,12 +1025,13 @@ def _login_html() -> str:
         const latencyValue = metrics.latencyMs !== undefined && metrics.latencyMs !== null ? metrics.latencyMs : null;
         const jitterValue = metrics.jitterMs !== undefined && metrics.jitterMs !== null ? metrics.jitterMs : null;
         const pathLabel = `${formatNodeLabel(test.src_node_id)} → ${formatNodeLabel(test.dst_node_id)}`;
+        const typeLabel = `${test.protocol.toUpperCase()}${test.params?.reverse ? ' (-R)' : ''}`;
 
         const row = document.createElement('tr');
         const cells = [
           `#${test.id}`,
           pathLabel,
-          test.protocol.toUpperCase(),
+          typeLabel,
           latencyValue !== null ? formatMetric(latencyValue) : 'N/A',
           jitterValue !== null ? formatMetric(jitterValue) : 'N/A',
           rateSummary.receiverRateMbps,
@@ -1115,7 +1129,8 @@ def _login_html() -> str:
         protocol: document.getElementById('protocol').value,
         duration: Number(document.getElementById('duration').value),
         parallel: Number(document.getElementById('parallel').value),
-        port: Number(testPortInput.value || (selectedDst ? (selectedDst.detected_iperf_port || selectedDst.iperf_port) : 5201))
+        port: Number(testPortInput.value || (selectedDst ? (selectedDst.detected_iperf_port || selectedDst.iperf_port) : 5201)),
+        reverse: reverseToggle?.checked || false,
       };
 
       const finishProgress = startProgressBar(
@@ -1306,7 +1321,8 @@ def _login_html() -> str:
       header.className = 'flex flex-col gap-3 md:flex-row md:items-center md:justify-between';
 
       const summary = document.createElement('div');
-      summary.innerHTML = `<strong>#${test.id} ${pathLabel}</strong> · ${test.protocol.toUpperCase()} · 端口 ${test.params.port} · 时长 ${test.params.duration}s<br/>` +
+      const directionLabel = test.params?.reverse ? ' (反向)' : '';
+      summary.innerHTML = `<strong>#${test.id} ${pathLabel}</strong> · ${test.protocol.toUpperCase()}${directionLabel} · 端口 ${test.params.port} · 时长 ${test.params.duration}s<br/>` +
         `<span class="${styles.textMutedSm}">速率: ${metrics.bitsPerSecond ? formatMetric(metrics.bitsPerSecond / 1e6, 2) + ' Mbps' : 'N/A'} | 时延: ${latencyValue !== null ? formatMetric(latencyValue) + ' ms' : 'N/A'} | 丢包: ${metrics.lostPercent !== undefined && metrics.lostPercent !== null ? formatMetric(metrics.lostPercent) + '%' : 'N/A'}</span>`;
       header.appendChild(summary);
 
@@ -1333,6 +1349,15 @@ def _login_html() -> str:
     document.getElementById('logout-btn').addEventListener('click', logout);
     document.getElementById('run-test').addEventListener('click', runTest);
     saveNodeBtn.addEventListener('click', saveNode);
+
+    if (openAddNodeBtn) {
+      openAddNodeBtn.addEventListener('click', () => {
+        if (addNodeCard) {
+          addNodeCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        nodeName.focus({ preventScroll: true });
+      });
+    }
 
     importConfigsBtn.addEventListener('click', () => configFileInput.click());
     exportConfigsBtn.addEventListener('click', exportAgentConfigs);
@@ -1809,6 +1834,7 @@ async def create_test(test: TestCreate, db: Session = Depends(get_db)):
         "duration": test.duration,
         "protocol": test.protocol,
         "parallel": test.parallel,
+        "reverse": test.reverse,
     }
 
     try:
