@@ -499,12 +499,29 @@ async def lookup_geo_country_code(ip: str) -> str | None:
     if cached and now - cached[1] < GEO_CACHE_TTL_SECONDS:
         return cached[0]
 
+    async def _fetch_from_ipapi(client: httpx.AsyncClient) -> str | None:
+        resp = await client.get(f"https://ipapi.co/{ip}/country/")
+        if resp.status_code == 200:
+            code = resp.text.strip().upper()
+            if len(code) == 2:
+                return code
+        return None
+
+    async def _fetch_from_ip_api(client: httpx.AsyncClient) -> str | None:
+        resp = await client.get(f"https://ip-api.com/json/{ip}?fields=status,countryCode,message")
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("status") == "success":
+                code = data.get("countryCode")
+                if isinstance(code, str) and len(code) == 2:
+                    return code.upper()
+        return None
+
     try:
         async with httpx.AsyncClient(timeout=5) as client:
-            resp = await client.get(f"https://ipapi.co/{ip}/country/")
-            if resp.status_code == 200:
-                code = resp.text.strip().upper()
-                if len(code) == 2:
+            for fetcher in (_fetch_from_ipapi, _fetch_from_ip_api):
+                code = await fetcher(client)
+                if code:
                     _geo_cache[ip] = (code, now)
                     return code
     except Exception:  # pragma: no cover - external dependency
