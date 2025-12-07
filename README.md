@@ -118,6 +118,9 @@ curl -X DELETE http://localhost:9000/schedules/1
 * `STATE_RECENT_TESTS` – Number of most recent tests to keep in the snapshot file (default `50`).
 * `STREAMING_PROBE_MODE` – Agent-only: set to `external` to force use of the upstream `ip.sh` streaming checker. Default `builtin` runs a short HTTP reachability probe for quicker feedback.
 * `STREAMING_HTTP_TIMEOUT` – Agent-only: per-request timeout (seconds) for the builtin streaming probe (default `5`).
+* `STREAMING_AUTO_ENABLED` – Agent-only: whether to auto-run the streaming unlock suite on startup and every 24 hours (default `true`).
+* `STREAMING_AUTO_INTERVAL` – Agent-only: interval seconds between automatic streaming unlock runs (default `86400`).
+* `STREAMING_CACHE_PATH` – Agent-only: where to store cached streaming/AI unlock results (default `/tmp/streaming_probe_cache.json`).
 
 ## Notes / 补充说明
 
