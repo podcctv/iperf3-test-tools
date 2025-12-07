@@ -7,7 +7,7 @@ import subprocess
 import threading
 import time
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import requests
 from flask import Flask, jsonify, request
@@ -40,6 +40,29 @@ STREAMING_CACHE_PATH = Path(os.environ.get("STREAMING_CACHE_PATH", "/tmp/streami
 STREAMING_AUTO_INTERVAL = int(os.environ.get("STREAMING_AUTO_INTERVAL", 60 * 60 * 24))
 STREAMING_AUTO_ENABLED = os.environ.get("STREAMING_AUTO_ENABLED", "true").lower() != "false"
 
+BACKBONE_TARGETS = [
+    {
+        "key": "zj_cu",
+        "name": "浙江联通",
+        "host": "zj-cu-v4.ip.zstaticcdn.com",
+        "port": 443,
+    },
+    {
+        "key": "zj_cm",
+        "name": "浙江移动",
+        "host": "zj-cm-v4.ip.zstaticcdn.com",
+        "port": 443,
+    },
+    {
+        "key": "zj_ct",
+        "name": "浙江电信",
+        "host": "zj-ct-v4.ip.zstaticcdn.com",
+        "port": 443,
+    },
+]
+BACKBONE_LATENCY_TTL = int(os.environ.get("BACKBONE_LATENCY_TTL", 60))
+_backbone_cache: dict[str, Any] = {"timestamp": 0, "results": []}
+
 SCRIPT_SERVICE_MAP = {
     "Youtube": {"key": "youtube", "name": "YouTube"},
     "AmazonPrimeVideo": {"key": "prime_video", "name": "Prime Video"},
@@ -56,6 +79,44 @@ STREAMING_UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
+
+
+def _measure_backbone_target(target: dict) -> Dict[str, Any]:
+    samples: list[float] = []
+    detail: str | None = None
+    for _ in range(2):
+        start = time.perf_counter()
+        try:
+            with socket.create_connection(
+                (target["host"], int(target["port"])), timeout=3
+            ):
+                pass
+            samples.append((time.perf_counter() - start) * 1000)
+        except OSError as exc:
+            detail = str(exc)
+
+    latency_ms = round(sum(samples) / len(samples), 2) if samples else None
+    return {
+        "key": target.get("key"),
+        "name": target.get("name"),
+        "host": target.get("host"),
+        "port": int(target.get("port", 0)),
+        "latency_ms": latency_ms,
+        "status": "ok" if latency_ms is not None else "error",
+        "detail": None if latency_ms is not None else detail,
+        "checked_at": int(time.time()),
+    }
+
+
+def _get_backbone_latency() -> List[Dict[str, Any]]:
+    now = time.time()
+    if _backbone_cache["results"] and now - _backbone_cache["timestamp"] < BACKBONE_LATENCY_TTL:
+        return _backbone_cache["results"]
+
+    results = [_measure_backbone_target(target) for target in BACKBONE_TARGETS]
+    _backbone_cache["timestamp"] = now
+    _backbone_cache["results"] = results
+    return results
 
 
 def _resolve_hostname(hostname: str) -> tuple[str | None, list[str]]:
@@ -624,7 +685,8 @@ def health() -> Any:
         "status": "ok",
         "server_running": _is_process_running(server_process),
         "port": DEFAULT_IPERF_PORT,
-        "timestamp": int(time.time())
+        "timestamp": int(time.time()),
+        "backbone_latency": _get_backbone_latency(),
     })
 
 

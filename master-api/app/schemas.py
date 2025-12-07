@@ -31,14 +31,6 @@ class NodeRead(NodeBase):
         orm_mode = True
 
 
-class NodeWithStatus(NodeRead):
-    status: str
-    server_running: bool | None = None
-    health_timestamp: int | None = None
-    checked_at: int | None = None
-    detected_iperf_port: int | None = None
-
-
 class BackboneLatency(BaseModel):
     key: str
     name: str
@@ -48,6 +40,15 @@ class BackboneLatency(BaseModel):
     status: str = "unknown"
     detail: str | None = None
     checked_at: int | None = None
+
+
+class NodeWithStatus(NodeRead):
+    status: str
+    server_running: bool | None = None
+    health_timestamp: int | None = None
+    checked_at: int | None = None
+    detected_iperf_port: int | None = None
+    backbone_latency: list[BackboneLatency] | None = None
 
 
 class TestCreate(BaseModel):
