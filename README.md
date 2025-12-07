@@ -116,6 +116,8 @@ curl -X DELETE http://localhost:9000/schedules/1
 * `AGENT_IMAGE` – Docker image tag used when (re)deploying agents (default `iperf-agent:latest`).
 * `STATE_FILE_PATH` – JSON snapshot location for nodes/tests/schedules (default `./data/master_state.json`).
 * `STATE_RECENT_TESTS` – Number of most recent tests to keep in the snapshot file (default `50`).
+* `STREAMING_PROBE_MODE` – Agent-only: set to `external` to force use of the upstream `ip.sh` streaming checker. Default `builtin` runs a short HTTP reachability probe for quicker feedback.
+* `STREAMING_HTTP_TIMEOUT` – Agent-only: per-request timeout (seconds) for the builtin streaming probe (default `5`).
 
 ## Notes / 补充说明
 
