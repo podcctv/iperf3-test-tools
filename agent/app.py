@@ -163,11 +163,24 @@ def _probe_netflix() -> dict[str, Any]:
     headers = {"User-Agent": STREAMING_UA}
     dns_info = _dns_detail("www.netflix.com")
     try:
-        resp = requests.get(test_title, headers=headers, timeout=10)
+        resp = requests.get(test_title, headers=headers, timeout=10, allow_redirects=False)
         status = resp.status_code
-        blocked_text = "not available to watch" in resp.text.lower() or "proxy" in resp.text.lower()
-        unlocked = status and status < 500 and not blocked_text
-        detail_parts = [dns_info, f"HTTP {status}", "自制片库" if status == 404 else None]
+        text_lower = resp.text.lower()
+        blocked_text = "not available to watch" in text_lower or "proxy" in text_lower
+        redirected_to = resp.headers.get("location")
+
+        if status in {301, 302, 307, 308}:
+            unlocked = False
+            detail_parts = [dns_info, f"HTTP {status}", f"Redirect: {redirected_to}" if redirected_to else None]
+        elif status == 200:
+            unlocked = not blocked_text
+            detail_parts = [dns_info, f"HTTP {status}", "全片库" if unlocked else "地域限制"]
+        elif status == 404:
+            unlocked = True
+            detail_parts = [dns_info, f"HTTP {status}", "自制片库"]
+        else:
+            unlocked = False
+            detail_parts = [dns_info, f"HTTP {status}", "未解锁"]
     except requests.RequestException as exc:
         unlocked = False
         status = None
@@ -183,16 +196,26 @@ def _probe_youtube_premium() -> dict[str, Any]:
     try:
         resp = requests.get(url, headers=headers, timeout=10)
         status = resp.status_code
+        text_lower = resp.text.lower()
         region_match = re.search(r'"countryCode"\s*:\s*"([A-Z]{2})"', resp.text)
         region_match = region_match or re.search(r'"contentRegion"\s*:\s*"([A-Z]{2})"', resp.text)
         region = region_match.group(1) if region_match else None
-        unavailable = "not available in your country" in resp.text.lower()
-        unlocked = status and status < 400 and not unavailable
+        unavailable = any(
+            key in text_lower
+            for key in ["not available in your country", "premium is not available"]
+        )
+        captcha_block = "unusual traffic" in text_lower or "captcha" in text_lower
+        consent_flow = "consent.youtube" in resp.url.lower() or any(
+            "consent.youtube" in h.headers.get("location", "").lower()
+            for h in resp.history or []
+        )
+        unlocked = status == 200 and not unavailable and not captcha_block and not consent_flow
         detail_parts = [
             dns_info,
             f"HTTP {status}",
             f"Region: {region}" if region else None,
             resp.url if resp.url and resp.url != url else None,
+            "需要验证" if captcha_block or consent_flow else None,
         ]
     except requests.RequestException as exc:
         unlocked = False
@@ -640,11 +663,13 @@ def run_test() -> Any:
         duration = int(data.get("duration", 10))
         protocol = data.get("protocol", "tcp")
         parallel = int(data.get("parallel", 1))
+        reverse_mode = str(data.get("reverse", "false")).lower() in ["1", "true", "yes"]
     except ValueError:
         return jsonify({"status": "error", "error": "invalid_parameter"}), 400
 
     proto_flag = "-u" if protocol.lower() == "udp" else ""
-    cmd = f"iperf3 -c {target} -p {port} -t {duration} -P {parallel} {proto_flag} -J"
+    reverse_flag = "-R" if reverse_mode else ""
+    cmd = f"iperf3 -c {target} -p {port} -t {duration} -P {parallel} {proto_flag} {reverse_flag} -J"
 
     try:
         result = subprocess.run(

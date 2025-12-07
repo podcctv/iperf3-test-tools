@@ -46,6 +46,7 @@ class TestCreate(BaseModel):
     duration: int = Field(default=10, gt=0)
     parallel: int = Field(default=1, gt=0)
     port: int = Field(default=5201, ge=1, le=65535)
+    reverse: bool = False
 
 
 class TestRead(BaseModel):
