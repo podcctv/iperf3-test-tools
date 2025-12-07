@@ -929,6 +929,20 @@ def _login_html() -> str:
       return (key || label || 'unknown').toLowerCase().replace(/[^a-z0-9+]+/g, '_');
     }
 
+    function cacheStreamingFromNode(node) {
+      if (!node?.streaming?.length) return;
+
+      const byService = {};
+      node.streaming.forEach((svc) => {
+        const normalized = normalizeServiceKey(svc.key, svc.service);
+        byService[normalized] = {
+          unlocked: svc.unlocked,
+          detail: svc.detail,
+        };
+      });
+      streamingStatusCache[node.id] = byService;
+    }
+
     const flagCache = {};
     const FLAG_CACHE_TTL = 1000 * 60 * 60 * 6;
 
@@ -1183,6 +1197,8 @@ def _login_html() -> str:
         }
 
         nodes.forEach((node) => {
+          cacheStreamingFromNode(node);
+
           const privacyEnabled = !!ipPrivacyState[node.id];
           const statusBadge = node.status === 'online'
             ? `<span class="${styles.badgeOnline}"><span class=\"h-2 w-2 rounded-full bg-emerald-400\"></span> 在线</span>`
@@ -2231,8 +2247,15 @@ async def _check_node_health(node: Node) -> NodeWithStatus:
                 data = response.json()
                 detected_port = data.get("port")
                 latency_payload = data.get("backbone_latency") or []
+                streaming_payload = data.get("streaming") or []
+                streaming_checked_at = data.get("streaming_checked_at")
                 backbone_latency = [
                     BackboneLatency(**item) for item in latency_payload if isinstance(item, dict)
+                ]
+                streaming_statuses = [
+                    StreamingServiceStatus(**item)
+                    for item in streaming_payload
+                    if isinstance(item, dict)
                 ]
                 return NodeWithStatus(
                     id=node.id,
@@ -2247,6 +2270,8 @@ async def _check_node_health(node: Node) -> NodeWithStatus:
                     checked_at=checked_at,
                     detected_iperf_port=int(detected_port) if detected_port else None,
                     backbone_latency=backbone_latency or None,
+                    streaming=streaming_statuses or None,
+                    streaming_checked_at=streaming_checked_at,
                 )
     except Exception:
         pass

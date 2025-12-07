@@ -681,12 +681,21 @@ def _is_process_running(proc: subprocess.Popen | None) -> bool:
 
 @app.route("/health", methods=["GET"])
 def health() -> Any:
+    streaming_payload = _load_cached_probe(max_age=STREAMING_AUTO_INTERVAL)
+    streaming_results = None
+    streaming_timestamp = None
+    if streaming_payload:
+        streaming_results = streaming_payload.get("results")
+        streaming_timestamp = streaming_payload.get("timestamp")
+
     return jsonify({
         "status": "ok",
         "server_running": _is_process_running(server_process),
         "port": DEFAULT_IPERF_PORT,
         "timestamp": int(time.time()),
         "backbone_latency": _get_backbone_latency(),
+        "streaming": streaming_results,
+        "streaming_checked_at": streaming_timestamp,
     })
 
 

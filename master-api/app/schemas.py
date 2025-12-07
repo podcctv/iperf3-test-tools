@@ -51,6 +51,8 @@ class NodeWithStatus(NodeRead):
     checked_at: int | None = None
     detected_iperf_port: int | None = None
     backbone_latency: list[BackboneLatency] | None = None
+    streaming: list[StreamingServiceStatus] | None = None
+    streaming_checked_at: int | None = None
 
 
 class TestCreate(BaseModel):
