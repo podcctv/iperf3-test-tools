@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from pydantic import AnyUrl
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,6 +13,7 @@ class Settings(BaseSettings):
     dashboard_password: str = "iperf-pass"
     dashboard_secret: str = "iperf-dashboard-secret"
     dashboard_cookie_name: str = "iperf_dashboard_auth"
+    dashboard_password_path: str = str(Path(__file__).resolve().parent.parent / "data" / "dashboard_password.txt")
     agent_config_path: str = str(Path(__file__).resolve().parent.parent / "agent_configs.json")
     agent_image: str = "iperf-agent:latest"
     state_file_path: str = str(Path(__file__).resolve().parent.parent / "data" / "master_state.json")
@@ -25,6 +27,10 @@ class Settings(BaseSettings):
     @property
     def state_file(self) -> Path:
         return Path(self.state_file_path)
+
+    @property
+    def dashboard_password_file(self) -> Path:
+        return Path(self.dashboard_password_path)
 
 
 settings = Settings()
