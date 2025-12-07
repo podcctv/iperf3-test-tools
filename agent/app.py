@@ -30,6 +30,10 @@ STREAMING_TARGETS = {
 STREAMING_SCRIPT_URL = "https://raw.githubusercontent.com/xykt/IPQuality/main/ip.sh"
 STREAMING_SCRIPT_PATH = Path("/tmp/ipquality_ip.sh")
 STREAMING_SCRIPT_TTL = int(os.environ.get("STREAMING_SCRIPT_TTL", 60 * 60 * 12))
+# Streaming probe mode: "builtin" (fast HTTP reachability checks) or "external" (ip.sh).
+# The builtin mode is the default to avoid long-running external scripts.
+STREAMING_PROBE_MODE = os.environ.get("STREAMING_PROBE_MODE", "builtin").lower()
+STREAMING_HTTP_TIMEOUT = float(os.environ.get("STREAMING_HTTP_TIMEOUT", 5))
 
 SCRIPT_SERVICE_MAP = {
     "Youtube": {"key": "youtube", "name": "YouTube"},
@@ -92,6 +96,61 @@ def _parse_streaming_results_from_script(raw: str) -> list[dict[str, Any]]:
                 "unlocked": unlocked,
                 "status_code": None,
                 "detail": detail or ("未返回结果" if entry is None else None),
+            }
+        )
+
+    return results
+
+
+def _probe_streaming_targets_http() -> list[dict[str, Any]]:
+    """
+    Lightweight reachability checks for major streaming services.
+
+    We only care about fast feedback (is the service reachable, any geo/ban headers),
+    not the full unlock heuristics from the upstream ip.sh script. Each request uses a
+    short timeout to keep the overall probe bounded and predictable.
+    """
+
+    results: list[dict[str, Any]] = []
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+        )
+    }
+
+    for key, target in STREAMING_TARGETS.items():
+        url = target["url"]
+        try:
+            resp = requests.get(
+                url,
+                headers=headers,
+                timeout=STREAMING_HTTP_TIMEOUT,
+                allow_redirects=True,
+            )
+            status_code = resp.status_code
+            unlocked = status_code < 400
+            region = resp.headers.get("X-Region") or resp.headers.get("CF-IPCountry")
+            detail_parts = [f"HTTP {status_code}", resp.reason]
+            if region:
+                detail_parts.append(f"Region: {region}")
+            detail = " | ".join([p for p in detail_parts if p])
+        except requests.Timeout:
+            unlocked = False
+            status_code = None
+            detail = "请求超时"
+        except requests.RequestException as exc:
+            unlocked = False
+            status_code = None
+            detail = f"请求失败: {exc}"[:120]
+
+        results.append(
+            {
+                "key": key,
+                "service": target["name"],
+                "unlocked": unlocked,
+                "status_code": status_code,
+                "detail": detail,
             }
         )
 
@@ -195,56 +254,60 @@ def run_test() -> Any:
 @app.route("/streaming_probe", methods=["GET"])
 def streaming_probe() -> Any:
     start = time.time()
-    try:
-        script_path = _ensure_streaming_script()
-    except Exception as exc:  # pragma: no cover - network failures
-        return jsonify(
-            {
-                "status": "error",
-                "results": [],
-                "detail": f"获取脚本失败: {exc}",
-                "elapsed_ms": int((time.time() - start) * 1000),
-            }
-        ), 502
 
-    try:
-        proc = subprocess.run(
-            ["bash", str(script_path), "-j", "-n"],
-            capture_output=True,
-            text=True,
-            timeout=180,
-        )
-    except subprocess.TimeoutExpired:
-        return jsonify(
-            {
-                "status": "error",
-                "results": [],
-                "detail": "脚本执行超时",
-                "elapsed_ms": int((time.time() - start) * 1000),
-            }
-        ), 504
+    if STREAMING_PROBE_MODE == "external":
+        try:
+            script_path = _ensure_streaming_script()
+        except Exception as exc:  # pragma: no cover - network failures
+            return jsonify(
+                {
+                    "status": "error",
+                    "results": [],
+                    "detail": f"获取脚本失败: {exc}",
+                    "elapsed_ms": int((time.time() - start) * 1000),
+                }
+            ), 502
 
-    if proc.returncode != 0:
-        return jsonify(
-            {
-                "status": "error",
-                "results": [],
-                "detail": proc.stderr.strip() or "执行失败",
-                "elapsed_ms": int((time.time() - start) * 1000),
-            }
-        ), 500
+        try:
+            proc = subprocess.run(
+                ["bash", str(script_path), "-j", "-n"],
+                capture_output=True,
+                text=True,
+                timeout=180,
+            )
+        except subprocess.TimeoutExpired:
+            return jsonify(
+                {
+                    "status": "error",
+                    "results": [],
+                    "detail": "脚本执行超时",
+                    "elapsed_ms": int((time.time() - start) * 1000),
+                }
+            ), 504
 
-    try:
-        results = _parse_streaming_results_from_script(proc.stdout)
-    except Exception as exc:  # pragma: no cover - defensive parsing
-        return jsonify(
-            {
-                "status": "error",
-                "results": [],
-                "detail": f"解析结果失败: {exc}",
-                "elapsed_ms": int((time.time() - start) * 1000),
-            }
-        ), 500
+        if proc.returncode != 0:
+            return jsonify(
+                {
+                    "status": "error",
+                    "results": [],
+                    "detail": proc.stderr.strip() or "执行失败",
+                    "elapsed_ms": int((time.time() - start) * 1000),
+                }
+            ), 500
+
+        try:
+            results = _parse_streaming_results_from_script(proc.stdout)
+        except Exception as exc:  # pragma: no cover - defensive parsing
+            return jsonify(
+                {
+                    "status": "error",
+                    "results": [],
+                    "detail": f"解析结果失败: {exc}",
+                    "elapsed_ms": int((time.time() - start) * 1000),
+                }
+            ), 500
+    else:
+        results = _probe_streaming_targets_http()
 
     elapsed_ms = int((time.time() - start) * 1000)
     return jsonify({"status": "ok", "results": results, "elapsed_ms": elapsed_ms})
