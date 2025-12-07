@@ -765,6 +765,7 @@ def _login_html() -> str:
     const openAddNodeBtn = document.getElementById('open-add-node');
     let nodeCache = [];
     let editingNodeId = null;
+    const ipPrivacyState = {};
     const streamingServices = [
       { key: 'youtube', label: 'YouTube', icon: '▶', color: 'text-rose-300', bg: 'border-rose-500/30 bg-rose-500/10' },
       { key: 'prime_video', label: 'Prime', icon: '🛒', color: 'text-amber-300', bg: 'border-amber-400/40 bg-amber-500/10' },
@@ -785,6 +786,7 @@ def _login_html() -> str:
       pillDanger: 'inline-flex items-center justify-center gap-2 rounded-lg bg-rose-500/15 px-3 py-2 text-xs font-semibold text-rose-100 ring-1 ring-rose-500/40 transition hover:bg-rose-500/25',
       pillWarn: 'inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500/15 px-3 py-2 text-xs font-semibold text-amber-100 ring-1 ring-amber-500/40 transition hover:bg-amber-500/25',
       pillMuted: 'inline-flex items-center justify-center gap-2 rounded-lg bg-slate-800/70 px-3 py-2 text-xs font-semibold text-slate-200 ring-1 ring-slate-700',
+      iconButton: 'inline-flex items-center justify-center gap-1 rounded-full border border-slate-700/70 bg-slate-800/80 px-2 py-1 text-xs font-semibold text-slate-200 transition hover:border-sky-500 hover:text-sky-100',
       textMuted: 'text-slate-400 text-sm',
       textMutedSm: 'text-slate-500 text-xs',
       table: 'w-full border-collapse overflow-hidden rounded-xl border border-slate-800/60 bg-slate-900/50 text-sm text-slate-100',
@@ -845,6 +847,39 @@ def _login_html() -> str:
 
     function normalizeServiceKey(key, label) {
       return (key || label || 'unknown').toLowerCase().replace(/[^a-z0-9+]+/g, '_');
+    }
+
+    function extractCountryCode(text) {
+      const match = (text || '').match(/\b([A-Za-z]{2})\b/);
+      return match ? match[1].toUpperCase() : null;
+    }
+
+    function countryCodeToFlag(code) {
+      if (!code || code.length !== 2) return null;
+      const base = 127397;
+      const chars = code.toUpperCase().split('');
+      return String.fromCodePoint(...chars.map((c) => c.codePointAt(0) + base));
+    }
+
+    function resolveNodeFlag(node) {
+      const codeFromDescription = extractCountryCode(node.description);
+      const codeFromName = extractCountryCode(node.name);
+      const flag = countryCodeToFlag(codeFromDescription || codeFromName);
+      return flag || '🌐';
+    }
+
+    function maskIp(ip, shouldMask) {
+      if (!shouldMask || !ip) return ip;
+      if (ip.includes(':')) {
+        const segments = ip.split(':');
+        const kept = segments.slice(0, 2).join(':');
+        return `${kept}:****:****`;
+      }
+      const parts = ip.split('.');
+      if (parts.length >= 4) {
+        return `${parts[0]}.***.***.***`;
+      }
+      return `${parts[0] || '***'}.***.***.***`;
     }
 
     function renderStreamingBadges(nodeId) {
@@ -1016,6 +1051,8 @@ def _login_html() -> str:
         const ports = node.detected_iperf_port ? `${node.detected_iperf_port}` : `${node.iperf_port}`;
         const streamingBadges = renderStreamingBadges(node.id);
         const backboneBadges = renderBackboneBadges(node.backbone_latency);
+        const flagEmoji = resolveNodeFlag(node);
+        const ipMasked = maskIp(node.ip, ipPrivacyState[node.id]);
 
         const item = document.createElement('div');
         item.className = styles.rowCard;
@@ -1025,10 +1062,18 @@ def _login_html() -> str:
               <div class="flex flex-wrap items-center gap-2">
                 ${statusBadge}
                 <span class="text-base font-semibold text-white">${node.name}</span>
-                ${backboneBadges ? `<div class=\"flex flex-wrap items-center gap-2\">${backboneBadges}</div>` : ''}
+                <button type="button" class="${styles.iconButton}" data-privacy-toggle="${node.id}" aria-label="切换 IP 隐藏">
+                  <span class="text-base">${ipPrivacyState[node.id] ? '🙈' : '👁️'}</span>
+                </button>
               </div>
+              ${backboneBadges ? `<div class=\"flex flex-wrap items-center gap-2\">${backboneBadges}</div>` : ''}
               ${streamingBadges ? `<div class=\"flex flex-wrap items-center gap-2\">${streamingBadges}</div>` : ''}
-              <p class="${styles.textMuted}">${node.ip}:${node.agent_port} · iperf ${ports}${node.description ? ' · ' + node.description : ''}</p>
+              <p class="${styles.textMuted} flex items-center gap-2">
+                <span class="text-lg" title="服务器所在地区">${flagEmoji}</span>
+                <span class="font-mono" data-node-ip-display="${node.id}">${ipMasked}</span>
+                <span class="text-slate-500">:${node.agent_port}</span>
+                <span>· iperf ${ports}${node.description ? ' · ' + node.description : ''}</span>
+              </p>
             </div>
             <div class="flex flex-wrap items-center justify-start gap-2 lg:flex-col lg:items-end lg:justify-center lg:min-w-[170px]">
               <button class="${styles.pillInfo}" onclick="runStreamingCheck(${node.id})">流媒体解锁测试</button>
@@ -1038,6 +1083,18 @@ def _login_html() -> str:
           </div>
         `;
         nodesList.appendChild(item);
+
+        const toggleBtn = item.querySelector('[data-privacy-toggle]');
+        const ipDisplay = item.querySelector(`[data-node-ip-display="${node.id}"]`);
+        toggleBtn?.addEventListener('click', () => {
+          const nextState = !ipPrivacyState[node.id];
+          ipPrivacyState[node.id] = nextState;
+          if (ipDisplay) {
+            ipDisplay.textContent = maskIp(node.ip, nextState);
+          }
+          toggleBtn.innerHTML = `<span class="text-base">${nextState ? '🙈' : '👁️'}</span>`;
+          toggleBtn.setAttribute('aria-pressed', String(nextState));
+        });
 
         const optionA = document.createElement('option');
         optionA.value = node.id;
