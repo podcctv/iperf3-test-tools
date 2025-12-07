@@ -11,6 +11,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app.py /app/
 
-EXPOSE 8000 5201/tcp 5201/udp
+EXPOSE 8000 62001/tcp 62001/udp
 
 CMD ["python", "app.py"]

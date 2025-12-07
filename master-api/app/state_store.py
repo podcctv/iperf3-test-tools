@@ -9,6 +9,7 @@ from typing import Any, Iterable
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .constants import DEFAULT_IPERF_PORT
 from .models import Node, TestResult, TestSchedule
 
 
@@ -101,7 +102,7 @@ class StateStore:
                 name=node_data["name"],
                 ip=node_data["ip"],
                 agent_port=node_data.get("agent_port", 8000),
-                iperf_port=node_data.get("iperf_port", 5201),
+                iperf_port=node_data.get("iperf_port", DEFAULT_IPERF_PORT),
                 description=node_data.get("description"),
             )
             db.add(node)
@@ -140,7 +141,7 @@ class StateStore:
                 protocol=sched.get("protocol", "tcp"),
                 duration=sched.get("duration", 10),
                 parallel=sched.get("parallel", 1),
-                port=sched.get("port", 5201),
+                port=sched.get("port", DEFAULT_IPERF_PORT),
                 interval_seconds=sched.get("interval_seconds", 3600),
                 enabled=sched.get("enabled", True),
                 notes=sched.get("notes"),

@@ -20,24 +20,24 @@ A lightweight **master/agent** toolkit for orchestrating iperf3 tests across mul
 ### Master node (API + dashboard + optional local agent) / 主控节点
 
 ```bash
-./install_master.sh [--deploy-remote] [--clean-existing] [--master-port 9000] [--web-port 9100] [--agent-port 8000] [--iperf-port 5201] [--no-start-server]
+./install_master.sh [--deploy-remote] [--clean-existing] [--master-port 9000] [--web-port 9100] [--agent-port 8000] [--iperf-port 62001] [--no-start-server]
 ```
 
 * Auto-updates the git checkout when possible, builds the master-api image, brings up Postgres, and starts the dashboard on `http://<host>:9100/web` (password `iperf-pass` by default).
 * Pass `--clean-existing` to stop/remove any existing master/api/db containers and the local `iperf-agent` container before reinstalling.
 * With `--deploy-remote`, provide an inventory file path via `--hosts-file <path>` to call `./deploy_agents.sh` automatically.
-* You can avoid host port conflicts by overriding the defaults: `./install_master.sh --master-port 19000 --web-port 19100 --agent-port 18000 --iperf-port 15201`. The aliases `--master-api-port` and `--dashboard-port` are also accepted for the master and dashboard ports.
+* You can avoid host port conflicts by overriding the defaults: `./install_master.sh --master-port 19000 --web-port 19100 --agent-port 18000 --iperf-port 16201`. The aliases `--master-api-port` and `--dashboard-port` are also accepted for the master and dashboard ports.
 
 ### Agent-only host / 仅部署代理
 
 `install_agent.sh` now works both **inside** the repository and as a standalone file downloaded elsewhere. If no `agent/` directory is found next to the script, it will fetch the repository to `~/.cache/iperf3-test-tools/agent-build` via `git` (or a GitHub tarball as fallback) before building the image.
 
 ```bash
-# default ports: agent API 8000, iperf3 5201
-bash ./install_agent.sh [--agent-port 8000] [--agent-listen-port 8000] [--iperf-port 5201] [--no-start-server] [--repo-url <url>] [--repo-ref <ref>]
+# default ports: agent API 8000, iperf3 62001
+bash ./install_agent.sh [--agent-port 8000] [--agent-listen-port 8000] [--iperf-port 62001] [--no-start-server] [--repo-url <url>] [--repo-ref <ref>]
 ```
 
-After installation the script prints the URL you can register on the master dashboard, e.g. `http://<agent-ip>:8000` with iperf3 port `5201`.
+After installation the script prints the URL you can register on the master dashboard, e.g. `http://<agent-ip>:8000` with iperf3 port `62001`.
 
 ### Remote agent rollout via SSH / SSH 批量部署
 
@@ -79,7 +79,7 @@ MASTER_API_PORT=9000 MASTER_WEB_PORT=9100 docker-compose up -d
    ```bash
    curl -X POST http://localhost:9000/tests \
      -H "Content-Type: application/json" \
-     -d '{"src_node_id":1,"dst_node_id":2,"protocol":"tcp","duration":10,"parallel":1,"port":5201}'
+     -d '{"src_node_id":1,"dst_node_id":2,"protocol":"tcp","duration":10,"parallel":1,"port":62001}'
    ```
    The master calls the source agent's `/run_test`, stores the raw iperf3 JSON output, and returns the record.
 4. **View results / 查看结果**

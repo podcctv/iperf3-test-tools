@@ -1,5 +1,8 @@
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, JSON, String, func
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, JSON, String, func
 from sqlalchemy.orm import declarative_base, relationship
+
+from .constants import DEFAULT_IPERF_PORT
 
 Base = declarative_base()
 
@@ -11,7 +14,7 @@ class Node(Base):
     name = Column(String, nullable=False)
     ip = Column(String, nullable=False)
     agent_port = Column(Integer, default=8000)
-    iperf_port = Column(Integer, default=5201)
+    iperf_port = Column(Integer, default=DEFAULT_IPERF_PORT)
     description = Column(String, nullable=True)
 
     outgoing_tests = relationship("TestResult", foreign_keys="TestResult.src_node_id", back_populates="src_node")
@@ -44,7 +47,7 @@ class TestSchedule(Base):
     protocol = Column(String, default="tcp")
     duration = Column(Integer, default=10)
     parallel = Column(Integer, default=1)
-    port = Column(Integer, default=5201)
+    port = Column(Integer, default=DEFAULT_IPERF_PORT)
     interval_seconds = Column(Integer, nullable=False)
     enabled = Column(Boolean, default=True)
     last_run_at = Column(DateTime(timezone=True), nullable=True)

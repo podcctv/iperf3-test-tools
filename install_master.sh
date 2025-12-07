@@ -4,7 +4,7 @@ set -euo pipefail
 
 AGENT_IMAGE=${AGENT_IMAGE:-"iperf-agent:latest"}
 AGENT_PORT=${AGENT_PORT:-8000}
-IPERF_PORT=${IPERF_PORT:-5201}
+IPERF_PORT=${IPERF_PORT:-62001}
 MASTER_API_PORT=${MASTER_API_PORT:-9000}
 MASTER_WEB_PORT=${MASTER_WEB_PORT:-9100}
 START_IPERF_SERVER=${START_IPERF_SERVER:-true}
@@ -515,7 +515,7 @@ parse_args() {
     --config <path>          Source port variables from a file before applying flags
     --deploy-remote          Deploy agents to hosts listed in an inventory file
     --agent-port <port>      Agent API port to expose (default: 8000)
-    --iperf-port <port>      iperf3 TCP/UDP port to expose (default: 5201)
+    --iperf-port <port>      iperf3 TCP/UDP port to expose (default: 62001)
     --master-port <port>     Master API host port (default: 9000)
     --master-api-port <port> Same as --master-port for convenience
     --web-port <port>        Dashboard host port (default: 9100)

@@ -5,7 +5,7 @@ set -euo pipefail
 AGENT_IMAGE=${AGENT_IMAGE:-"iperf-agent:latest"}
 AGENT_PORT=${AGENT_PORT:-8000}
 AGENT_LISTEN_PORT=${AGENT_LISTEN_PORT:-8000}
-IPERF_PORT=${IPERF_PORT:-5201}
+IPERF_PORT=${IPERF_PORT:-62001}
 START_IPERF_SERVER=${START_IPERF_SERVER:-true}
 UNINSTALL=${UNINSTALL:-false}
 REPO_REF=${REPO_REF:-""}
@@ -397,7 +397,7 @@ Usage: install_agent.sh [options]
   --config <path>            Source port variables from a file before applying flags
   --agent-port <port>         Host port where the agent API is exposed (default: 8000)
   --agent-listen-port <port>  Container port the agent listens on (default: 8000)
-  --iperf-port <port>         iperf3 TCP/UDP port to expose (default: 5201)
+  --iperf-port <port>         iperf3 TCP/UDP port to expose (default: 62001)
   --no-start-server           Skip auto-starting iperf3 server inside the agent
   --uninstall                 Remove iperf-agent container and image
   --repo-url <url>            Git remote URL used for auto-update
