@@ -3,12 +3,14 @@ from typing import Any, List, Optional
 
 from pydantic import BaseModel, Field
 
+from .constants import DEFAULT_IPERF_PORT
+
 
 class NodeBase(BaseModel):
     name: str
     ip: str
     agent_port: int = Field(default=8000, ge=1, le=65535)
-    iperf_port: int = Field(default=5201, ge=1, le=65535)
+    iperf_port: int = Field(default=DEFAULT_IPERF_PORT, ge=1, le=65535)
     description: Optional[str] = None
 
 
@@ -57,7 +59,7 @@ class TestCreate(BaseModel):
     protocol: str = "tcp"
     duration: int = Field(default=10, gt=0)
     parallel: int = Field(default=1, gt=0)
-    port: int = Field(default=5201, ge=1, le=65535)
+    port: int = Field(default=DEFAULT_IPERF_PORT, ge=1, le=65535)
     reverse: bool = False
 
 
@@ -82,7 +84,7 @@ class TestScheduleBase(BaseModel):
     protocol: str = "tcp"
     duration: int = Field(default=10, gt=0)
     parallel: int = Field(default=1, gt=0)
-    port: int = Field(default=5201, ge=1, le=65535)
+    port: int = Field(default=DEFAULT_IPERF_PORT, ge=1, le=65535)
     interval_seconds: int = Field(default=3600, gt=0)
     enabled: bool = True
     notes: Optional[str] = None
@@ -133,7 +135,7 @@ class AgentConfigBase(BaseModel):
     name: str
     host: str
     agent_port: int = Field(default=8000, ge=1, le=65535)
-    iperf_port: int = Field(default=5201, ge=1, le=65535)
+    iperf_port: int = Field(default=DEFAULT_IPERF_PORT, ge=1, le=65535)
     ssh_port: Optional[int] = Field(default=None, ge=1, le=65535)
     image: str = "iperf-agent:latest"
     container_name: str = "iperf-agent"

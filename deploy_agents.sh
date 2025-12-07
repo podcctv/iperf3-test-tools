@@ -3,12 +3,12 @@ set -euo pipefail
 
 IMAGE_NAME="iperf-agent:latest"
 AGENT_PORT=8000
-IPERF_PORT=5201
+IPERF_PORT=62001
 HOSTS_FILE=""
 
 usage() {
   cat <<'USAGE'
-Usage: deploy_agents.sh --hosts-file <path> [--agent-port 8000] [--iperf-port 5201] [--image iperf-agent:latest]
+Usage: deploy_agents.sh --hosts-file <path> [--agent-port 8000] [--iperf-port 62001] [--image iperf-agent:latest]
 
 Deploy the agent image to a list of SSH hosts provided in a newline-delimited inventory file.
 Lines may be formatted as "user@host [agent_port] [iperf_port]" with optional SSH port suffix (user@host:2222).

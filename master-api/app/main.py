@@ -14,6 +14,7 @@ from sqlalchemy import or_, select, text
 from sqlalchemy.orm import Session
 
 from .config import settings
+from .constants import DEFAULT_IPERF_PORT
 from .database import SessionLocal, engine, get_db
 from .agent_store import AgentConfigStore
 from .models import Base, Node, TestResult, TestSchedule
@@ -48,7 +49,9 @@ def _ensure_iperf_port_column() -> None:
     with engine.connect() as connection:
         columns = connection.exec_driver_sql("PRAGMA table_info(nodes)").fetchall()
         if not any(col[1] == "iperf_port" for col in columns):
-            connection.exec_driver_sql("ALTER TABLE nodes ADD COLUMN iperf_port INTEGER DEFAULT 5201")
+            connection.exec_driver_sql(
+                f"ALTER TABLE nodes ADD COLUMN iperf_port INTEGER DEFAULT {DEFAULT_IPERF_PORT}"
+            )
             connection.commit()
 
 
@@ -411,6 +414,14 @@ class NodeHealthMonitor:
         self._cache: Dict[int, NodeWithStatus] = {}
         self._lock = asyncio.Lock()
 
+    def invalidate(self, node_id: int | None = None) -> None:
+        """Clear cached health state so updates reflect immediately."""
+
+        if node_id is None:
+            self._cache = {}
+        else:
+            self._cache.pop(node_id, None)
+
     async def start(self) -> None:
         if self._task:
             return
@@ -711,7 +722,7 @@ def _login_html() -> str:
                   </div>
                   <div class="space-y-2">
                     <label class="text-sm font-medium text-slate-200">端口</label>
-                    <input id="test-port" type="number" value="5201" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+                    <input id="test-port" type="number" value="62001" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
                   </div>
                 </div>
                 <div class="flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/50 px-3 py-2">
@@ -779,7 +790,7 @@ def _login_html() -> str:
         </div>
         <div class="space-y-2">
           <label class="text-sm font-medium text-slate-200">iperf 端口</label>
-          <input id="node-iperf-port" type="number" value="5201" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+          <input id="node-iperf-port" type="number" value="62001" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
         </div>
       </div>
       <div class="mt-3 space-y-2">
@@ -829,6 +840,7 @@ def _login_html() -> str:
     const closeAddNodeBtn = document.getElementById('close-add-node');
     const cancelAddNodeBtn = document.getElementById('cancel-add-node');
     const openAddNodeBtn = document.getElementById('open-add-node');
+    const DEFAULT_IPERF_PORT = 62001;
     let nodeCache = [];
     let editingNodeId = null;
     const ipPrivacyState = {};
@@ -1083,7 +1095,7 @@ def _login_html() -> str:
       nodeName.value = '';
       nodeIp.value = '';
       nodePort.value = 8000;
-      nodeIperf.value = 5201;
+      nodeIperf.value = DEFAULT_IPERF_PORT;
       nodeDesc.value = '';
       editingNodeId = null;
       saveNodeBtn.textContent = '保存节点';
@@ -1150,7 +1162,7 @@ def _login_html() -> str:
       const dst = nodeCache.find((n) => n.id === Number(dstSelect.value));
       if (dst) {
         const detected = dst.detected_iperf_port || dst.iperf_port;
-        testPortInput.value = detected || 5201;
+        testPortInput.value = detected || DEFAULT_IPERF_PORT;
       }
     }
 
@@ -1512,7 +1524,7 @@ def _login_html() -> str:
         name: nodeName.value,
         ip: nodeIp.value,
         agent_port: Number(nodePort.value || 8000),
-        iperf_port: Number(nodeIperf.value || 5201),
+        iperf_port: Number(nodeIperf.value || DEFAULT_IPERF_PORT),
         description: nodeDesc.value
       };
 
@@ -1546,7 +1558,7 @@ def _login_html() -> str:
         protocol: document.getElementById('protocol').value,
         duration: Number(document.getElementById('duration').value),
         parallel: Number(document.getElementById('parallel').value),
-        port: Number(testPortInput.value || (selectedDst ? (selectedDst.detected_iperf_port || selectedDst.iperf_port) : 5201)),
+        port: Number(testPortInput.value || (selectedDst ? (selectedDst.detected_iperf_port || selectedDst.iperf_port) : DEFAULT_IPERF_PORT)),
         reverse: reverseToggle?.checked || false,
       };
 
@@ -1966,7 +1978,7 @@ def _schedule_html() -> str:
             </div>
             <div class="space-y-2">
               <label class="text-sm font-medium text-slate-200">端口</label>
-              <input id="schedule-port" type="number" value="5201" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+              <input id="schedule-port" type="number" value="62001" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
             </div>
             <div class="space-y-2">
               <label class="text-sm font-medium text-slate-200">间隔（分钟）</label>
@@ -2087,7 +2099,7 @@ def _schedule_html() -> str:
         protocol: scheduleProtocol.value,
         duration: Number(scheduleDuration.value || 10),
         parallel: Number(scheduleParallel.value || 1),
-        port: Number(schedulePort.value || 5201),
+        port: Number(schedulePort.value || DEFAULT_IPERF_PORT),
         interval_seconds: Number(scheduleInterval.value || 60) * 60,
         notes: scheduleNotes.value
       };
@@ -2174,6 +2186,30 @@ def logout(response: Response) -> dict:
     return {"status": "logged_out"}
 
 
+async def _start_iperf_server(node: Node, port: int) -> None:
+    agent_url = f"http://{node.ip}:{node.agent_port}/start_server"
+    try:
+        async with httpx.AsyncClient(timeout=settings.request_timeout) as client:
+            response = await client.post(agent_url, json={"port": port})
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=502, detail=f"failed to reach destination agent: {exc}")
+
+    if response.status_code != 200:
+        detail = response.text or "failed to start iperf server"
+        raise HTTPException(status_code=502, detail=detail)
+
+
+async def _stop_iperf_server(node: Node) -> None:
+    agent_url = f"http://{node.ip}:{node.agent_port}/stop_server"
+    try:
+        async with httpx.AsyncClient(timeout=settings.request_timeout) as client:
+            response = await client.post(agent_url)
+            if response.status_code != 200:
+                logger.warning("Failed to stop iperf server for %s: %s", node.name, response.text)
+    except httpx.RequestError:
+        logger.exception("Failed to reach destination agent when stopping server for %s", node.name)
+
+
 @app.get("/")
 def root() -> dict:
     """Provide a simple landing response instead of a 404."""
@@ -2249,6 +2285,7 @@ def create_node(node: NodeCreate, db: Session = Depends(get_db)):
     db.refresh(obj)
     _persist_state(db)
     _sync_agent_config(obj)
+    health_monitor.invalidate(obj.id)
     return obj
 
 
@@ -2273,6 +2310,7 @@ def update_node(node_id: int, payload: NodeUpdate, db: Session = Depends(get_db)
     db.refresh(node)
     _persist_state(db)
     _sync_agent_config(node, previous_name=previous_name)
+    health_monitor.invalidate(node.id)
     return node
 
 
@@ -2300,6 +2338,7 @@ def delete_node(node_id: int, db: Session = Depends(get_db)):
         agent_store.delete(node.name)
     except KeyError:
         pass
+    health_monitor.invalidate(node_id)
     return {"status": "deleted"}
 
 
@@ -2329,6 +2368,7 @@ async def create_test(test: TestCreate, db: Session = Depends(get_db)):
     if not src or not dst:
         raise HTTPException(status_code=404, detail="node not found")
 
+    requested_port = test.port
     src_status = await health_monitor.check_node(src)
     if src_status.status != "online":
         raise HTTPException(status_code=503, detail="source node is offline or unreachable")
@@ -2336,13 +2376,21 @@ async def create_test(test: TestCreate, db: Session = Depends(get_db)):
     dst_status = await health_monitor.check_node(dst)
     if dst_status.status != "online":
         raise HTTPException(status_code=503, detail="destination node is offline or unreachable")
-    if dst_status.server_running is False:
-        raise HTTPException(status_code=503, detail="destination iperf server is not running")
+
+    server_started = False
+    current_port = dst_status.detected_iperf_port or dst_status.iperf_port
+    if not dst_status.server_running:
+        await _start_iperf_server(dst, requested_port)
+        server_started = True
+    elif current_port != requested_port:
+        await _stop_iperf_server(dst)
+        await _start_iperf_server(dst, requested_port)
+        server_started = True
 
     agent_url = f"http://{src.ip}:{src.agent_port}/run_test"
     payload = {
         "target": dst.ip,
-        "port": test.port,
+        "port": requested_port,
         "duration": test.duration,
         "protocol": test.protocol,
         "parallel": test.parallel,
@@ -2350,20 +2398,25 @@ async def create_test(test: TestCreate, db: Session = Depends(get_db)):
     }
 
     try:
-        async with httpx.AsyncClient(timeout=test.duration + settings.request_timeout) as client:
-            response = await client.post(agent_url, json=payload)
-    except httpx.RequestError as exc:
-        raise HTTPException(status_code=502, detail=f"failed to reach source agent: {exc}")
-
-    if response.status_code != 200:
-        detail = response.text
         try:
-            parsed = response.json()
-            if isinstance(parsed, dict) and parsed.get("error"):
-                detail = parsed.get("error")
-        except Exception:
-            pass
-        raise HTTPException(status_code=502, detail=f"agent returned {response.status_code}: {detail}")
+            async with httpx.AsyncClient(timeout=test.duration + settings.request_timeout) as client:
+                response = await client.post(agent_url, json=payload)
+        except httpx.RequestError as exc:
+            raise HTTPException(status_code=502, detail=f"failed to reach source agent: {exc}")
+
+        if response.status_code != 200:
+            detail = response.text
+            try:
+                parsed = response.json()
+                if isinstance(parsed, dict) and parsed.get("error"):
+                    detail = parsed.get("error")
+            except Exception:
+                pass
+            raise HTTPException(status_code=502, detail=f"agent returned {response.status_code}: {detail}")
+    finally:
+        if server_started:
+            await _stop_iperf_server(dst)
+        health_monitor.invalidate(dst.id)
 
     try:
         raw_data = response.json()
