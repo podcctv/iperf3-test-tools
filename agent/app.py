@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict
 
+import requests
 from flask import Flask, jsonify, request
 
 app = Flask(__name__)
@@ -16,6 +17,14 @@ AGENT_API_PORT = int(os.environ.get("AGENT_API_PORT", "8000"))
 
 server_process: subprocess.Popen | None = None
 server_lock = threading.Lock()
+
+STREAMING_TARGETS = {
+    "youtube": {"name": "YouTube", "url": "https://www.youtube.com"},
+    "prime_video": {"name": "Prime Video", "url": "https://www.primevideo.com"},
+    "netflix": {"name": "Netflix", "url": "https://www.netflix.com"},
+    "disney_plus": {"name": "Disney+", "url": "https://www.disneyplus.com"},
+    "hbo": {"name": "HBO", "url": "https://www.hbomax.com"},
+}
 
 
 def _read_port_from_request(data: Dict[str, Any]) -> int:
@@ -110,6 +119,38 @@ def run_test() -> Any:
         return jsonify({"status": "error", "error": "parse_failed"}), 500
 
     return jsonify({"status": "ok", "iperf_result": output})
+
+
+@app.route("/streaming_probe", methods=["GET"])
+def streaming_probe() -> Any:
+    start = time.time()
+    results = []
+    for key, target in STREAMING_TARGETS.items():
+        url = target.get("url")
+        name = target.get("name", key)
+        unlocked = False
+        status_code: int | None = None
+        detail: str | None = None
+        try:
+            response = requests.get(url, timeout=5)
+            status_code = response.status_code
+            unlocked = 200 <= response.status_code < 400
+            detail = f"HTTP {response.status_code}"
+        except requests.RequestException as exc:  # pragma: no cover - network failures
+            detail = str(exc)
+
+        results.append(
+            {
+                "key": key,
+                "service": name,
+                "unlocked": unlocked,
+                "status_code": status_code,
+                "detail": detail,
+            }
+        )
+
+    elapsed_ms = int((time.time() - start) * 1000)
+    return jsonify({"status": "ok", "results": results, "elapsed_ms": elapsed_ms})
 
 
 if __name__ == "__main__":

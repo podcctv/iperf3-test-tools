@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -99,6 +99,21 @@ class TestScheduleRead(TestScheduleBase):
 
     class Config:
         orm_mode = True
+
+
+class StreamingServiceStatus(BaseModel):
+    service: str
+    unlocked: bool
+    key: Optional[str] = None
+    status_code: Optional[int] = None
+    detail: Optional[str] = None
+
+
+class StreamingTestResult(BaseModel):
+    node_id: int
+    node_name: str
+    services: List[StreamingServiceStatus]
+    elapsed_ms: Optional[int] = None
 
 
 class AgentConfigBase(BaseModel):

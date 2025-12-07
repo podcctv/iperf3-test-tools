@@ -31,6 +31,8 @@ from .schemas import (
     TestScheduleUpdate,
     TestCreate,
     TestRead,
+    StreamingServiceStatus,
+    StreamingTestResult,
 )
 from .state_store import StateStore
 
@@ -201,6 +203,92 @@ def _summarize_metrics(raw: dict | None) -> dict | None:
         "lost_percent": lost_percent,
         "latency_ms": latency_ms,
     }
+
+
+async def _probe_streaming_unlock(node: Node) -> StreamingTestResult:
+    offline_status = StreamingServiceStatus(
+        service="节点离线", unlocked=False, detail="agent 未在线或不可达"
+    )
+    node_status = await health_monitor.check_node(node)
+    if node_status.status != "online":
+        return StreamingTestResult(
+            node_id=node.id,
+            node_name=node.name,
+            services=[offline_status],
+            elapsed_ms=0,
+        )
+
+    agent_url = f"http://{node.ip}:{node.agent_port}/streaming_probe"
+    try:
+        async with httpx.AsyncClient(timeout=settings.request_timeout + 10) as client:
+            response = await client.get(agent_url)
+    except httpx.RequestError as exc:
+        return StreamingTestResult(
+            node_id=node.id,
+            node_name=node.name,
+            services=[
+                StreamingServiceStatus(
+                    service="连通性检查", unlocked=False, detail=str(exc)
+                )
+            ],
+            elapsed_ms=0,
+        )
+
+    if response.status_code != 200:
+        return StreamingTestResult(
+            node_id=node.id,
+            node_name=node.name,
+            services=[
+                StreamingServiceStatus(
+                    service="连通性检查",
+                    unlocked=False,
+                    status_code=response.status_code,
+                    detail=response.text[:200],
+                )
+            ],
+            elapsed_ms=0,
+        )
+
+    try:
+        payload = response.json()
+    except Exception:  # pragma: no cover - defensive parsing
+        return StreamingTestResult(
+            node_id=node.id,
+            node_name=node.name,
+            services=[
+                StreamingServiceStatus(
+                    service="数据解析", unlocked=False, detail="返回数据无法解析"
+                )
+            ],
+            elapsed_ms=0,
+        )
+
+    services: list[StreamingServiceStatus] = []
+    for item in payload.get("results", []) or []:
+        key = item.get("key") or item.get("service")
+        services.append(
+            StreamingServiceStatus(
+                key=key,
+                service=item.get("service") or (key or "未知服务"),
+                unlocked=bool(item.get("unlocked")),
+                status_code=item.get("status_code"),
+                detail=item.get("detail"),
+            )
+        )
+
+    if not services:
+        services.append(
+            StreamingServiceStatus(
+                service="未返回数据", unlocked=False, detail="未收到任何探测结果"
+            )
+        )
+
+    return StreamingTestResult(
+        node_id=node.id,
+        node_name=node.name,
+        services=services,
+        elapsed_ms=payload.get("elapsed_ms"),
+    )
 
 
 def _dashboard_token(password: str) -> str:
@@ -465,6 +553,15 @@ def _login_html() -> str:
                   </div>
                 </div>
                 <button id="run-test" class="w-full rounded-xl bg-gradient-to-r from-sky-500 to-indigo-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-sky-500/20 transition hover:scale-[1.01] hover:shadow-xl">开始测试</button>
+                <div id="test-progress" class="hidden mt-2 space-y-2">
+                  <div class="flex items-center justify-between text-xs text-slate-400">
+                    <span>链路测试进度</span>
+                    <span id="test-progress-label" class="font-medium text-slate-200"></span>
+                  </div>
+                  <div class="h-2 w-full rounded-full bg-slate-800/80">
+                    <div id="test-progress-bar" class="h-2 w-0 rounded-full bg-gradient-to-r from-sky-500 to-indigo-500 transition-all duration-300"></div>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -475,7 +572,19 @@ def _login_html() -> str:
                     <h3 class="text-lg font-semibold text-white">节点列表</h3>
                     <p class="text-sm text-slate-400">实时状态与检测到的 iperf 端口。</p>
                   </div>
-                  <button data-refresh-nodes class="rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200">刷新</button>
+                  <div class="flex flex-wrap gap-2">
+                    <button id="run-streaming-checks" class="rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-100 shadow-sm transition hover:bg-emerald-500/25">流媒体解锁测试</button>
+                    <button data-refresh-nodes class="rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200">刷新</button>
+                  </div>
+                </div>
+                <div id="streaming-progress" class="hidden space-y-2 rounded-xl border border-slate-800 bg-slate-900/50 p-3">
+                  <div class="flex items-center justify-between text-xs text-slate-400">
+                    <span>流媒体解锁检测</span>
+                    <span id="streaming-progress-label" class="font-medium text-slate-200"></span>
+                  </div>
+                  <div class="h-2 w-full rounded-full bg-slate-800/80">
+                    <div id="streaming-progress-bar" class="h-2 w-0 rounded-full bg-gradient-to-r from-emerald-500 to-sky-500 transition-all duration-300"></div>
+                  </div>
                 </div>
                 <div id="nodes-list" class="text-sm text-slate-400 space-y-3">暂无节点。</div>
               </div>
@@ -518,6 +627,10 @@ def _login_html() -> str:
     const nodeIperf = document.getElementById('node-iperf-port');
     const nodeDesc = document.getElementById('node-desc');
     const nodesList = document.getElementById('nodes-list');
+    const streamingProgress = document.getElementById('streaming-progress');
+    const streamingProgressBar = document.getElementById('streaming-progress-bar');
+    const streamingProgressLabel = document.getElementById('streaming-progress-label');
+    const runStreamingChecksBtn = document.getElementById('run-streaming-checks');
     const testsList = document.getElementById('tests-list');
     const saveNodeBtn = document.getElementById('save-node');
     const srcSelect = document.getElementById('src-select');
@@ -526,8 +639,19 @@ def _login_html() -> str:
     const testAlert = document.getElementById('test-alert');
     const deleteAllTestsBtn = document.getElementById('delete-all-tests');
     const testPortInput = document.getElementById('test-port');
+    const testProgress = document.getElementById('test-progress');
+    const testProgressBar = document.getElementById('test-progress-bar');
+    const testProgressLabel = document.getElementById('test-progress-label');
     let nodeCache = [];
     let editingNodeId = null;
+    const streamingServices = [
+      { key: 'youtube', label: 'YouTube', icon: '▶', color: 'text-rose-300', bg: 'border-rose-500/30 bg-rose-500/10' },
+      { key: 'prime_video', label: 'Prime', icon: '🛒', color: 'text-amber-300', bg: 'border-amber-400/40 bg-amber-500/10' },
+      { key: 'netflix', label: 'Netflix', icon: 'N', color: 'text-red-400', bg: 'border-red-500/40 bg-red-500/10' },
+      { key: 'disney_plus', label: 'Disney+', icon: '★', color: 'text-sky-300', bg: 'border-sky-500/40 bg-sky-500/10' },
+      { key: 'hbo', label: 'HBO', icon: 'H', color: 'text-purple-300', bg: 'border-purple-500/40 bg-purple-500/10' },
+    ];
+    let streamingStatusCache = {};
     const styles = {
       rowCard: 'rounded-xl border border-slate-800/70 bg-slate-900/60 p-4 shadow-sm shadow-black/30 space-y-3',
       inline: 'flex flex-wrap items-center gap-3',
@@ -549,6 +673,57 @@ def _login_html() -> str:
     function hide(el) { el.classList.add('hidden'); }
     function setAlert(el, message) { el.textContent = message; show(el); }
     function clearAlert(el) { el.textContent = ''; hide(el); }
+
+    function startProgressBar(container, bar, label, expectedMs, initialText, showCountdown = true) {
+      const start = Date.now();
+      const target = Math.max(expectedMs || 0, 1200);
+      if (initialText) label.textContent = initialText;
+      show(container);
+      bar.style.width = '6%';
+      const timer = setInterval(() => {
+        const elapsed = Date.now() - start;
+        const pct = Math.min(96, Math.max(10, (elapsed / target) * 100));
+        bar.style.width = `${pct}%`;
+        const remain = Math.max(target - elapsed, 0);
+        if (remain > 0 && showCountdown) {
+          label.textContent = `预计 ${Math.ceil(remain / 1000)}s 完成`;
+        }
+      }, 250);
+
+      return (finalText) => {
+        clearInterval(timer);
+        bar.style.width = '100%';
+        if (finalText) label.textContent = finalText;
+        setTimeout(() => hide(container), 1200);
+      };
+    }
+
+    function normalizeServiceKey(key, label) {
+      return (key || label || 'unknown').toLowerCase().replace(/[^a-z0-9+]+/g, '_');
+    }
+
+    function renderStreamingBadges(nodeId) {
+      const cache = streamingStatusCache[nodeId];
+      if (!cache) {
+        return '<span class="text-xs text-slate-500">未检测</span>';
+      }
+
+      if (cache.error) {
+        return `<span class=\"text-xs text-amber-300\">${cache.message || '检测异常'}</span>`;
+      }
+
+      return streamingServices
+        .map((svc) => {
+          const status = cache[svc.key];
+          const unlocked = status ? status.unlocked : null;
+          const detail = status && status.detail ? status.detail.replace(/"/g, "'") : '';
+          const color = unlocked === true ? `${svc.color} ${svc.bg}` : 'text-slate-500 border-slate-800 bg-slate-900/60';
+          const label = unlocked === true ? '可解锁' : unlocked === false ? '未解锁' : '未检测';
+          const title = `${svc.label}：${label}${detail ? ' · ' + detail : ''}`;
+          return `<span class=\"inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold ${color}\" title=\"${title}\">${svc.icon}<span>${svc.label}</span></span>`;
+        })
+        .join('');
+    }
 
     async function exportAgentConfigs() {
       clearAlert(configAlert);
@@ -688,13 +863,14 @@ def _login_html() -> str:
           : `<span class="${styles.badgeOffline}"><span class=\"h-2 w-2 rounded-full bg-rose-400\"></span> 离线</span>`;
 
         const ports = node.detected_iperf_port ? `${node.detected_iperf_port}` : `${node.iperf_port}`;
+        const streamingBadges = renderStreamingBadges(node.id);
 
         const item = document.createElement('div');
         item.className = styles.rowCard;
         item.innerHTML = `
           <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div>
-              <div class="flex flex-wrap items-center gap-2">${statusBadge}<span class="text-base font-semibold text-white">${node.name}</span></div>
+              <div class="flex flex-wrap items-center gap-2">${statusBadge}<span class="text-base font-semibold text-white">${node.name}</span>${streamingBadges}</div>
               <p class="${styles.textMuted}">${node.ip}:${node.agent_port} · iperf ${ports}${node.description ? ' · ' + node.description : ''}</p>
             </div>
             <div class="flex flex-wrap gap-2">
@@ -715,6 +891,48 @@ def _login_html() -> str:
       });
 
       syncTestPort();
+    }
+
+    async function runStreamingChecks() {
+      if (!nodeCache.length) {
+        setAlert(addNodeAlert, '请先添加节点再进行解锁检测。');
+        return;
+      }
+
+      const expectedMs = Math.max(nodeCache.length * 3500, 2000);
+      const stopProgress = startProgressBar(streamingProgress, streamingProgressBar, streamingProgressLabel, expectedMs, '准备发起检测...', false);
+
+      for (let i = 0; i < nodeCache.length; i++) {
+        const node = nodeCache[i];
+        streamingProgressLabel.textContent = `${node.name} (${i + 1}/${nodeCache.length}) 测试中`;
+        try {
+          const res = await fetch(`/nodes/${node.id}/streaming-test`, { method: 'POST' });
+          if (!res.ok) {
+            streamingStatusCache[node.id] = streamingStatusCache[node.id] || {};
+            streamingStatusCache[node.id].error = true;
+            streamingStatusCache[node.id].message = `请求失败 (${res.status})`;
+            continue;
+          }
+
+          const data = await res.json();
+          const byService = {};
+          (data.services || []).forEach((svc) => {
+            const key = normalizeServiceKey(svc.key, svc.service);
+            byService[key] = { unlocked: !!svc.unlocked, detail: svc.detail, service: svc.service };
+          });
+          streamingServices.forEach((svc) => {
+            if (!byService[svc.key]) {
+              byService[svc.key] = { unlocked: false, detail: '未检测' };
+            }
+          });
+          streamingStatusCache[node.id] = byService;
+        } catch (err) {
+          streamingStatusCache[node.id] = { error: true, message: err?.message || '请求异常' };
+        }
+      }
+
+      stopProgress('检测完成');
+      await refreshNodes();
     }
 
     function editNode(nodeId) {
@@ -892,6 +1110,14 @@ def _login_html() -> str:
         port: Number(testPortInput.value || (selectedDst ? (selectedDst.detected_iperf_port || selectedDst.iperf_port) : 5201))
       };
 
+      const finishProgress = startProgressBar(
+        testProgress,
+        testProgressBar,
+        testProgressLabel,
+        payload.duration * 1000 + 1500,
+        '开始链路测试...'
+      );
+
       const res = await fetch('/tests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -902,10 +1128,12 @@ def _login_html() -> str:
         const details = await res.text();
         const message = details ? `启动测试失败：${details}` : '启动测试失败，请确认节点存在且参数有效。';
         setAlert(testAlert, message);
+        finishProgress('测试失败');
         return;
       }
 
       await refreshTests();
+      finishProgress('测试完成');
       clearAlert(testAlert);
     }
 
@@ -1096,6 +1324,7 @@ def _login_html() -> str:
     document.getElementById('login-btn').addEventListener('click', login);
     document.getElementById('logout-btn').addEventListener('click', logout);
     document.getElementById('run-test').addEventListener('click', runTest);
+    runStreamingChecksBtn.addEventListener('click', runStreamingChecks);
     saveNodeBtn.addEventListener('click', saveNode);
 
     importConfigsBtn.addEventListener('click', () => configFileInput.click());
@@ -1538,6 +1767,15 @@ def delete_node(node_id: int, db: Session = Depends(get_db)):
 @app.get("/nodes/status", response_model=List[NodeWithStatus])
 async def nodes_with_status(db: Session = Depends(get_db)):
     return await health_monitor.get_statuses()
+
+
+@app.post("/nodes/{node_id}/streaming-test", response_model=StreamingTestResult)
+async def streaming_test(node_id: int, db: Session = Depends(get_db)):
+    node = db.get(Node, node_id)
+    if not node:
+        raise HTTPException(status_code=404, detail="node not found")
+
+    return await _probe_streaming_unlock(node)
 
 
 @app.post("/tests", response_model=TestRead)
