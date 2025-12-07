@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import shlex
 import subprocess
 import threading
@@ -25,6 +26,76 @@ STREAMING_TARGETS = {
     "disney_plus": {"name": "Disney+", "url": "https://www.disneyplus.com"},
     "hbo": {"name": "HBO", "url": "https://www.hbomax.com"},
 }
+
+STREAMING_SCRIPT_URL = "https://raw.githubusercontent.com/xykt/IPQuality/main/ip.sh"
+STREAMING_SCRIPT_PATH = Path("/tmp/ipquality_ip.sh")
+STREAMING_SCRIPT_TTL = int(os.environ.get("STREAMING_SCRIPT_TTL", 60 * 60 * 12))
+
+SCRIPT_SERVICE_MAP = {
+    "Youtube": {"key": "youtube", "name": "YouTube"},
+    "AmazonPrimeVideo": {"key": "prime_video", "name": "Prime Video"},
+    "Netflix": {"key": "netflix", "name": "Netflix"},
+    "DisneyPlus": {"key": "disney_plus", "name": "Disney+"},
+    "HBO": {"key": "hbo", "name": "HBO"},
+}
+
+
+def _ensure_streaming_script() -> Path:
+    """Download the upstream streaming test script if it is missing or stale."""
+
+    if STREAMING_SCRIPT_PATH.exists():
+        age = time.time() - STREAMING_SCRIPT_PATH.stat().st_mtime
+        if age < STREAMING_SCRIPT_TTL:
+            return STREAMING_SCRIPT_PATH
+
+    response = requests.get(STREAMING_SCRIPT_URL, timeout=15)
+    response.raise_for_status()
+
+    STREAMING_SCRIPT_PATH.write_text(response.text)
+    STREAMING_SCRIPT_PATH.chmod(0o755)
+    return STREAMING_SCRIPT_PATH
+
+
+def _clean_script_output(raw: str) -> str:
+    cleaned = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", raw)
+    cleaned = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", cleaned)
+
+    start = cleaned.find("{")
+    if start != -1:
+        cleaned = cleaned[start:]
+    return cleaned
+
+
+def _parse_streaming_results_from_script(raw: str) -> list[dict[str, Any]]:
+    cleaned = _clean_script_output(raw)
+    payload = json.loads(cleaned)
+    media_entries = payload.get("Media") if isinstance(payload, dict) else None
+    media = media_entries[0] if isinstance(media_entries, list) and media_entries else {}
+
+    results: list[dict[str, Any]] = []
+    for upstream_key, target in SCRIPT_SERVICE_MAP.items():
+        entry = media.get(upstream_key) if isinstance(media, dict) else None
+        status_text = str((entry or {}).get("Status") or "").lower()
+        unlocked = any(token in status_text for token in ["解锁", "原生", "unblock", "yes", "open"])
+
+        detail_parts = [
+            (entry or {}).get("Status"),
+            (entry or {}).get("Region"),
+            (entry or {}).get("Type"),
+        ]
+        detail = " | ".join([part for part in detail_parts if part]) or None
+
+        results.append(
+            {
+                "key": target["key"],
+                "service": target["name"],
+                "unlocked": unlocked,
+                "status_code": None,
+                "detail": detail or ("未返回结果" if entry is None else None),
+            }
+        )
+
+    return results
 
 
 def _read_port_from_request(data: Dict[str, Any]) -> int:
@@ -124,30 +195,56 @@ def run_test() -> Any:
 @app.route("/streaming_probe", methods=["GET"])
 def streaming_probe() -> Any:
     start = time.time()
-    results = []
-    for key, target in STREAMING_TARGETS.items():
-        url = target.get("url")
-        name = target.get("name", key)
-        unlocked = False
-        status_code: int | None = None
-        detail: str | None = None
-        try:
-            response = requests.get(url, timeout=5)
-            status_code = response.status_code
-            unlocked = 200 <= response.status_code < 400
-            detail = f"HTTP {response.status_code}"
-        except requests.RequestException as exc:  # pragma: no cover - network failures
-            detail = str(exc)
-
-        results.append(
+    try:
+        script_path = _ensure_streaming_script()
+    except Exception as exc:  # pragma: no cover - network failures
+        return jsonify(
             {
-                "key": key,
-                "service": name,
-                "unlocked": unlocked,
-                "status_code": status_code,
-                "detail": detail,
+                "status": "error",
+                "results": [],
+                "detail": f"获取脚本失败: {exc}",
+                "elapsed_ms": int((time.time() - start) * 1000),
             }
+        ), 502
+
+    try:
+        proc = subprocess.run(
+            ["bash", str(script_path), "-j", "-n"],
+            capture_output=True,
+            text=True,
+            timeout=180,
         )
+    except subprocess.TimeoutExpired:
+        return jsonify(
+            {
+                "status": "error",
+                "results": [],
+                "detail": "脚本执行超时",
+                "elapsed_ms": int((time.time() - start) * 1000),
+            }
+        ), 504
+
+    if proc.returncode != 0:
+        return jsonify(
+            {
+                "status": "error",
+                "results": [],
+                "detail": proc.stderr.strip() or "执行失败",
+                "elapsed_ms": int((time.time() - start) * 1000),
+            }
+        ), 500
+
+    try:
+        results = _parse_streaming_results_from_script(proc.stdout)
+    except Exception as exc:  # pragma: no cover - defensive parsing
+        return jsonify(
+            {
+                "status": "error",
+                "results": [],
+                "detail": f"解析结果失败: {exc}",
+                "elapsed_ms": int((time.time() - start) * 1000),
+            }
+        ), 500
 
     elapsed_ms = int((time.time() - start) * 1000)
     return jsonify({"status": "ok", "results": results, "elapsed_ms": elapsed_ms})
