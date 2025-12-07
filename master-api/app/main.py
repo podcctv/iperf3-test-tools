@@ -4,6 +4,7 @@ import hmac
 import json
 import logging
 import time
+from pathlib import Path
 from datetime import datetime, timezone
 from typing import Dict, List
 
@@ -402,9 +403,47 @@ def _dashboard_token(password: str) -> str:
     return hmac.new(secret, password.encode(), hashlib.sha256).hexdigest()
 
 
+def _load_dashboard_password() -> str:
+    path = settings.dashboard_password_file
+    if path.exists():
+        try:
+            content = path.read_text(encoding="utf-8").strip()
+            if content:
+                return content
+        except OSError:
+            logger.exception("Failed to read stored dashboard password from %s", path)
+    return settings.dashboard_password
+
+
+def _save_dashboard_password(password: str) -> None:
+    path = settings.dashboard_password_file
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        path.write_text(password, encoding="utf-8")
+    except OSError:
+        logger.exception("Failed to persist dashboard password to %s", path)
+
+
+_dashboard_password = _load_dashboard_password()
+
+
+def _current_dashboard_password() -> str:
+    return _dashboard_password
+
+
 def _is_authenticated(request: Request) -> bool:
     stored = request.cookies.get(settings.dashboard_cookie_name)
-    return stored == _dashboard_token(settings.dashboard_password)
+    return stored == _dashboard_token(_current_dashboard_password())
+
+
+def _set_auth_cookie(response: Response, password: str) -> None:
+    response.set_cookie(
+        settings.dashboard_cookie_name,
+        _dashboard_token(password),
+        httponly=True,
+        samesite="lax",
+        max_age=60 * 60 * 24,
+    )
 
 
 class NodeHealthMonitor:
@@ -669,6 +708,38 @@ def _login_html() -> str:
               <p class="text-xs text-slate-500">可在不同实例之间迁移配置，便于备份。</p>
             </div>
 
+            <div class="panel-card rounded-2xl p-5 space-y-4">
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 class="text-lg font-semibold text-white">修改控制台密码</h3>
+                  <p class="text-sm text-slate-400">更新登录密码并立即应用到当前会话。</p>
+                </div>
+                <span class="rounded-full bg-slate-800/70 px-3 py-1 text-xs font-semibold text-slate-300 ring-1 ring-slate-700">本地保存</span>
+              </div>
+              <div id="change-password-alert" class="hidden rounded-xl border border-slate-700 bg-slate-800/60 px-4 py-3 text-sm text-slate-100"></div>
+              <div class="grid gap-3 md:grid-cols-3">
+                <div class="space-y-2">
+                  <label class="text-sm font-medium text-slate-200" for="current-password">当前密码</label>
+                  <input id="current-password" type="password" placeholder="请输入当前密码"
+                    class="w-full rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+                </div>
+                <div class="space-y-2">
+                  <label class="text-sm font-medium text-slate-200" for="new-password">新密码</label>
+                  <input id="new-password" type="password" placeholder="至少 6 位字符"
+                    class="w-full rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/60" />
+                </div>
+                <div class="space-y-2">
+                  <label class="text-sm font-medium text-slate-200" for="confirm-password">确认新密码</label>
+                  <input id="confirm-password" type="password" placeholder="再次输入新密码"
+                    class="w-full rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/60" />
+                </div>
+              </div>
+              <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+                <p class="text-xs text-slate-500 sm:flex-1">新密码将写入本地数据目录并覆盖默认环境变量。</p>
+                <button id="change-password-btn" class="w-full sm:w-auto rounded-xl bg-gradient-to-r from-emerald-500 to-sky-500 px-4 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-500/20 transition hover:scale-[1.01] hover:shadow-xl">更新密码</button>
+              </div>
+            </div>
+
             <div class="space-y-4">
               <div class="panel-card rounded-2xl p-5 space-y-4">
                 <div class="flex flex-wrap items-center justify-between gap-3">
@@ -813,6 +884,11 @@ def _login_html() -> str:
     const importConfigsBtn = document.getElementById('import-configs');
     const exportConfigsBtn = document.getElementById('export-configs');
     const configFileInput = document.getElementById('config-file-input');
+    const changePasswordAlert = document.getElementById('change-password-alert');
+    const currentPasswordInput = document.getElementById('current-password');
+    const newPasswordInput = document.getElementById('new-password');
+    const confirmPasswordInput = document.getElementById('confirm-password');
+    const changePasswordBtn = document.getElementById('change-password-btn');
 
     const nodeName = document.getElementById('node-name');
     const nodeIp = document.getElementById('node-ip');
@@ -1170,6 +1246,57 @@ def _login_html() -> str:
     async function logout() {
       await fetch('/auth/logout', { method: 'POST' });
       await checkAuth();
+    }
+
+    async function changePassword() {
+      clearAlert(changePasswordAlert);
+
+      const payload = {
+        current_password: currentPasswordInput.value,
+        new_password: newPasswordInput.value,
+        confirm_password: confirmPasswordInput.value,
+      };
+
+      if (!payload.new_password) {
+        setAlert(changePasswordAlert, '请输入新密码。');
+        return;
+      }
+
+      if (payload.new_password.length < 6) {
+        setAlert(changePasswordAlert, '新密码长度需不少于 6 位。');
+        return;
+      }
+
+      if (payload.new_password !== payload.confirm_password) {
+        setAlert(changePasswordAlert, '两次输入的新密码不一致。');
+        return;
+      }
+
+      const res = await fetch('/auth/change', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        let feedback = '更新密码失败。';
+        try {
+          const data = await res.json();
+          if (data?.detail === 'invalid_password') feedback = '当前密码不正确或会话已过期。';
+          if (data?.detail === 'password_too_short') feedback = '新密码长度不足 6 位。';
+          if (data?.detail === 'password_mismatch') feedback = '两次输入的新密码不一致。';
+          if (data?.detail === 'empty_password') feedback = '请输入新密码。';
+        } catch (err) {
+          feedback = feedback + ' ' + (err?.message || '');
+        }
+        setAlert(changePasswordAlert, feedback.trim());
+        return;
+      }
+
+      setAlert(changePasswordAlert, '密码已更新，当前会话已使用新密码。');
+      currentPasswordInput.value = '';
+      newPasswordInput.value = '';
+      confirmPasswordInput.value = '';
     }
 
     function syncTestPort() {
@@ -1824,6 +1951,7 @@ def _login_html() -> str:
     document.getElementById('login-btn').addEventListener('click', login);
     document.getElementById('logout-btn').addEventListener('click', logout);
     document.getElementById('run-test').addEventListener('click', runTest);
+    changePasswordBtn?.addEventListener('click', changePassword);
     saveNodeBtn.addEventListener('click', saveNode);
 
     if (openAddNodeBtn) {
@@ -2183,16 +2311,10 @@ def auth_status(request: Request) -> dict:
 @app.post("/auth/login")
 def login(response: Response, payload: dict = Body(...)) -> dict:
     password = str(payload.get("password", ""))
-    if password != settings.dashboard_password:
+    if password != _current_dashboard_password():
         raise HTTPException(status_code=401, detail="invalid_password")
 
-    response.set_cookie(
-        settings.dashboard_cookie_name,
-        _dashboard_token(settings.dashboard_password),
-        httponly=True,
-        samesite="lax",
-        max_age=60 * 60 * 24,
-    )
+    _set_auth_cookie(response, password)
     return {"status": "ok"}
 
 
@@ -2200,6 +2322,33 @@ def login(response: Response, payload: dict = Body(...)) -> dict:
 def logout(response: Response) -> dict:
     response.delete_cookie(settings.dashboard_cookie_name)
     return {"status": "logged_out"}
+
+
+@app.post("/auth/change")
+def change_password(request: Request, response: Response, payload: dict = Body(...)) -> dict:
+    global _dashboard_password
+
+    current_password = str(payload.get("current_password", ""))
+    new_password = str(payload.get("new_password", ""))
+    confirm_password = str(payload.get("confirm_password", new_password))
+
+    if not new_password:
+        raise HTTPException(status_code=400, detail="empty_password")
+
+    if len(new_password) < 6:
+        raise HTTPException(status_code=400, detail="password_too_short")
+
+    if new_password != confirm_password:
+        raise HTTPException(status_code=400, detail="password_mismatch")
+
+    if not _is_authenticated(request) and current_password != _current_dashboard_password():
+        raise HTTPException(status_code=401, detail="invalid_password")
+
+    _dashboard_password = new_password
+    _save_dashboard_password(new_password)
+    _set_auth_cookie(response, new_password)
+
+    return {"status": "updated"}
 
 
 async def _start_iperf_server(node: Node, port: int) -> None:
