@@ -113,6 +113,12 @@ if [ "$LOCAL_HASH" != "$REMOTE_HASH" ]; then
     echo "[INFO] New version detected. Updating..."
     git pull --rebase
     echo "[INFO] Update completed."
+
+    UPDATED_FILES=$(git diff --name-only "$LOCAL_HASH" HEAD)
+    if echo "$UPDATED_FILES" | grep -q "update_iperf3_master.sh" && [ -z "${IPERF3_UPDATER_RERUN}" ]; then
+        echo "[INFO] Detected updater script changes. Re-running with latest version..."
+        IPERF3_UPDATER_RERUN=1 exec bash "$0" "$@"
+    fi
 else
     echo "[INFO] Already the latest version. No update needed."
 fi
@@ -143,6 +149,7 @@ case "$choice" in
         ;;
     3)
         # 手动安装 agent（NAT VPS、端口自行指定）
+        cleanup_docker
         echo "[INFO] Manual agent installation (NAT mode, custom ports)..."
         AGENT_PORT=$(prompt_required_port "Agent API 端口（宿主机 NAT 映射端口）" "${AGENT_PORT:-}")
         AGENT_LISTEN_PORT=$(prompt_optional_port "Agent API 端口（容器内监听，留空则与宿主机相同）" "${AGENT_LISTEN_PORT:-}")

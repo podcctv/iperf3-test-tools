@@ -1,9 +1,12 @@
 import asyncio
 import hashlib
+import asyncio
 import hmac
 import json
 import logging
+import socket
 import time
+import ipaddress
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Dict, List
@@ -88,6 +91,32 @@ state_store = StateStore(settings.state_file, settings.state_recent_tests)
 logger = logging.getLogger(__name__)
 _geo_cache: dict[str, tuple[str | None, float]] = {}
 GEO_CACHE_TTL_SECONDS = 60 * 60 * 6
+
+
+async def _resolve_geo_ip(ip_or_host: str) -> tuple[str | None, str]:
+    try:
+        ipaddress.ip_address(ip_or_host)
+        return ip_or_host, ip_or_host
+    except ValueError:
+        pass
+
+    loop = asyncio.get_running_loop()
+    try:
+        infos = await loop.getaddrinfo(ip_or_host, None, proto=socket.IPPROTO_TCP)
+    except socket.gaierror:
+        return None, ip_or_host
+
+    for info in infos:
+        sockaddr = info[4]
+        if sockaddr:
+            resolved_ip = sockaddr[0]
+            try:
+                ipaddress.ip_address(resolved_ip)
+                return resolved_ip, ip_or_host
+            except ValueError:
+                continue
+
+    return None, ip_or_host
 
 ZHEJIANG_TARGETS = [
     {
@@ -549,16 +578,23 @@ async def lookup_geo_country_code(ip: str) -> str | None:
     if cached and now - cached[1] < GEO_CACHE_TTL_SECONDS:
         return cached[0]
 
-    async def _fetch_from_ipapi(client: httpx.AsyncClient) -> str | None:
-        resp = await client.get(f"https://ipapi.co/{ip}/country/")
+    resolved_ip, cache_key = await _resolve_geo_ip(ip)
+    if not resolved_ip:
+        _geo_cache[cache_key] = (None, now)
+        return None
+
+    async def _fetch_from_ipapi(client: httpx.AsyncClient, target_ip: str) -> str | None:
+        resp = await client.get(f"https://ipapi.co/{target_ip}/country/")
         if resp.status_code == 200:
             code = resp.text.strip().upper()
             if len(code) == 2:
                 return code
         return None
 
-    async def _fetch_from_ip_api(client: httpx.AsyncClient) -> str | None:
-        resp = await client.get(f"https://ip-api.com/json/{ip}?fields=status,countryCode,message")
+    async def _fetch_from_ip_api(client: httpx.AsyncClient, target_ip: str) -> str | None:
+        resp = await client.get(
+            f"https://ip-api.com/json/{target_ip}?fields=status,countryCode,message"
+        )
         if resp.status_code == 200:
             data = resp.json()
             if data.get("status") == "success":
@@ -569,15 +605,20 @@ async def lookup_geo_country_code(ip: str) -> str | None:
 
     try:
         async with httpx.AsyncClient(timeout=5) as client:
-            for fetcher in (_fetch_from_ipapi, _fetch_from_ip_api):
+            for fetcher in (
+                lambda c: _fetch_from_ipapi(c, resolved_ip),
+                lambda c: _fetch_from_ip_api(c, resolved_ip),
+            ):
                 code = await fetcher(client)
                 if code:
-                    _geo_cache[ip] = (code, now)
+                    _geo_cache[cache_key] = (code, now)
+                    if cache_key != resolved_ip:
+                        _geo_cache[resolved_ip] = (code, now)
                     return code
     except Exception:  # pragma: no cover - external dependency
         logger.exception("Failed to lookup geo country code for %s", ip)
 
-    _geo_cache[ip] = (None, now)
+    _geo_cache[cache_key] = (None, now)
     return None
 
 
@@ -1005,6 +1046,8 @@ def _login_html() -> str:
         byService[normalized] = {
           unlocked: svc.unlocked,
           detail: svc.detail,
+          tier: svc.tier,
+          service: svc.service,
         };
       });
       streamingStatusCache[node.id] = byService;
@@ -1144,15 +1187,37 @@ def _login_html() -> str:
         return `<span class=\"text-xs text-amber-300\">${cache.message || '检测异常'}</span>`;
       }
 
+      const mutedStyle = 'text-slate-500 border-slate-800 bg-slate-900/60';
       return streamingServices
         .map((svc) => {
           const status = cache[svc.key];
           const unlocked = status ? status.unlocked : null;
+          const tier = status?.tier;
           const detail = status && status.detail ? status.detail.replace(/"/g, "'") : '';
-          const color = unlocked === true ? `${svc.color} ${svc.bg}` : 'text-slate-500 border-slate-800 bg-slate-900/60';
-          const label = unlocked === true ? '可解锁' : unlocked === false ? '未解锁' : '未检测';
-          const title = `${svc.label}：${label}${detail ? ' · ' + detail : ''}`;
-          return `<span class=\"inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold ${color}\" title=\"${title}\">${svc.icon}<span>${svc.label}</span></span>`;
+
+          let badgeColor = unlocked === true ? `${svc.color} ${svc.bg}` : mutedStyle;
+          let statusLabel = unlocked === true ? '可解锁' : unlocked === false ? '未解锁' : '未检测';
+          let badgeLabel = svc.label;
+
+          if (svc.key === 'netflix' && status) {
+            const netflixTier = tier || (unlocked ? 'full' : 'none');
+            if (netflixTier === 'full') {
+              badgeLabel = 'Netflix（全解锁）';
+              statusLabel = '全片库';
+              badgeColor = `${svc.color} ${svc.bg}`;
+            } else if (netflixTier === 'originals') {
+              badgeLabel = 'Netflix（仅自制）';
+              statusLabel = '自制片库';
+              badgeColor = 'text-amber-200 border-amber-400/40 bg-amber-400/10';
+            } else {
+              badgeLabel = 'Netflix';
+              statusLabel = '未解锁';
+              badgeColor = mutedStyle;
+            }
+          }
+
+          const title = `${badgeLabel}：${statusLabel}${detail ? ' · ' + detail : ''}`;
+          return `<span class=\"inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold ${badgeColor}\" title=\"${title}\">${svc.icon}<span>${badgeLabel}</span></span>`;
         })
         .join('');
     }
@@ -1350,10 +1415,11 @@ def _login_html() -> str:
           cacheStreamingFromNode(node);
 
           const privacyEnabled = !!ipPrivacyState[node.id];
-          const flagInfo = resolveLocalFlag(node);
-          const statusBadge = node.status === 'online'
-            ? `<span class="${styles.badgeOnline}">${renderFlagSlot(node.id, flagInfo, 'text-base')}<span class=\"h-2 w-2 rounded-full bg-emerald-400\"></span><span>在线</span></span>`
-            : `<span class="${styles.badgeOffline}">${renderFlagSlot(node.id, flagInfo, 'text-base')}<span class=\"h-2 w-2 rounded-full bg-rose-400\"></span><span>离线</span></span>`;
+        const flagInfo = resolveLocalFlag(node);
+        const locationBadge = renderFlagSlot(node.id, flagInfo, 'text-base drop-shadow-sm', '服务器所在地区');
+        const statusBadge = node.status === 'online'
+          ? `<span class="${styles.badgeOnline}"><span class=\"h-2 w-2 rounded-full bg-emerald-400\"></span><span>在线</span></span>`
+          : `<span class="${styles.badgeOffline}"><span class=\"h-2 w-2 rounded-full bg-rose-400\"></span><span>离线</span></span>`;
 
           const ports = node.detected_iperf_port ? `${node.detected_iperf_port}` : `${node.iperf_port}`;
           const agentPortDisplay = maskPort(node.agent_port, privacyEnabled);
@@ -1361,12 +1427,11 @@ def _login_html() -> str:
           const streamingBadges = renderStreamingBadges(node.id);
           const backboneBadges = renderBackboneBadges(node.backbone_latency);
           const ipMasked = maskIp(node.ip, privacyEnabled);
-          const flagPlaceholder = renderFlagSlot(node.id, flagInfo, 'text-lg font-semibold drop-shadow-sm', '服务器所在地区');
 
-          const item = document.createElement('div');
-          item.className = styles.rowCard;
-          item.innerHTML = `
-            <div class="pointer-events-none absolute inset-0 opacity-80">
+        const item = document.createElement('div');
+        item.className = styles.rowCard;
+        item.innerHTML = `
+          <div class="pointer-events-none absolute inset-0 opacity-80">
               <div class="absolute inset-0 bg-gradient-to-br from-emerald-500/8 via-transparent to-sky-500/10"></div>
               <div class="absolute -left-10 top-0 h-32 w-32 rounded-full bg-sky-500/10 blur-3xl"></div>
           </div>
@@ -1374,6 +1439,7 @@ def _login_html() -> str:
             <div class="flex-1 space-y-2">
               <div class="flex flex-wrap items-center gap-2">
                 ${statusBadge}
+                ${locationBadge}
                 <span class="text-base font-semibold text-white drop-shadow">${node.name}</span>
                 <button type="button" class="${styles.iconButton}" data-privacy-toggle="${node.id}" aria-label="切换 IP 隐藏">
                   <span class="text-base">${ipPrivacyState[node.id] ? '🙈' : '👁️'}</span>
@@ -1382,7 +1448,6 @@ def _login_html() -> str:
               ${backboneBadges ? `<div class=\"flex flex-wrap items-center gap-2\">${backboneBadges}</div>` : ''}
               <div class="flex flex-wrap items-center gap-2" data-streaming-badges="${node.id}">${streamingBadges || ''}</div>
               <p class="${styles.textMuted} flex items-center gap-2">
-                ${flagPlaceholder}
                 <span class="font-mono" data-node-ip-display="${node.id}">${ipMasked}</span>
                 <span class="text-slate-500" data-node-agent-port="${node.id}">:${agentPortDisplay}</span>
                 <span data-node-iperf-display="${node.id}">· iperf ${iperfPortDisplay}${node.description ? ' · ' + node.description : ''}</span>
@@ -1464,7 +1529,12 @@ def _login_html() -> str:
             const byService = {};
             (data.services || []).forEach((svc) => {
               const key = normalizeServiceKey(svc.key, svc.service);
-              byService[key] = { unlocked: !!svc.unlocked, detail: svc.detail, service: svc.service };
+              byService[key] = {
+                unlocked: !!svc.unlocked,
+                detail: svc.detail,
+                service: svc.service,
+                tier: svc.tier,
+              };
             });
             streamingServices.forEach((svc) => {
               if (!byService[svc.key]) {
