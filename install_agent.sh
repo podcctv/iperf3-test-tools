@@ -56,6 +56,118 @@ maybe_load_port_config() {
   fi
 }
 
+select_python() {
+  if command -v python3 >/dev/null 2>&1; then
+    echo "python3"
+  elif command -v python >/dev/null 2>&1; then
+    echo "python"
+  else
+    echo ""
+  fi
+}
+
+port_in_use() {
+  local port=$1 py
+  py=$(select_python)
+
+  if [ -z "${py}" ]; then
+    return 2
+  fi
+
+  "${py}" - "$port" <<'PY'
+import errno, socket, sys
+
+port = int(sys.argv[1])
+
+def can_bind(family, address):
+    try:
+        with socket.socket(family, socket.SOCK_STREAM) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.bind((address, port))
+        return False
+    except OSError as exc:
+        if exc.errno == errno.EADDRINUSE:
+            return True
+
+        print(f"[install-agent] Port probe on {address}:{port} skipped: {exc}", file=sys.stderr)
+        return False
+
+
+if can_bind(socket.AF_INET, "0.0.0.0"):
+    sys.exit(1)
+
+try:
+    if can_bind(socket.AF_INET6, "::"):
+        sys.exit(1)
+except OSError:
+    pass
+
+sys.exit(0)
+PY
+}
+
+prompt_for_port() {
+  local label=$1 current=$2 new_port
+  while true; do
+    read -r -p "${label} port (${current}) is in use. Enter a different port: " new_port
+
+    if [ -z "${new_port}" ]; then
+      new_port=${current}
+    fi
+
+    if [[ "${new_port}" =~ ^[0-9]+$ ]] && [ "${new_port}" -ge 1 ] && [ "${new_port}" -le 65535 ]; then
+      echo "${new_port}"
+      return
+    fi
+
+    log "Invalid port: ${new_port}. Please provide a value between 1 and 65535."
+  done
+}
+
+ensure_ports_available() {
+  local py status label port_var port_value
+
+  py=$(select_python)
+  if [ -z "${py}" ]; then
+    log "Python is required for port availability checks. Skipping prompts and continuing with current values."
+    return
+  fi
+
+  for entry in \
+    "Agent API:AGENT_PORT" \
+    "iperf3:IPERF_PORT"; do
+    label=${entry%%:*}
+    port_var=${entry#*:}
+    port_value=$(eval "echo \${${port_var}}")
+
+    status=0
+    port_in_use "${port_value}" || status=$?
+
+    if [ "${status}" -eq 0 ]; then
+      continue
+    fi
+
+    if [ "${status}" -eq 2 ]; then
+      log "Skipping port availability checks due to missing Python interpreter."
+      return
+    fi
+
+    if [ -t 0 ]; then
+      while [ "${status}" -ne 0 ]; do
+        port_value=$(prompt_for_port "${label}" "${port_value}")
+        eval "${port_var}=${port_value}"
+        port_in_use "${port_value}"; status=$?
+        if [ "${status}" -eq 0 ]; then
+          log "Using ${label} port ${port_value}."
+        fi
+      done
+    else
+      log "${label} port ${port_value} is already in use. Re-run with a different port via flags or environment variables."
+      exit 1
+    fi
+  done
+}
+
 preprocess_config_arg() {
   local expect_path=false arg
   for arg in "$@"; do
@@ -307,6 +419,7 @@ main() {
   ensure_repo_available
   update_repo
   rerun_if_repo_updated "$@"
+  ensure_ports_available
   ensure_docker
   start_agent
 
