@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import hmac
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Dict, List
@@ -1704,11 +1705,27 @@ def _get_agent_or_404(name: str) -> AgentConfigRead:
 
 
 @app.get("/agent-configs/export")
-def export_agent_configs() -> FileResponse:
-    return FileResponse(
-        agent_store.path,
+def export_agent_configs(db: Session = Depends(get_db)) -> Response:
+    """Download the current agent inventory as a JSON file."""
+
+    configs = agent_store.list_configs()
+    if not configs:
+        nodes = db.scalars(select(Node)).all()
+        configs = [
+            AgentConfigCreate(**_normalized_agent_payload(_agent_config_from_node(node).model_dump()))
+            for node in nodes
+        ]
+
+    payload = json.dumps(
+        [config.model_dump() for config in configs],
+        ensure_ascii=False,
+        indent=2,
+    )
+
+    return Response(
+        content=payload,
         media_type="application/json",
-        filename="agent_configs.json",
+        headers={"Content-Disposition": "attachment; filename=agent_configs.json"},
     )
 
 
