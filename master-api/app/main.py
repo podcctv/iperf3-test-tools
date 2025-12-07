@@ -93,6 +93,21 @@ app = FastAPI(title="iperf3 master api")
 agent_store = AgentConfigStore(settings.agent_config_file)
 
 
+def _hydrate_agent_store() -> None:
+    db = SessionLocal()
+    try:
+        for node in db.scalars(select(Node)).all():
+            try:
+                agent_store.upsert(_agent_config_from_node(node))
+            except Exception:  # pragma: no cover - defensive hydration
+                logger.exception("Failed to sync agent config for node %s", node.name)
+    finally:
+        db.close()
+
+
+_hydrate_agent_store()
+
+
 def _persist_state(db: Session) -> None:
     try:
         state_store.persist(db)
