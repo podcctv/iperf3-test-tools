@@ -296,13 +296,13 @@ async def _on_shutdown() -> None:
 def _login_html() -> str:
     return """
 <!DOCTYPE html>
-<html lang=\"en\">
+<html lang="zh-CN">
 <head>
-  <meta charset=\"UTF-8\" />
-  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />
-  <title>iperf3 Master Dashboard</title>
-  <link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/@radix-ui/themes@3.1.1/dist/css/themes.css\" />
-  <script src=\"https://cdn.tailwindcss.com\"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>iperf3 主控面板</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@radix-ui/themes@3.1.1/dist/css/themes.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
       theme: {
@@ -325,234 +325,184 @@ def _login_html() -> str:
   </style>
 </head>
 <body>
-  <div class=\"radix-themes min-h-screen\" data-theme=\"dark\"> 
-    <div class=\"relative mx-auto max-w-6xl px-6 py-10 lg:px-10\">
-      <div class=\"absolute inset-0 -z-10 overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900/90 via-slate-950 to-slate-950 shadow-[0_30px_120px_rgba(0,0,0,0.55)]\"></div>
-      <div class=\"relative z-10 space-y-6\">
-        <div class=\"flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between\">
+  <div class="radix-themes min-h-screen" data-theme="dark">
+    <div class="relative mx-auto max-w-6xl px-6 py-10 lg:px-10">
+      <div class="absolute inset-0 -z-10 overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900/90 via-slate-950 to-slate-950 shadow-[0_30px_120px_rgba(0,0,0,0.55)]"></div>
+      <div class="relative z-10 space-y-6">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p class=\"text-sm uppercase tracking-[0.25em] text-sky-300/80\">iperf3 orchestration</p>
-            <h1 class=\"text-3xl font-bold text-white sm:text-4xl\">Master Dashboard</h1>
-            <p class=\"mt-2 text-slate-400 text-sm leading-relaxed max-w-3xl\">Securely manage agents, dispatch iperf3 tests, and keep an eye on live performance without leaving this page.</p>
+            <p class="text-sm uppercase tracking-[0.25em] text-sky-300/80">iperf3 控制中心</p>
+            <h1 class="text-3xl font-bold text-white sm:text-4xl">主控面板</h1>
+            <p class="mt-2 text-slate-400 text-sm leading-relaxed max-w-3xl">通过浏览器即可管理节点、发起测试并查看最新结果。</p>
           </div>
-          <div class=\"flex items-center gap-3\">
-            <span class=\"inline-flex items-center gap-2 rounded-full bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-300 ring-1 ring-emerald-500/30\">
-              <span class=\"h-2 w-2 rounded-full bg-emerald-400 animate-pulse\"></span>
-              Live control plane
+          <div class="flex items-center gap-3">
+            <span class="inline-flex items-center gap-2 rounded-full bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-300 ring-1 ring-emerald-500/30">
+              <span class="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              实时控制
             </span>
           </div>
         </div>
 
-        <div class=\"glass-card rounded-3xl p-6 ring-1 ring-slate-800/60\"> 
-          <div class=\"gradient-bar mb-6\"></div>
-          <div id=\"login-card\" class=\"space-y-6\"> 
-            <div class=\"flex items-center justify-between gap-4\">
+        <div class="glass-card rounded-3xl p-6 ring-1 ring-slate-800/60">
+          <div class="gradient-bar mb-6"></div>
+          <div id="login-card" class="space-y-6">
+            <div class="flex items-center justify-between gap-4">
               <div>
-                <h2 class=\"text-2xl font-semibold text-white\">Unlock dashboard</h2>
-                <p class=\"text-sm text-slate-400\">Enter the shared password to access orchestration controls.</p>
+                <h2 class="text-2xl font-semibold text-white">解锁控制台</h2>
+                <p class="text-sm text-slate-400">输入共享密码以进入运维面板。</p>
               </div>
-              <div class=\"hidden sm:inline-flex items-center gap-2 rounded-full bg-slate-800/70 px-3 py-2 text-xs font-medium text-slate-200 ring-1 ring-slate-700\">
-                <span class=\"h-2 w-2 rounded-full bg-amber-400 animate-ping\"></span>
-                Session locked
+              <div class="hidden sm:inline-flex items-center gap-2 rounded-full bg-slate-800/70 px-3 py-2 text-xs font-medium text-slate-200 ring-1 ring-slate-700">
+                <span class="h-2 w-2 rounded-full bg-amber-400 animate-ping"></span>
+                会话未解锁
               </div>
             </div>
-            <div id=\"login-alert\" class=\"hidden rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100\"></div>
-            <div class=\"grid gap-4 md:grid-cols-3\">
-              <div class=\"md:col-span-2 space-y-3\">
-                <label class=\"text-sm font-medium text-slate-200\" for=\"password\">Dashboard password</label>
-                <input id=\"password\" type=\"password\" placeholder=\"Enter dashboard password\"
-                  class=\"w-full rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\" />
-                <p class=\"text-xs text-slate-500\">Default password is <code class=\"font-semibold text-sky-300\">iperf-pass</code> unless overridden via environment.</p>
+            <div id="login-alert" class="hidden rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100"></div>
+            <div class="grid gap-4 md:grid-cols-3">
+              <div class="md:col-span-2 space-y-3">
+                <label class="text-sm font-medium text-slate-200" for="password">控制台密码</label>
+                <input id="password" type="password" placeholder="请输入控制台密码"
+                  class="w-full rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+                <p class="text-xs text-slate-500">默认密码为 <code class="font-semibold text-sky-300">iperf-pass</code>，可通过环境变量覆盖。</p>
               </div>
-              <div class=\"flex items-end\">
-                <button id=\"login-btn\" class=\"w-full rounded-xl bg-gradient-to-r from-sky-500 to-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-500/20 transition hover:scale-[1.01] hover:shadow-xl\">Unlock dashboard</button>
+              <div class="flex items-end">
+                <button id="login-btn" class="w-full rounded-xl bg-gradient-to-r from-sky-500 to-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-500/20 transition hover:scale-[1.01] hover:shadow-xl">解锁</button>
               </div>
             </div>
           </div>
 
-          <div id=\"app-card\" class=\"hidden space-y-8\">
-            <div class=\"flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between\">
+          <div id="app-card" class="hidden space-y-8">
+            <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <p class=\"text-sm uppercase tracking-[0.25em] text-sky-300/80\">Control plane</p>
-                <h2 class=\"text-2xl font-semibold text-white\">iperf3 Master Dashboard</h2>
-                <p class=\"text-sm text-slate-400\" id=\"auth-hint\"></p>
+                <p class="text-sm uppercase tracking-[0.25em] text-sky-300/80">控制面板</p>
+                <h2 class="text-2xl font-semibold text-white">iperf3 主控面板</h2>
+                <p class="text-sm text-slate-400" id="auth-hint"></p>
               </div>
-              <div class=\"flex flex-wrap items-center gap-3\">
-                <button data-refresh-nodes class=\"rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200\">Refresh nodes</button>
-                <button id=\"jump-schedules\" class=\"rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-100 shadow-sm transition hover:bg-emerald-500/25\">Scheduled tests</button>
-                <button id=\"logout-btn\" class=\"rounded-lg border border-rose-500/40 bg-rose-500/15 px-4 py-2 text-sm font-semibold text-rose-100 shadow-sm transition hover:bg-rose-500/25\">Logout</button>
+              <div class="flex flex-wrap items-center gap-3">
+                <button data-refresh-nodes class="rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200">刷新节点</button>
+                <a href="/web/schedules" class="rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-100 shadow-sm transition hover:bg-emerald-500/25">定时任务</a>
+                <button id="logout-btn" class="rounded-lg border border-rose-500/40 bg-rose-500/15 px-4 py-2 text-sm font-semibold text-rose-100 shadow-sm transition hover:bg-rose-500/25">退出登录</button>
               </div>
             </div>
 
-            <div class=\"panel-card rounded-2xl p-5 space-y-3\">
-              <div class=\"flex flex-wrap items-center justify-between gap-3\">
+            <div class="panel-card rounded-2xl p-5 space-y-3">
+              <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h3 class=\"text-lg font-semibold text-white\">Agent config file</h3>
-                  <p class=\"text-sm text-slate-400\">Import or export the saved agent_configs.json inventory.</p>
+                  <h3 class="text-lg font-semibold text-white">代理配置文件</h3>
+                  <p class="text-sm text-slate-400">导入或导出 agent_configs.json。</p>
                 </div>
-                <div class=\"flex flex-wrap items-center gap-2\">
-                  <input id=\"config-file-input\" type=\"file\" accept=\"application/json\" class=\"hidden\" />
-                  <button id=\"export-configs\" class=\"rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200\">Export</button>
-                  <button id=\"import-configs\" class=\"rounded-lg border border-sky-500/40 bg-sky-500/15 px-4 py-2 text-sm font-semibold text-sky-100 shadow-sm transition hover:bg-sky-500/25\">Import</button>
+                <div class="flex flex-wrap items-center gap-2">
+                  <input id="config-file-input" type="file" accept="application/json" class="hidden" />
+                  <button id="export-configs" class="rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200">导出</button>
+                  <button id="import-configs" class="rounded-lg border border-sky-500/40 bg-sky-500/15 px-4 py-2 text-sm font-semibold text-sky-100 shadow-sm transition hover:bg-sky-500/25">导入</button>
                 </div>
               </div>
-              <div id=\"config-alert\" class=\"hidden rounded-xl border border-slate-700 bg-slate-800/60 px-4 py-3 text-sm text-slate-100\"></div>
-              <p class=\"text-xs text-slate-500\">Use these controls to move agent configs between installations while keeping backups.</p>
+              <div id="config-alert" class="hidden rounded-xl border border-slate-700 bg-slate-800/60 px-4 py-3 text-sm text-slate-100"></div>
+              <p class="text-xs text-slate-500">可在不同实例之间迁移配置，便于备份。</p>
             </div>
 
-            <div class=\"grid gap-4 lg:grid-cols-2\">
-              <div class=\"panel-card rounded-2xl p-5 space-y-4\">
-                <div class=\"flex items-center justify-between gap-2\">
-                  <h3 class=\"text-lg font-semibold text-white\">Add node</h3>
-                  <span class=\"rounded-full bg-slate-800/70 px-3 py-1 text-xs font-semibold text-slate-300 ring-1 ring-slate-700\">Agent registry</span>
+            <div class="grid gap-4 lg:grid-cols-2">
+              <div class="panel-card rounded-2xl p-5 space-y-4">
+                <div class="flex items-center justify-between gap-2">
+                  <h3 class="text-lg font-semibold text-white">添加节点</h3>
+                  <span class="rounded-full bg-slate-800/70 px-3 py-1 text-xs font-semibold text-slate-300 ring-1 ring-slate-700">Agent 注册表</span>
                 </div>
-                <div id=\"add-node-alert\" class=\"hidden rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100\"></div>
-                <div class=\"grid gap-3 sm:grid-cols-2\"> 
-                  <div class=\"space-y-2\">
-                    <label class=\"text-sm font-medium text-slate-200\">Name</label>
-                    <input id=\"node-name\" placeholder=\"node-a\" class=\"rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\" />
+                <div id="add-node-alert" class="hidden rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100"></div>
+                <div class="grid gap-3 sm:grid-cols-2">
+                  <div class="space-y-2">
+                    <label class="text-sm font-medium text-slate-200">名称</label>
+                    <input id="node-name" placeholder="node-a" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
                   </div>
-                  <div class=\"space-y-2\">
-                    <label class=\"text-sm font-medium text-slate-200\">IP Address</label>
-                    <input id=\"node-ip\" placeholder=\"10.0.0.11\" class=\"rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\" />
+                  <div class="space-y-2">
+                    <label class="text-sm font-medium text-slate-200">IP 地址</label>
+                    <input id="node-ip" placeholder="10.0.0.11" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
                   </div>
-                  <div class=\"space-y-2\">
-                    <label class=\"text-sm font-medium text-slate-200\">Agent Port</label>
-                    <input id=\"node-port\" type=\"number\" value=\"8000\" class=\"rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\" />
+                  <div class="space-y-2">
+                    <label class="text-sm font-medium text-slate-200">Agent 端口</label>
+                    <input id="node-port" type="number" value="8000" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
                   </div>
-                  <div class=\"space-y-2\">
-                    <label class=\"text-sm font-medium text-slate-200\">iperf Port</label>
-                    <input id=\"node-iperf-port\" type=\"number\" value=\"5201\" class=\"rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\" />
+                  <div class="space-y-2">
+                    <label class="text-sm font-medium text-slate-200">iperf 端口</label>
+                    <input id="node-iperf-port" type="number" value="5201" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
                   </div>
                 </div>
-                <div class=\"space-y-2\">
-                  <label class=\"text-sm font-medium text-slate-200\">Description (optional)</label>
-                  <textarea id=\"node-desc\" rows=\"2\" class=\"w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\"></textarea>
+                <div class="space-y-2">
+                  <label class="text-sm font-medium text-slate-200">描述（可选）</label>
+                  <textarea id="node-desc" rows="2" class="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60"></textarea>
                 </div>
-                <button id=\"save-node\" class=\"w-full rounded-xl bg-gradient-to-r from-emerald-500 to-sky-500 px-4 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-500/20 transition hover:scale-[1.01] hover:shadow-xl\">Save node</button>
+                <button id="save-node" class="w-full rounded-xl bg-gradient-to-r from-emerald-500 to-sky-500 px-4 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-500/20 transition hover:scale-[1.01] hover:shadow-xl">保存节点</button>
               </div>
 
-              <div class=\"panel-card rounded-2xl p-5 space-y-4\"> 
-                <div class=\"flex items-center justify-between gap-2\">
-                  <h3 class=\"text-lg font-semibold text-white\">Run test</h3>
-                  <span class=\"rounded-full bg-slate-800/70 px-3 py-1 text-xs font-semibold text-slate-300 ring-1 ring-slate-700\">Quick launch</span>
+              <div class="panel-card rounded-2xl p-5 space-y-4">
+                <div class="flex items-center justify-between gap-2">
+                  <h3 class="text-lg font-semibold text-white">发起测试</h3>
+                  <span class="rounded-full bg-slate-800/70 px-3 py-1 text-xs font-semibold text-slate-300 ring-1 ring-slate-700">快速启动</span>
                 </div>
-                <div id=\"test-alert\" class=\"hidden rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100\"></div>
-                <div class=\"grid gap-3 sm:grid-cols-2\"> 
-                  <div class=\"space-y-2\">
-                    <label class=\"text-sm font-medium text-slate-200\">Source Node</label>
-                    <select id=\"src-select\" class=\"rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\"></select>
+                <div id="test-alert" class="hidden rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100"></div>
+                <div class="grid gap-3 sm:grid-cols-2">
+                  <div class="space-y-2">
+                    <label class="text-sm font-medium text-slate-200">源节点</label>
+                    <select id="src-select" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60"></select>
                   </div>
-                  <div class=\"space-y-2\">
-                    <label class=\"text-sm font-medium text-slate-200\">Destination Node</label>
-                    <select id=\"dst-select\" class=\"rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\"></select>
+                  <div class="space-y-2">
+                    <label class="text-sm font-medium text-slate-200">目标节点</label>
+                    <select id="dst-select" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60"></select>
                   </div>
-                  <div class=\"space-y-2\">
-                    <label class=\"text-sm font-medium text-slate-200\">Protocol</label>
-                    <select id=\"protocol\" class=\"rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\"><option value=\"tcp\">TCP</option><option value=\"udp\">UDP</option></select>
+                  <div class="space-y-2">
+                    <label class="text-sm font-medium text-slate-200">协议</label>
+                    <select id="protocol" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60"><option value="tcp">TCP</option><option value="udp">UDP</option></select>
                   </div>
-                  <div class=\"space-y-2\">
-                    <label class=\"text-sm font-medium text-slate-200\">Duration (seconds)</label>
-                    <input id=\"duration\" type=\"number\" value=\"10\" class=\"rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\" />
+                  <div class="space-y-2">
+                    <label class="text-sm font-medium text-slate-200">时长（秒）</label>
+                    <input id="duration" type="number" value="10" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
                   </div>
-                  <div class=\"space-y-2\">
-                    <label class=\"text-sm font-medium text-slate-200\">Parallel Streams</label>
-                    <input id=\"parallel\" type=\"number\" value=\"1\" class=\"rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\" />
+                  <div class="space-y-2">
+                    <label class="text-sm font-medium text-slate-200">并行数</label>
+                    <input id="parallel" type="number" value="1" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
                   </div>
-                  <div class=\"space-y-2\">
-                    <label class=\"text-sm font-medium text-slate-200\">Port</label>
-                    <input id=\"test-port\" type=\"number\" value=\"5201\" class=\"rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\" />
+                  <div class="space-y-2">
+                    <label class="text-sm font-medium text-slate-200">端口</label>
+                    <input id="test-port" type="number" value="5201" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
                   </div>
                 </div>
-                <button id=\"run-test\" class=\"w-full rounded-xl bg-gradient-to-r from-sky-500 to-indigo-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-sky-500/20 transition hover:scale-[1.01] hover:shadow-xl\">Start test</button>
+                <button id="run-test" class="w-full rounded-xl bg-gradient-to-r from-sky-500 to-indigo-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-sky-500/20 transition hover:scale-[1.01] hover:shadow-xl">开始测试</button>
               </div>
             </div>
 
-            <div class=\"grid gap-4\"> 
-              <div class=\"panel-card rounded-2xl p-5 space-y-4\"> 
-                <div class=\"flex flex-wrap items-center justify-between gap-3\"> 
+            <div class="grid gap-4">
+              <div class="panel-card rounded-2xl p-5 space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <h3 class=\"text-lg font-semibold text-white\">Nodes</h3>
-                    <p class=\"text-sm text-slate-400\">Live agent status with detected iperf ports.</p>
+                    <h3 class="text-lg font-semibold text-white">节点列表</h3>
+                    <p class="text-sm text-slate-400">实时状态与检测到的 iperf 端口。</p>
                   </div>
-                  <button data-refresh-nodes class=\"rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200\">Refresh</button>
+                  <button data-refresh-nodes class="rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200">刷新</button>
                 </div>
-                <div id=\"nodes-list\" class=\"text-sm text-slate-400 space-y-3\">No nodes yet.</div>
+                <div id="nodes-list" class="text-sm text-slate-400 space-y-3">暂无节点。</div>
               </div>
             </div>
 
-            <div class=\"grid gap-4\"> 
-              <div class=\"panel-card rounded-2xl p-5 space-y-4\"> 
-                <div class=\"flex flex-wrap items-center justify-between gap-3\"> 
+            <div class="grid gap-4">
+              <div class="panel-card rounded-2xl p-5 space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <h3 class=\"text-lg font-semibold text-white\">Recent tests</h3>
-                    <p class=\"text-sm text-slate-400\">Lightweight summary with expandable raw iperf output.</p>
+                    <h3 class="text-lg font-semibold text-white">最近测试</h3>
+                    <p class="text-sm text-slate-400">按时间倒序展示，可展开查看原始输出。</p>
                   </div>
-                  <div class=\"flex flex-wrap items-center gap-2\"> 
-                    <button id=\"refresh-tests\" class=\"rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200\">Refresh</button>
-                    <button id=\"delete-all-tests\" class=\"rounded-lg border border-rose-500/40 bg-rose-500/15 px-4 py-2 text-sm font-semibold text-rose-100 shadow-sm transition hover:bg-rose-500/25\">Delete All</button>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <button id="refresh-tests" class="rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200">刷新</button>
+                    <button id="delete-all-tests" class="rounded-lg border border-rose-500/40 bg-rose-500/15 px-4 py-2 text-sm font-semibold text-rose-100 shadow-sm transition hover:bg-rose-500/25">清空记录</button>
                   </div>
                 </div>
-                <div id=\"tests-list\" class=\"text-sm text-slate-400 space-y-3\">No tests yet.</div>
+                <div id="tests-list" class="text-sm text-slate-400 space-y-3">暂无测试记录。</div>
               </div>
-            </div>
-
-            <div id=\"scheduled-tests-section\" class=\"panel-card rounded-2xl p-5 space-y-4\">
-              <div class=\"flex flex-wrap items-center justify-between gap-3\"> 
-                <div>
-                  <h3 class=\"text-lg font-semibold text-white\">Scheduled tests</h3>
-                  <p class=\"text-sm text-slate-400\">Capture recurring test intents for future automation.</p>
-                </div>
-                <button id=\"refresh-schedules\" class=\"rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200\">Refresh</button>
-              </div>
-              <div class=\"grid gap-3 md:grid-cols-2 lg:grid-cols-3\"> 
-                <div class=\"space-y-2\"> 
-                  <label class=\"text-sm font-medium text-slate-200\">Schedule Name</label>
-                  <input id=\"schedule-name\" placeholder=\"nightly tcp baseline\" class=\"rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\" />
-                </div>
-                <div class=\"space-y-2\"> 
-                  <label class=\"text-sm font-medium text-slate-200\">Source Node</label>
-                  <select id=\"schedule-src\" class=\"rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\"></select>
-                </div>
-                <div class=\"space-y-2\"> 
-                  <label class=\"text-sm font-medium text-slate-200\">Destination Node</label>
-                  <select id=\"schedule-dst\" class=\"rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\"></select>
-                </div>
-                <div class=\"space-y-2\"> 
-                  <label class=\"text-sm font-medium text-slate-200\">Protocol</label>
-                  <select id=\"schedule-protocol\" class=\"rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\"><option value=\"tcp\">TCP</option><option value=\"udp\">UDP</option></select>
-                </div>
-                <div class=\"space-y-2\"> 
-                  <label class=\"text-sm font-medium text-slate-200\">Duration (s)</label>
-                  <input id=\"schedule-duration\" type=\"number\" value=\"10\" class=\"rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\" />
-                </div>
-                <div class=\"space-y-2\"> 
-                  <label class=\"text-sm font-medium text-slate-200\">Parallel Streams</label>
-                  <input id=\"schedule-parallel\" type=\"number\" value=\"1\" class=\"rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\" />
-                </div>
-                <div class=\"space-y-2\"> 
-                  <label class=\"text-sm font-medium text-slate-200\">Port</label>
-                  <input id=\"schedule-port\" type=\"number\" value=\"5201\" class=\"rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\" />
-                </div>
-                <div class=\"space-y-2\"> 
-                  <label class=\"text-sm font-medium text-slate-200\">Interval (minutes)</label>
-                  <input id=\"schedule-interval\" type=\"number\" value=\"60\" class=\"rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\" />
-                </div>
-                <div class=\"space-y-2\"> 
-                  <label class=\"text-sm font-medium text-slate-200\">Notes (optional)</label>
-                  <input id=\"schedule-notes\" placeholder=\"for weekly report\" class=\"rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\" />
-                </div>
-              </div>
-              <button id=\"save-schedule\" class=\"w-full rounded-xl bg-gradient-to-r from-emerald-500 to-sky-500 px-4 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-500/20 transition hover:scale-[1.01] hover:shadow-xl\">Save schedule</button>
-              <div id=\"schedules-list\" class=\"text-sm text-slate-400 space-y-3\">No schedules yet.</div>
             </div>
           </div>
         </div>
       </div>
     </div>
   </div>
-  
-  <script>
+
+    <script>
     const loginCard = document.getElementById('login-card');
     const appCard = document.getElementById('app-card');
     const loginAlert = document.getElementById('login-alert');
@@ -561,65 +511,50 @@ def _login_html() -> str:
     const importConfigsBtn = document.getElementById('import-configs');
     const exportConfigsBtn = document.getElementById('export-configs');
     const configFileInput = document.getElementById('config-file-input');
-    const scheduledTestsSection = document.getElementById('scheduled-tests-section');
-    const jumpSchedulesBtn = document.getElementById('jump-schedules');
 
-      const nodeName = document.getElementById('node-name');
-      const nodeIp = document.getElementById('node-ip');
-      const nodePort = document.getElementById('node-port');
-      const nodeIperf = document.getElementById('node-iperf-port');
-      const nodeDesc = document.getElementById('node-desc');
-      const nodesList = document.getElementById('nodes-list');
-      const testsList = document.getElementById('tests-list');
-      const schedulesList = document.getElementById('schedules-list');
-      const saveNodeBtn = document.getElementById('save-node');
-      const saveScheduleBtn = document.getElementById('save-schedule');
-      const srcSelect = document.getElementById('src-select');
-      const dstSelect = document.getElementById('dst-select');
-      const scheduleSrcSelect = document.getElementById('schedule-src');
-      const scheduleDstSelect = document.getElementById('schedule-dst');
-      const scheduleProtocol = document.getElementById('schedule-protocol');
-      const scheduleDuration = document.getElementById('schedule-duration');
-      const scheduleParallel = document.getElementById('schedule-parallel');
-      const schedulePort = document.getElementById('schedule-port');
-      const scheduleInterval = document.getElementById('schedule-interval');
-      const scheduleNotes = document.getElementById('schedule-notes');
-      const scheduleName = document.getElementById('schedule-name');
-      const addNodeAlert = document.getElementById('add-node-alert');
-      const testAlert = document.getElementById('test-alert');
-      const deleteAllTestsBtn = document.getElementById('delete-all-tests');
-      const testPortInput = document.getElementById('test-port');
-      let nodeCache = [];
-      let editingNodeId = null;
-      const styles = {
-        rowCard: 'rounded-xl border border-slate-800/70 bg-slate-900/60 p-4 shadow-sm shadow-black/30 space-y-3',
-        inline: 'flex flex-wrap items-center gap-3',
-        badgeOnline: 'inline-flex items-center gap-2 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300 ring-1 ring-emerald-500/40',
-        badgeOffline: 'inline-flex items-center gap-2 rounded-full bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-200 ring-1 ring-rose-500/40',
-        pillInfo: 'inline-flex items-center justify-center gap-2 rounded-lg bg-sky-500/15 px-3 py-2 text-xs font-semibold text-sky-100 ring-1 ring-sky-500/40 transition hover:bg-sky-500/25',
-        pillDanger: 'inline-flex items-center justify-center gap-2 rounded-lg bg-rose-500/15 px-3 py-2 text-xs font-semibold text-rose-100 ring-1 ring-rose-500/40 transition hover:bg-rose-500/25',
-        pillWarn: 'inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500/15 px-3 py-2 text-xs font-semibold text-amber-100 ring-1 ring-amber-500/40 transition hover:bg-amber-500/25',
-        pillMuted: 'inline-flex items-center justify-center gap-2 rounded-lg bg-slate-800/70 px-3 py-2 text-xs font-semibold text-slate-200 ring-1 ring-slate-700',
-        textMuted: 'text-slate-400 text-sm',
-        textMutedSm: 'text-slate-500 text-xs',
-        table: 'w-full border-collapse overflow-hidden rounded-xl border border-slate-800/60 bg-slate-900/50 text-sm text-slate-100',
-        tableHeader: 'bg-slate-900/70 text-slate-300',
-        tableCell: 'border-b border-slate-800 px-3 py-2',
-        codeBlock: 'overflow-auto rounded-lg border border-slate-800 bg-slate-950/80 p-3 text-xs text-slate-200 shadow-inner shadow-black/30',
-      };
-
+    const nodeName = document.getElementById('node-name');
+    const nodeIp = document.getElementById('node-ip');
+    const nodePort = document.getElementById('node-port');
+    const nodeIperf = document.getElementById('node-iperf-port');
+    const nodeDesc = document.getElementById('node-desc');
+    const nodesList = document.getElementById('nodes-list');
+    const testsList = document.getElementById('tests-list');
+    const saveNodeBtn = document.getElementById('save-node');
+    const srcSelect = document.getElementById('src-select');
+    const dstSelect = document.getElementById('dst-select');
+    const addNodeAlert = document.getElementById('add-node-alert');
+    const testAlert = document.getElementById('test-alert');
+    const deleteAllTestsBtn = document.getElementById('delete-all-tests');
+    const testPortInput = document.getElementById('test-port');
+    let nodeCache = [];
+    let editingNodeId = null;
+    const styles = {
+      rowCard: 'rounded-xl border border-slate-800/70 bg-slate-900/60 p-4 shadow-sm shadow-black/30 space-y-3',
+      inline: 'flex flex-wrap items-center gap-3',
+      badgeOnline: 'inline-flex items-center gap-2 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300 ring-1 ring-emerald-500/40',
+      badgeOffline: 'inline-flex items-center gap-2 rounded-full bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-200 ring-1 ring-rose-500/40',
+      pillInfo: 'inline-flex items-center justify-center gap-2 rounded-lg bg-sky-500/15 px-3 py-2 text-xs font-semibold text-sky-100 ring-1 ring-sky-500/40 transition hover:bg-sky-500/25',
+      pillDanger: 'inline-flex items-center justify-center gap-2 rounded-lg bg-rose-500/15 px-3 py-2 text-xs font-semibold text-rose-100 ring-1 ring-rose-500/40 transition hover:bg-rose-500/25',
+      pillWarn: 'inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500/15 px-3 py-2 text-xs font-semibold text-amber-100 ring-1 ring-amber-500/40 transition hover:bg-amber-500/25',
+      pillMuted: 'inline-flex items-center justify-center gap-2 rounded-lg bg-slate-800/70 px-3 py-2 text-xs font-semibold text-slate-200 ring-1 ring-slate-700',
+      textMuted: 'text-slate-400 text-sm',
+      textMutedSm: 'text-slate-500 text-xs',
+      table: 'w-full border-collapse overflow-hidden rounded-xl border border-slate-800/60 bg-slate-900/50 text-sm text-slate-100',
+      tableHeader: 'bg-slate-900/70 text-slate-300',
+      tableCell: 'border-b border-slate-800 px-3 py-2',
+      codeBlock: 'overflow-auto rounded-lg border border-slate-800 bg-slate-950/80 p-3 text-xs text-slate-200 shadow-inner shadow-black/30',
+    };
 
     function show(el) { el.classList.remove('hidden'); }
     function hide(el) { el.classList.add('hidden'); }
     function setAlert(el, message) { el.textContent = message; show(el); }
     function clearAlert(el) { el.textContent = ''; hide(el); }
 
-
     async function exportAgentConfigs() {
       clearAlert(configAlert);
       const res = await fetch('/agent-configs/export');
       if (!res.ok) {
-        setAlert(configAlert, 'Failed to export agent configs.');
+        setAlert(configAlert, '导出配置失败。');
         return;
       }
 
@@ -634,7 +569,6 @@ def _login_html() -> str:
       URL.revokeObjectURL(url);
     }
 
-
     async function importAgentConfigs(file) {
       clearAlert(configAlert);
       if (!file) return;
@@ -643,7 +577,7 @@ def _login_html() -> str:
       try {
         payload = JSON.parse(await file.text());
       } catch (err) {
-        setAlert(configAlert, 'Invalid JSON file.');
+        setAlert(configAlert, 'JSON 文件无效。');
         return;
       }
 
@@ -655,21 +589,13 @@ def _login_html() -> str:
 
       if (!res.ok) {
         const msg = await res.text();
-        setAlert(configAlert, msg || 'Failed to import agent configs.');
+        setAlert(configAlert, msg || '导入配置失败。');
         return;
       }
 
       const imported = await res.json();
-      setAlert(configAlert, `Imported ${imported.length} agent configs from file.`);
+      setAlert(configAlert, `已导入 ${imported.length} 条代理配置。`);
     }
-
-
-    function scrollToSchedules() {
-      if (scheduledTestsSection) {
-        scheduledTestsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
-    }
-
 
     function resetNodeForm() {
       nodeName.value = '';
@@ -678,18 +604,17 @@ def _login_html() -> str:
       nodeIperf.value = 5201;
       nodeDesc.value = '';
       editingNodeId = null;
-      saveNodeBtn.textContent = 'Save Node';
+      saveNodeBtn.textContent = '保存节点';
     }
-
 
     async function removeNode(nodeId) {
       clearAlert(addNodeAlert);
-      const confirmDelete = confirm('Delete this node and any related tests?');
+      const confirmDelete = confirm('确定删除该节点并清理相关测试记录吗？');
       if (!confirmDelete) return;
 
       const res = await fetch(`/nodes/${nodeId}`, { method: 'DELETE' });
       if (!res.ok) {
-        setAlert(addNodeAlert, 'Failed to delete node.');
+        setAlert(addNodeAlert, '删除节点失败。');
         return;
       }
 
@@ -701,21 +626,19 @@ def _login_html() -> str:
       await refreshTests();
     }
 
-
     async function checkAuth() {
       const res = await fetch('/auth/status');
       const data = await res.json();
-        if (data.authenticated) {
-          loginCard.classList.add('hidden');
-          appCard.classList.remove('hidden');
-          authHint.textContent = 'Authenticated. Use the controls below to manage nodes and run tests.';
-          await refreshNodes();
-          await refreshTests();
-          await refreshSchedules();
-        } else {
-          appCard.classList.add('hidden');
-          loginCard.classList.remove('hidden');
-        }
+      if (data.authenticated) {
+        loginCard.classList.add('hidden');
+        appCard.classList.remove('hidden');
+        authHint.textContent = '已通过认证，可管理节点与测速任务。';
+        await refreshNodes();
+        await refreshTests();
+      } else {
+        appCard.classList.add('hidden');
+        loginCard.classList.remove('hidden');
+      }
     }
 
     async function login() {
@@ -726,12 +649,11 @@ def _login_html() -> str:
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password })
       });
-      if (res.ok) {
-        document.getElementById('password').value = '';
-        await checkAuth();
-      } else {
-        setAlert(loginAlert, 'Invalid password.');
+      if (!res.ok) {
+        setAlert(loginAlert, '密码错误或未配置。');
+        return;
       }
+      await checkAuth();
     }
 
     async function logout() {
@@ -740,13 +662,72 @@ def _login_html() -> str:
     }
 
     function syncTestPort() {
-      const selected = nodeCache.find((n) => n.id === Number(dstSelect.value));
-      if (selected && testPortInput) {
-        const preferredPort = selected.detected_iperf_port || selected.iperf_port || selected.agent_port || 5201;
-        testPortInput.value = preferredPort;
+      const dst = nodeCache.find((n) => n.id === Number(dstSelect.value));
+      if (dst) {
+        const detected = dst.detected_iperf_port || dst.iperf_port;
+        testPortInput.value = detected || 5201;
       }
     }
 
+    async function refreshNodes() {
+      const res = await fetch('/nodes/status');
+      const nodes = await res.json();
+      nodeCache = nodes;
+      nodesList.innerHTML = '';
+      srcSelect.innerHTML = '';
+      dstSelect.innerHTML = '';
+
+      if (!nodes.length) {
+        nodesList.textContent = '暂无节点。';
+        return;
+      }
+
+      nodes.forEach((node) => {
+        const statusBadge = node.status === 'online'
+          ? `<span class="${styles.badgeOnline}"><span class=\"h-2 w-2 rounded-full bg-emerald-400\"></span> 在线</span>`
+          : `<span class="${styles.badgeOffline}"><span class=\"h-2 w-2 rounded-full bg-rose-400\"></span> 离线</span>`;
+
+        const ports = node.detected_iperf_port ? `${node.detected_iperf_port}` : `${node.iperf_port}`;
+
+        const item = document.createElement('div');
+        item.className = styles.rowCard;
+        item.innerHTML = `
+          <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div class="flex flex-wrap items-center gap-2">${statusBadge}<span class="text-base font-semibold text-white">${node.name}</span></div>
+              <p class="${styles.textMuted}">${node.ip}:${node.agent_port} · iperf ${ports}${node.description ? ' · ' + node.description : ''}</p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button class="${styles.pillInfo}" onclick="editNode(${node.id})">编辑</button>
+              <button class="${styles.pillDanger}" onclick="removeNode(${node.id})">删除</button>
+            </div>
+          </div>
+        `;
+        nodesList.appendChild(item);
+
+        const optionA = document.createElement('option');
+        optionA.value = node.id;
+        optionA.textContent = `${node.name} (${node.ip} | iperf ${ports})`;
+        srcSelect.appendChild(optionA);
+
+        const optionB = optionA.cloneNode(true);
+        dstSelect.appendChild(optionB);
+      });
+
+      syncTestPort();
+    }
+
+    function editNode(nodeId) {
+      const node = nodeCache.find((n) => n.id === nodeId);
+      if (!node) return;
+      nodeName.value = node.name;
+      nodeIp.value = node.ip;
+      nodePort.value = node.agent_port;
+      nodeIperf.value = node.iperf_port;
+      nodeDesc.value = node.description || '';
+      editingNodeId = nodeId;
+      saveNodeBtn.textContent = '保存修改';
+    }
 
     async function saveNodeInline(nodeId, payload) {
       const res = await fetch(`/nodes/${nodeId}`, {
@@ -754,169 +735,178 @@ def _login_html() -> str:
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-
       if (!res.ok) {
-        setAlert(addNodeAlert, 'Failed to update node. Check the fields and try again.');
-        return false;
+        alert('保存失败，请检查字段。');
+        return;
       }
-      editingNodeId = null;
       await refreshNodes();
-      clearAlert(addNodeAlert);
-      return true;
     }
 
+    async function refreshTests() {
+      const res = await fetch('/tests');
+      const tests = await res.json();
+      if (!tests.length) {
+        testsList.textContent = '暂无测试记录。';
+        return;
+      }
+      testsList.innerHTML = '';
 
-    async function refreshNodes() {
-      const res = await fetch('/nodes/status');
-      nodeCache = await res.json();
-      srcSelect.innerHTML = '';
-      dstSelect.innerHTML = '';
-      scheduleSrcSelect.innerHTML = '';
-      scheduleDstSelect.innerHTML = '';
-      if (!nodeCache.length) {
-        nodesList.textContent = 'No nodes yet.';
+      const table = document.createElement('table');
+      table.className = styles.table;
+      const headerRow = document.createElement('tr');
+      headerRow.className = styles.tableHeader;
+      ['序号', '节点信息', '类型', 'TLS RTT (ms)', 'HTTP 延迟 (ms)', '平均速度 (Mbps)', '峰值速度 (Mbps)', '每秒连接', 'UDP 类型', '操作'].forEach((label) => {
+        const th = document.createElement('th');
+        th.textContent = label;
+        th.className = styles.tableCell + ' font-semibold';
+        headerRow.appendChild(th);
+      });
+      table.appendChild(headerRow);
+
+      const detailsContainer = document.createElement('div');
+      detailsContainer.className = 'flex flex-col gap-3 mt-3';
+      const detailBlocks = new Map();
+
+      const toggleDetail = (testId, btn) => {
+        const block = detailBlocks.get(testId);
+        if (!block) return;
+        const isHidden = block.classList.contains('hidden');
+        if (isHidden) {
+          block.classList.remove('hidden');
+          btn.textContent = '收起';
+        } else {
+          block.classList.add('hidden');
+          btn.textContent = '详情';
+        }
+      };
+
+      tests.slice().reverse().forEach((test) => {
+        const metrics = summarizeTestMetrics(test.raw_result || {});
+        const rateSummary = summarizeRateTable(test.raw_result || {});
+        const latencyValue = metrics.latencyMs !== undefined && metrics.latencyMs !== null ? metrics.latencyMs : null;
+        const jitterValue = metrics.jitterMs !== undefined && metrics.jitterMs !== null ? metrics.jitterMs : null;
+        const pathLabel = `${formatNodeLabel(test.src_node_id)} → ${formatNodeLabel(test.dst_node_id)}`;
+
+        const row = document.createElement('tr');
+        const cells = [
+          `#${test.id}`,
+          pathLabel,
+          test.protocol.toUpperCase(),
+          latencyValue !== null ? formatMetric(latencyValue) : 'N/A',
+          jitterValue !== null ? formatMetric(jitterValue) : 'N/A',
+          rateSummary.receiverRateMbps,
+          rateSummary.senderRateMbps,
+          test.params.parallel ?? 'N/A',
+          test.protocol.toLowerCase() === 'udp' ? 'UDP' : 'TCP',
+        ];
+        cells.forEach((value) => {
+          const td = document.createElement('td');
+          td.textContent = value;
+          td.className = styles.tableCell;
+          row.appendChild(td);
+        });
+
+        const actionTd = document.createElement('td');
+        actionTd.className = styles.tableCell;
+        const detailsBtn = document.createElement('button');
+        detailsBtn.textContent = '详情';
+        detailsBtn.className = styles.pillInfo;
+        detailsBtn.onclick = () => toggleDetail(test.id, detailsBtn);
+        const deleteBtn = document.createElement('button');
+        deleteBtn.textContent = '删除';
+        deleteBtn.className = styles.pillDanger + ' ml-2';
+        deleteBtn.onclick = () => deleteTestResult(test.id);
+        actionTd.appendChild(detailsBtn);
+        actionTd.appendChild(deleteBtn);
+        row.appendChild(actionTd);
+        table.appendChild(row);
+
+        const block = buildTestDetailsBlock(test, metrics, latencyValue, pathLabel);
+        detailBlocks.set(test.id, block);
+        detailsContainer.appendChild(block);
+      });
+
+      testsList.appendChild(table);
+      testsList.appendChild(detailsContainer);
+    }
+
+    async function deleteTestResult(testId) {
+      clearAlert(testAlert);
+      const res = await fetch(`/tests/${testId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        setAlert(testAlert, '删除记录失败。');
+        return;
+      }
+      await refreshTests();
+    }
+
+    async function clearAllTests() {
+      clearAlert(testAlert);
+      const res = await fetch('/tests', { method: 'DELETE' });
+      if (!res.ok) {
+        setAlert(testAlert, '清空失败。');
+        return;
+      }
+      await refreshTests();
+    }
+
+    async function saveNode() {
+      clearAlert(addNodeAlert);
+      const payload = {
+        name: nodeName.value,
+        ip: nodeIp.value,
+        agent_port: Number(nodePort.value || 8000),
+        iperf_port: Number(nodeIperf.value || 5201),
+        description: nodeDesc.value
+      };
+
+      const method = editingNodeId ? 'PUT' : 'POST';
+      const url = editingNodeId ? `/nodes/${editingNodeId}` : '/nodes';
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const msg = editingNodeId ? '更新节点失败，请检查字段。' : '保存节点失败，请检查字段。';
+        setAlert(addNodeAlert, msg);
         return;
       }
 
-      nodesList.innerHTML = '';
-      nodeCache.forEach((node) => {
-        const server = node.server_running ? 'running' : 'stopped';
-        const isEditing = editingNodeId === node.id;
-        const item = document.createElement('div');
-        item.className = styles.rowCard;
+      resetNodeForm();
+      await refreshNodes();
+      clearAlert(addNodeAlert);
+    }
 
-        const detectedPort = node.detected_iperf_port;
-        const portLabel = detectedPort && detectedPort !== node.iperf_port
-          ? `iperf ${node.iperf_port} • agent reports ${detectedPort}`
-          : `iperf ${node.iperf_port || detectedPort || 'n/a'}`;
+    async function runTest() {
+      clearAlert(testAlert);
+      const selectedDst = nodeCache.find((n) => n.id === Number(dstSelect.value));
+      const payload = {
+        src_node_id: Number(srcSelect.value),
+        dst_node_id: Number(dstSelect.value),
+        protocol: document.getElementById('protocol').value,
+        duration: Number(document.getElementById('duration').value),
+        parallel: Number(document.getElementById('parallel').value),
+        port: Number(testPortInput.value || (selectedDst ? (selectedDst.detected_iperf_port || selectedDst.iperf_port) : 5201))
+      };
 
-        const header = document.createElement('div');
-        header.className = 'flex flex-col gap-3 md:flex-row md:items-center md:justify-between';
-        const info = document.createElement('div');
-        info.innerHTML = `<div class=\"text-base font-semibold text-white\">${node.name}</div>` +
-          `<div class=\"${styles.textMuted}\">${node.ip}:${node.agent_port} • ${portLabel}</div>` +
-          `<div class=\"${styles.textMutedSm}\">${node.description || 'No description'} · Server ${server}</div>`;
-        header.appendChild(info);
-
-        const actions = document.createElement('div');
-        actions.className = `${styles.inline} justify-end`;
-
-        const statusBadge = document.createElement('span');
-        statusBadge.className = node.status === 'online' ? styles.badgeOnline : styles.badgeOffline;
-        statusBadge.textContent = node.status;
-        actions.appendChild(statusBadge);
-
-        const editBtn = document.createElement('button');
-        editBtn.textContent = isEditing ? 'Editing' : 'Edit';
-        editBtn.disabled = isEditing;
-        editBtn.className = styles.pillInfo;
-        editBtn.onclick = () => { editingNodeId = node.id; refreshNodes(); };
-        actions.appendChild(editBtn);
-
-        const deleteBtn = document.createElement('button');
-        deleteBtn.textContent = 'Delete';
-        deleteBtn.className = styles.pillDanger;
-        deleteBtn.onclick = () => removeNode(node.id);
-        actions.appendChild(deleteBtn);
-
-        header.appendChild(actions);
-        item.appendChild(header);
-
-        if (detectedPort && detectedPort !== node.iperf_port) {
-          const warning = document.createElement('div');
-          warning.className = 'flex flex-wrap items-center gap-3 text-amber-200 text-sm';
-          warning.textContent = `Agent reports iperf port ${detectedPort}. Configured ${node.iperf_port || 'n/a'}.`;
-
-          const applyBtn = document.createElement('button');
-          applyBtn.className = styles.pillWarn;
-          applyBtn.textContent = 'Apply detected port';
-          applyBtn.onclick = () => saveNodeInline(node.id, { iperf_port: detectedPort });
-
-          warning.appendChild(applyBtn);
-          item.appendChild(warning);
-        }
-
-        if (isEditing) {
-          const form = document.createElement('div');
-          form.className = 'grid w-full grid-cols-1 gap-3 md:grid-cols-2';
-
-          const nameInput = document.createElement('input');
-          nameInput.className = 'rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100';
-          nameInput.value = node.name || '';
-          nameInput.placeholder = 'Name';
-
-          const ipInput = document.createElement('input');
-          ipInput.className = 'rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100';
-          ipInput.value = node.ip || '';
-          ipInput.placeholder = 'IP';
-
-          const agentPortInput = document.createElement('input');
-          agentPortInput.type = 'number';
-          agentPortInput.className = 'rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100';
-          agentPortInput.value = node.agent_port || 8000;
-          agentPortInput.placeholder = 'Agent port';
-
-          const iperfPortInput = document.createElement('input');
-          iperfPortInput.type = 'number';
-          iperfPortInput.className = 'rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100';
-          iperfPortInput.value = node.iperf_port || 5201;
-          iperfPortInput.placeholder = 'iperf port';
-
-          const descInput = document.createElement('input');
-          descInput.className = 'rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100';
-          descInput.value = node.description || '';
-          descInput.placeholder = 'Description';
-
-          form.appendChild(nameInput);
-          form.appendChild(ipInput);
-          form.appendChild(agentPortInput);
-          form.appendChild(iperfPortInput);
-          form.appendChild(descInput);
-          item.appendChild(form);
-
-          const buttonBar = document.createElement('div');
-          buttonBar.className = `${styles.inline} mt-2`;
-
-          const saveBtn = document.createElement('button');
-          saveBtn.textContent = 'Save';
-          saveBtn.className = 'rounded-lg bg-emerald-500/90 px-3 py-2 text-xs font-semibold text-slate-950 shadow-sm shadow-emerald-500/30 transition hover:bg-emerald-400';
-          saveBtn.onclick = () => saveNodeInline(node.id, {
-            name: nameInput.value,
-            ip: ipInput.value,
-            agent_port: Number(agentPortInput.value || 8000),
-            iperf_port: Number(iperfPortInput.value || 5201),
-            description: descInput.value,
-          });
-          buttonBar.appendChild(saveBtn);
-
-          const cancelBtn = document.createElement('button');
-          cancelBtn.textContent = 'Cancel';
-          cancelBtn.className = styles.pillMuted;
-          cancelBtn.onclick = () => { editingNodeId = null; refreshNodes(); };
-          buttonBar.appendChild(cancelBtn);
-
-          item.appendChild(buttonBar);
-        }
-
-        nodesList.appendChild(item);
-
-        const optionA = document.createElement('option');
-        optionA.value = node.id;
-        optionA.textContent = `${node.name} (${node.ip} | iperf ${node.iperf_port})`;
-        srcSelect.appendChild(optionA);
-
-        const optionB = document.createElement('option');
-        optionB.value = node.id;
-        optionB.textContent = `${node.name} (${node.ip} | iperf ${node.iperf_port})`;
-        dstSelect.appendChild(optionB);
-
-        const schedSrcOption = optionA.cloneNode(true);
-        const schedDstOption = optionB.cloneNode(true);
-        scheduleSrcSelect.appendChild(schedSrcOption);
-        scheduleDstSelect.appendChild(schedDstOption);
+      const res = await fetch('/tests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
       });
 
-      syncTestPort();
+      if (!res.ok) {
+        const details = await res.text();
+        const message = details ? `启动测试失败：${details}` : '启动测试失败，请确认节点存在且参数有效。';
+        setAlert(testAlert, message);
+        return;
+      }
+
+      await refreshTests();
+      clearAlert(testAlert);
     }
 
     function summarizeTestMetrics(raw) {
@@ -950,16 +940,15 @@ def _login_html() -> str:
         (senderStream && (senderStream.mean_rtt || senderStream.rtt)) ||
         (receiverStream && (receiverStream.mean_rtt || receiverStream.rtt));
       if (latencyMs && latencyMs > 1000) {
-        latencyMs = latencyMs / 1000; // convert microseconds to milliseconds if needed
+        latencyMs = latencyMs / 1000;
       }
 
       return { bitsPerSecond, jitterMs, lostPercent, latencyMs };
     }
 
-
     function summarizeRateTable(raw) {
-      const result = (raw && raw.iperf_result) || raw || {};
-      const end = result.end || {};
+      const result = raw && raw.iperf_result ? raw.iperf_result : raw;
+      const end = (result && result.end) || {};
       const sumSent = end.sum_sent || end.sum || {};
       const sumReceived = end.sum_received || end.sum || {};
 
@@ -972,26 +961,23 @@ def _login_html() -> str:
       };
     }
 
-
     function formatMetric(value, decimals = 2) {
       if (value === undefined || value === null || Number.isNaN(value)) return 'N/A';
       return Number(value).toFixed(decimals);
     }
 
-
     function formatNodeLabel(nodeId) {
       const node = nodeCache.find((n) => n.id === Number(nodeId));
       if (node && node.name) return node.name;
-      return `Node ${nodeId}`;
+      return `节点 ${nodeId}`;
     }
-
 
     function renderRawResult(raw) {
       const wrap = document.createElement('div');
       wrap.className = 'overflow-auto rounded-xl border border-slate-800/70 bg-slate-950/60 p-3';
 
       if (!raw) {
-        wrap.textContent = 'No raw result available.';
+        wrap.textContent = '无原始结果。';
         return wrap;
       }
 
@@ -1016,11 +1002,11 @@ def _login_html() -> str:
         summaryTable.appendChild(row);
       };
 
-      addSummaryRow('Status', raw.status || 'unknown');
-      addSummaryRow('Sender rate (Mbps)', sumSent.bits_per_second ? formatMetric(sumSent.bits_per_second / 1e6) : 'N/A');
-      addSummaryRow('Receiver rate (Mbps)', sumReceived.bits_per_second ? formatMetric(sumReceived.bits_per_second / 1e6) : 'N/A');
-      addSummaryRow('Sender congestion', end.sender_tcp_congestion || 'N/A');
-      addSummaryRow('Receiver congestion', end.receiver_tcp_congestion || 'N/A');
+      addSummaryRow('状态', raw.status || 'unknown');
+      addSummaryRow('发送速率 (Mbps)', sumSent.bits_per_second ? formatMetric(sumSent.bits_per_second / 1e6) : 'N/A');
+      addSummaryRow('接收速率 (Mbps)', sumReceived.bits_per_second ? formatMetric(sumReceived.bits_per_second / 1e6) : 'N/A');
+      addSummaryRow('发送拥塞控制', end.sender_tcp_congestion || 'N/A');
+      addSummaryRow('接收拥塞控制', end.receiver_tcp_congestion || 'N/A');
       wrap.appendChild(summaryTable);
 
       const intervals = result.intervals || [];
@@ -1036,7 +1022,7 @@ def _login_html() -> str:
       intervalTable.className = styles.table;
       const headerRow = document.createElement('tr');
       headerRow.className = styles.tableHeader;
-      ['Interval (s)', 'Rate (Mbps)', 'Retrans', 'RTT (ms)', 'CWND', 'Window'].forEach((label) => {
+      ['时间区间 (s)', '速率 (Mbps)', '重传', 'RTT (ms)', 'CWND', '窗口'].forEach((label) => {
         const th = document.createElement('th');
         th.textContent = label;
         th.className = styles.tableCell + ' font-semibold';
@@ -1044,7 +1030,7 @@ def _login_html() -> str:
       });
       intervalTable.appendChild(headerRow);
 
-      intervals.forEach((interval, idx) => {
+      intervals.forEach((interval) => {
         const stream = (interval.streams && interval.streams[0]) || interval.sum || {};
         const start = stream.start ?? 0;
         const endTime = stream.end ?? (stream.seconds ? start + stream.seconds : start);
@@ -1075,7 +1061,6 @@ def _login_html() -> str:
       return wrap;
     }
 
-
     function buildTestDetailsBlock(test, metrics, latencyValue, pathLabel) {
       const block = document.createElement('div');
       block.className = 'hidden rounded-xl border border-slate-800/60 bg-slate-900/60 p-3 shadow-inner shadow-black/20';
@@ -1085,15 +1070,15 @@ def _login_html() -> str:
       header.className = 'flex flex-col gap-3 md:flex-row md:items-center md:justify-between';
 
       const summary = document.createElement('div');
-      summary.innerHTML = `<strong>#${test.id} ${pathLabel}</strong> · ${test.protocol.toUpperCase()} · port ${test.params.port} · duration ${test.params.duration}s<br/>` +
-        `<span class=\"${styles.textMutedSm}\">Rate: ${metrics.bitsPerSecond ? formatMetric(metrics.bitsPerSecond / 1e6, 2) + ' Mbps' : 'N/A'} | Latency: ${latencyValue !== null ? formatMetric(latencyValue) + ' ms' : 'N/A'} | Loss: ${metrics.lostPercent !== undefined && metrics.lostPercent !== null ? formatMetric(metrics.lostPercent) + '%' : 'N/A'}</span>`;
+      summary.innerHTML = `<strong>#${test.id} ${pathLabel}</strong> · ${test.protocol.toUpperCase()} · 端口 ${test.params.port} · 时长 ${test.params.duration}s<br/>` +
+        `<span class="${styles.textMutedSm}">速率: ${metrics.bitsPerSecond ? formatMetric(metrics.bitsPerSecond / 1e6, 2) + ' Mbps' : 'N/A'} | 时延: ${latencyValue !== null ? formatMetric(latencyValue) + ' ms' : 'N/A'} | 丢包: ${metrics.lostPercent !== undefined && metrics.lostPercent !== null ? formatMetric(metrics.lostPercent) + '%' : 'N/A'}</span>`;
       header.appendChild(summary);
 
       const actions = document.createElement('div');
       actions.className = styles.inline;
 
       const deleteBtn = document.createElement('button');
-      deleteBtn.textContent = 'Delete';
+      deleteBtn.textContent = '删除';
       deleteBtn.className = styles.pillDanger;
       deleteBtn.onclick = () => deleteTestResult(test.id);
       actions.appendChild(deleteBtn);
@@ -1108,214 +1093,230 @@ def _login_html() -> str:
       return block;
     }
 
+    document.getElementById('login-btn').addEventListener('click', login);
+    document.getElementById('logout-btn').addEventListener('click', logout);
+    document.getElementById('run-test').addEventListener('click', runTest);
+    saveNodeBtn.addEventListener('click', saveNode);
 
-    async function deleteTestResult(testId) {
-      clearAlert(testAlert);
-      const res = await fetch(`/tests/${testId}`, { method: 'DELETE' });
-      if (!res.ok) {
-        setAlert(testAlert, 'Failed to delete test result.');
-        return;
-      }
-      await refreshTests();
+    importConfigsBtn.addEventListener('click', () => configFileInput.click());
+    exportConfigsBtn.addEventListener('click', exportAgentConfigs);
+    configFileInput.addEventListener('change', (e) => importAgentConfigs(e.target.files[0]));
+    document.getElementById('refresh-tests').addEventListener('click', refreshTests);
+    deleteAllTestsBtn.addEventListener('click', clearAllTests);
+
+    document.querySelectorAll('[data-refresh-nodes]').forEach((btn) => btn.addEventListener('click', refreshNodes));
+    dstSelect.addEventListener('change', syncTestPort);
+    document.getElementById('password').addEventListener('keyup', (e) => { if (e.key === 'Enter') login(); });
+
+    checkAuth();
+  </script>
+
+</body>
+</html>
+
+    """
+
+
+def _schedule_html() -> str:
+    return """
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>定时测试计划</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@radix-ui/themes@3.1.1/dist/css/themes.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            slate: {
+              950: '#020617',
+            },
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: radial-gradient(circle at 20% 20%, rgba(56,189,248,0.06), transparent 35%), radial-gradient(circle at 80% 0%, rgba(16,185,129,0.05), transparent 40%), #020617; color: #e2e8f0; margin: 0; padding: 0; }
+    .glass-card { border: 1px solid rgba(148, 163, 184, 0.15); background: rgba(15, 23, 42, 0.8); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35); backdrop-filter: blur(12px); }
+    .panel-card { border: 1px solid rgba(148, 163, 184, 0.18); background: rgba(15, 23, 42, 0.7); box-shadow: 0 12px 35px rgba(0, 0, 0, 0.25); backdrop-filter: blur(10px); }
+    .gradient-bar { background: linear-gradient(120deg, #22c55e 0%, #0ea5e9 35%, #a855f7 100%); height: 4px; border-radius: 999px; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div class="radix-themes min-h-screen" data-theme="dark">
+    <div class="relative mx-auto max-w-5xl px-6 py-10 lg:px-10">
+      <div class="absolute inset-0 -z-10 overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900/90 via-slate-950 to-slate-950 shadow-[0_30px_120px_rgba(0,0,0,0.55)]"></div>
+      <div class="relative z-10 space-y-6">
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p class="text-sm uppercase tracking-[0.25em] text-sky-300/80">iperf3 控制中心</p>
+            <h1 class="text-3xl font-bold text-white">定时测试计划</h1>
+            <p class="text-sm text-slate-400">集中管理计划任务，循环执行链路测试。</p>
+          </div>
+          <div class="flex gap-2">
+            <a href="/web" class="rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200">返回控制台</a>
+            <button id="logout-btn" class="rounded-lg border border-rose-500/40 bg-rose-500/15 px-4 py-2 text-sm font-semibold text-rose-100 shadow-sm transition hover:bg-rose-500/25">退出登录</button>
+          </div>
+        </div>
+
+        <div class="panel-card rounded-2xl p-5 space-y-4">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 class="text-lg font-semibold text-white">新增计划</h3>
+              <p class="text-sm text-slate-400">保存后即按设定间隔周期执行。</p>
+            </div>
+            <div class="flex gap-2">
+              <button id="refresh-schedules" class="rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200">刷新列表</button>
+            </div>
+          </div>
+          <div id="schedule-alert" class="hidden rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100"></div>
+          <div class="grid gap-3 md:grid-cols-2">
+            <div class="space-y-2">
+              <label class="text-sm font-medium text-slate-200">计划名称</label>
+              <input id="schedule-name" placeholder="夜间基线" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+            </div>
+            <div class="space-y-2">
+              <label class="text-sm font-medium text-slate-200">协议</label>
+              <select id="schedule-protocol" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60"><option value="tcp">TCP</option><option value="udp">UDP</option></select>
+            </div>
+            <div class="space-y-2">
+              <label class="text-sm font-medium text-slate-200">源节点</label>
+              <select id="schedule-src" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60"></select>
+            </div>
+            <div class="space-y-2">
+              <label class="text-sm font-medium text-slate-200">目标节点</label>
+              <select id="schedule-dst" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60"></select>
+            </div>
+            <div class="space-y-2">
+              <label class="text-sm font-medium text-slate-200">时长（秒）</label>
+              <input id="schedule-duration" type="number" value="10" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+            </div>
+            <div class="space-y-2">
+              <label class="text-sm font-medium text-slate-200">并行数</label>
+              <input id="schedule-parallel" type="number" value="1" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+            </div>
+            <div class="space-y-2">
+              <label class="text-sm font-medium text-slate-200">端口</label>
+              <input id="schedule-port" type="number" value="5201" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+            </div>
+            <div class="space-y-2">
+              <label class="text-sm font-medium text-slate-200">间隔（分钟）</label>
+              <input id="schedule-interval" type="number" value="60" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+            </div>
+            <div class="space-y-2 md:col-span-2">
+              <label class="text-sm font-medium text-slate-200">备注（可选）</label>
+              <input id="schedule-notes" placeholder="例如：日报带宽基线" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+            </div>
+          </div>
+          <button id="save-schedule" class="w-full rounded-xl bg-gradient-to-r from-emerald-500 to-sky-500 px-4 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-500/20 transition hover:scale-[1.01] hover:shadow-xl">保存计划</button>
+        </div>
+
+        <div class="panel-card rounded-2xl p-5 space-y-4">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 class="text-lg font-semibold text-white">计划列表</h3>
+              <p class="text-sm text-slate-400">展示已保存的定时测试。</p>
+            </div>
+          </div>
+          <div id="schedules-list" class="text-sm text-slate-400 space-y-3">暂无计划。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+    <script>
+    const scheduleAlert = document.getElementById('schedule-alert');
+    const schedulesList = document.getElementById('schedules-list');
+    const scheduleSrcSelect = document.getElementById('schedule-src');
+    const scheduleDstSelect = document.getElementById('schedule-dst');
+    const scheduleProtocol = document.getElementById('schedule-protocol');
+    const scheduleDuration = document.getElementById('schedule-duration');
+    const scheduleParallel = document.getElementById('schedule-parallel');
+    const schedulePort = document.getElementById('schedule-port');
+    const scheduleInterval = document.getElementById('schedule-interval');
+    const scheduleNotes = document.getElementById('schedule-notes');
+    const scheduleName = document.getElementById('schedule-name');
+    const logoutBtn = document.getElementById('logout-btn');
+    const saveScheduleBtn = document.getElementById('save-schedule');
+    const refreshSchedulesBtn = document.getElementById('refresh-schedules');
+    let nodeCache = [];
+
+    const styles = {
+      rowCard: 'rounded-xl border border-slate-800/70 bg-slate-900/60 p-4 shadow-sm shadow-black/30 space-y-3',
+      inline: 'flex flex-wrap items-center gap-3',
+      pillInfo: 'inline-flex items-center justify-center gap-2 rounded-lg bg-sky-500/15 px-3 py-2 text-xs font-semibold text-sky-100 ring-1 ring-sky-500/40 transition hover:bg-sky-500/25',
+      pillDanger: 'inline-flex items-center justify-center gap-2 rounded-lg bg-rose-500/15 px-3 py-2 text-xs font-semibold text-rose-100 ring-1 ring-rose-500/40 transition hover:bg-rose-500/25',
+      textMuted: 'text-slate-400 text-sm',
+      textMutedSm: 'text-slate-500 text-xs',
+    };
+
+    function setAlert(el, message) { el.textContent = message; el.classList.remove('hidden'); }
+    function clearAlert(el) { el.textContent = ''; el.classList.add('hidden'); }
+
+    async function logout() {
+      await fetch('/auth/logout', { method: 'POST' });
+      window.location.href = '/web';
     }
 
-
-    async function clearAllTests() {
-      clearAlert(testAlert);
-      const res = await fetch('/tests', { method: 'DELETE' });
-      if (!res.ok) {
-        setAlert(testAlert, 'Failed to delete all tests.');
-        return;
+    async function checkAuth() {
+      const res = await fetch('/auth/status');
+      const data = await res.json();
+      if (!data.authenticated) {
+        window.location.href = '/web';
       }
-      await refreshTests();
     }
 
+    async function refreshNodes() {
+      const res = await fetch('/nodes/status');
+      const nodes = await res.json();
+      nodeCache = nodes;
+      scheduleSrcSelect.innerHTML = '';
+      scheduleDstSelect.innerHTML = '';
 
-    async function refreshTests() {
-      const res = await fetch('/tests');
-      const tests = await res.json();
-      if (!tests.length) {
-        testsList.textContent = 'No tests yet.';
-        return;
-      }
-      testsList.innerHTML = '';
-
-      const summaryTable = document.createElement('table');
-      summaryTable.className = styles.table;
-      const headerRow = document.createElement('tr');
-      headerRow.className = styles.tableHeader;
-      ['#', 'Path', 'Protocol', 'Port', 'Duration (s)', 'Sender rate (Mbps)', 'Receiver rate (Mbps)', 'Latency (ms)', 'Loss %', 'Status', 'Actions'].forEach((label) => {
-        const th = document.createElement('th');
-        th.textContent = label;
-        th.className = styles.tableCell + ' font-semibold';
-        headerRow.appendChild(th);
+      nodes.forEach((node) => {
+        const optionA = document.createElement('option');
+        optionA.value = node.id;
+        optionA.textContent = `${node.name} (${node.ip} | iperf ${node.detected_iperf_port || node.iperf_port})`;
+        scheduleSrcSelect.appendChild(optionA);
+        scheduleDstSelect.appendChild(optionA.cloneNode(true));
       });
-      summaryTable.appendChild(headerRow);
-
-      const detailsContainer = document.createElement('div');
-      detailsContainer.className = 'flex flex-col gap-3 mt-3';
-
-      const detailBlocks = new Map();
-
-      const toggleDetail = (testId, btn) => {
-        const block = detailBlocks.get(testId);
-        if (!block) return;
-        const isHidden = block.classList.contains('hidden');
-        if (isHidden) {
-          block.classList.remove('hidden');
-          btn.textContent = 'Hide';
-        } else {
-          block.classList.add('hidden');
-          btn.textContent = 'Details';
-        }
-      };
-
-      tests.slice().reverse().forEach((test) => {
-        const metrics = summarizeTestMetrics(test.raw_result || {});
-        const rateSummary = summarizeRateTable(test.raw_result || {});
-        const latencyValue = metrics.latencyMs !== undefined && metrics.latencyMs !== null ? metrics.latencyMs : null;
-        const pathLabel = `${formatNodeLabel(test.src_node_id)} → ${formatNodeLabel(test.dst_node_id)}`;
-
-        const row = document.createElement('tr');
-        [
-          `#${test.id}`,
-          pathLabel,
-          test.protocol.toUpperCase(),
-          test.params.port,
-          test.params.duration,
-          rateSummary.senderRateMbps,
-          rateSummary.receiverRateMbps,
-          latencyValue !== null ? formatMetric(latencyValue) : 'N/A',
-          metrics.lostPercent !== undefined && metrics.lostPercent !== null ? formatMetric(metrics.lostPercent) : 'N/A',
-          rateSummary.status,
-        ].forEach((value) => {
-          const td = document.createElement('td');
-          td.textContent = value;
-          td.className = styles.tableCell;
-          row.appendChild(td);
-        });
-
-        const actionTd = document.createElement('td');
-        const detailsBtn = document.createElement('button');
-        detailsBtn.textContent = 'Details';
-        detailsBtn.className = styles.pillInfo;
-        detailsBtn.onclick = () => toggleDetail(test.id, detailsBtn);
-        actionTd.appendChild(detailsBtn);
-        actionTd.className = styles.tableCell;
-        row.appendChild(actionTd);
-        summaryTable.appendChild(row);
-
-        const block = buildTestDetailsBlock(test, metrics, latencyValue, pathLabel);
-        detailBlocks.set(test.id, block);
-        detailsContainer.appendChild(block);
-      });
-
-      testsList.appendChild(summaryTable);
-      testsList.appendChild(detailsContainer);
     }
-
-
-    async function deleteSchedule(scheduleId) {
-      const res = await fetch(`/schedules/${scheduleId}`, { method: 'DELETE' });
-      if (!res.ok) {
-        setAlert(testAlert, 'Failed to delete schedule.');
-        return;
-      }
-      await refreshSchedules();
-    }
-
 
     async function refreshSchedules() {
       const res = await fetch('/schedules');
       const schedules = await res.json();
       if (!schedules.length) {
-        schedulesList.textContent = 'No schedules yet.';
+        schedulesList.textContent = '暂无计划。';
         return;
       }
       schedulesList.innerHTML = '';
       schedules.forEach((schedule) => {
         const row = document.createElement('div');
         row.className = styles.rowCard;
-        const info = document.createElement('div');
         const intervalMinutes = Math.round(schedule.interval_seconds / 60);
-        info.innerHTML = `<strong>${schedule.name}</strong> · ${schedule.protocol.toUpperCase()} every ${intervalMinutes}m<br/>` +
-          `<span class="${styles.textMutedSm}">${schedule.src_node_id} → ${schedule.dst_node_id}, duration ${schedule.duration}s, parallel ${schedule.parallel}, port ${schedule.port}${schedule.notes ? ' · ' + schedule.notes : ''}</span>`;
-        row.appendChild(info);
-
-        const actions = document.createElement('div');
-        actions.className = styles.inline;
-        const delBtn = document.createElement('button');
-        delBtn.textContent = 'Delete';
-        delBtn.className = styles.pillDanger;
-        delBtn.onclick = () => deleteSchedule(schedule.id);
-        actions.appendChild(delBtn);
-        row.appendChild(actions);
-
+        row.innerHTML = `
+          <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p class="font-semibold text-white">${schedule.name}</p>
+              <p class="${styles.textMuted}">${schedule.protocol.toUpperCase()} · ${schedule.src_node_id} → ${schedule.dst_node_id} · 每 ${intervalMinutes} 分钟 · 端口 ${schedule.port} · 时长 ${schedule.duration}s · 并行 ${schedule.parallel}${schedule.notes ? ' · ' + schedule.notes : ''}</p>
+            </div>
+            <div class="${styles.inline}">
+              <button class="${styles.pillDanger}" onclick="deleteSchedule(${schedule.id})">删除</button>
+            </div>
+          </div>
+        `;
         schedulesList.appendChild(row);
       });
     }
 
-    async function saveNode() {
-      clearAlert(addNodeAlert);
-      const payload = {
-        name: nodeName.value,
-        ip: nodeIp.value,
-        agent_port: Number(nodePort.value || 8000),
-        iperf_port: Number(nodeIperf.value || 5201),
-        description: nodeDesc.value
-      };
-
-      const method = editingNodeId ? 'PUT' : 'POST';
-      const url = editingNodeId ? `/nodes/${editingNodeId}` : '/nodes';
-
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      if (!res.ok) {
-        const msg = editingNodeId ? 'Failed to update node. Check the fields and try again.' : 'Failed to save node. Check the fields and try again.';
-        setAlert(addNodeAlert, msg);
-        return;
-      }
-
-      resetNodeForm();
-      await refreshNodes();
-      clearAlert(addNodeAlert);
-    }
-
-    async function runTest() {
-      clearAlert(testAlert);
-      const selectedDst = nodeCache.find((n) => n.id === Number(dstSelect.value));
-      const payload = {
-        src_node_id: Number(srcSelect.value),
-        dst_node_id: Number(dstSelect.value),
-        protocol: document.getElementById('protocol').value,
-        duration: Number(document.getElementById('duration').value),
-        parallel: Number(document.getElementById('parallel').value),
-        port: Number(testPortInput.value || (selectedDst ? (selectedDst.detected_iperf_port || selectedDst.iperf_port) : 5201))
-      };
-
-      const res = await fetch('/tests', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      if (!res.ok) {
-        const details = await res.text();
-        const message = details ? `Failed to start test. ${details}` : 'Failed to start test. Ensure nodes exist and parameters are valid.';
-        setAlert(testAlert, message);
-        return;
-      }
-
-      await refreshTests();
-      clearAlert(testAlert);
-    }
-
     async function saveSchedule() {
-      clearAlert(testAlert);
+      clearAlert(scheduleAlert);
       const payload = {
         name: scheduleName.value,
         src_node_id: Number(scheduleSrcSelect.value),
@@ -1335,50 +1336,52 @@ def _login_html() -> str:
       });
 
       if (!res.ok) {
-        setAlert(testAlert, 'Failed to save schedule. Check the fields and try again.');
+        const msg = await res.text();
+        setAlert(scheduleAlert, msg || '保存计划失败。');
         return;
       }
 
       scheduleName.value = '';
       scheduleNotes.value = '';
       await refreshSchedules();
-      clearAlert(testAlert);
     }
 
-      document.getElementById('login-btn').addEventListener('click', login);
-      document.getElementById('logout-btn').addEventListener('click', logout);
-      document.getElementById('save-node').addEventListener('click', saveNode);
-      document.getElementById('run-test').addEventListener('click', runTest);
-      saveScheduleBtn.addEventListener('click', saveSchedule);
-      if (exportConfigsBtn) exportConfigsBtn.addEventListener('click', exportAgentConfigs);
-      if (importConfigsBtn && configFileInput) {
-        importConfigsBtn.addEventListener('click', () => configFileInput.click());
-        configFileInput.addEventListener('change', (event) => {
-          const [file] = event.target.files || [];
-          if (file) importAgentConfigs(file);
-          event.target.value = '';
-        });
+    async function deleteSchedule(scheduleId) {
+      const res = await fetch(`/schedules/${scheduleId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        setAlert(scheduleAlert, '删除计划失败。');
+        return;
       }
-      if (jumpSchedulesBtn) jumpSchedulesBtn.addEventListener('click', scrollToSchedules);
-      document.querySelectorAll('[data-refresh-nodes]').forEach((btn) => btn.addEventListener('click', refreshNodes));
-      document.getElementById('refresh-tests').addEventListener('click', refreshTests);
-      document.getElementById('refresh-schedules').addEventListener('click', refreshSchedules);
-      deleteAllTestsBtn.addEventListener('click', clearAllTests);
-      dstSelect.addEventListener('change', syncTestPort);
-      document.getElementById('password').addEventListener('keyup', (e) => { if (e.key === 'Enter') login(); });
+      await refreshSchedules();
+    }
 
-      checkAuth();
-    </script>
-  </body>
+    logoutBtn.addEventListener('click', logout);
+    saveScheduleBtn.addEventListener('click', saveSchedule);
+    refreshSchedulesBtn.addEventListener('click', refreshSchedules);
+
+    checkAuth();
+    refreshNodes();
+    refreshSchedules();
+  </script>
+
+</body>
 </html>
+
     """
 
 
 @app.get("/web", response_class=HTMLResponse)
 def dashboard() -> HTMLResponse:
-    """Serve the dashboard shell; authentication is handled in-page."""
+    """Serve主控面板页面，认证在前端处理。"""
 
     return HTMLResponse(content=_login_html())
+
+
+@app.get("/web/schedules", response_class=HTMLResponse)
+def schedules_page() -> HTMLResponse:
+    """单独的定时测试管理页面。"""
+
+    return HTMLResponse(content=_schedule_html())
 
 
 @app.get("/auth/status")
