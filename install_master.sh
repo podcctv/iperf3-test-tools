@@ -129,9 +129,11 @@ ensure_ports_available() {
       while [ "${status}" -ne 0 ]; do
         port_value=$(prompt_for_port "${label}" "${port_value}")
         eval "${port_var}=${port_value}"
-        port_in_use "${port_value}"; status=$?
-        if [ "${status}" -eq 0 ]; then
+        if port_in_use "${port_value}"; then
+          status=0
           log "Using ${label} port ${port_value}."
+        else
+          status=$?
         fi
       done
     else
