@@ -4,7 +4,7 @@ set -euo pipefail
 
 AGENT_IMAGE=${AGENT_IMAGE:-"iperf-agent:latest"}
 AGENT_PORT=${AGENT_PORT:-8000}
-IPERF_PORT=${IPERF_PORT:-62001}
+IPERF_PORT=${IPERF_PORT:-}
 MASTER_API_PORT=${MASTER_API_PORT:-9000}
 MASTER_WEB_PORT=${MASTER_WEB_PORT:-9100}
 START_IPERF_SERVER=${START_IPERF_SERVER:-true}
@@ -31,6 +31,41 @@ select_python() {
   else
     echo ""
   fi
+}
+
+choose_random_port() {
+  local py
+  py=$(select_python)
+
+  if [ -z "${py}" ]; then
+    echo ""
+    return
+  fi
+
+  "${py}" <<'PY'
+import random
+import socket
+
+def find_port():
+    # Prefer high, unprivileged ports to reduce conflict risk.
+    for _ in range(50):
+        port = random.randint(20000, 64000)
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            try:
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                sock.bind(("", port))
+            except OSError:
+                continue
+            return port
+
+    # Fallback: let the OS select an ephemeral port.
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("", 0))
+        return sock.getsockname()[1]
+
+
+print(find_port())
+PY
 }
 
 port_in_use() {
@@ -176,6 +211,23 @@ maybe_load_port_config() {
     else
       log "Port config file ${config_path} not found; continuing with defaults and CLI args."
     fi
+  fi
+}
+
+ensure_random_iperf_port() {
+  if [ -n "${IPERF_PORT}" ]; then
+    return
+  fi
+
+  local random_port
+  random_port=$(choose_random_port)
+
+  if [ -n "${random_port}" ]; then
+    IPERF_PORT="${random_port}"
+    log "Selected random iperf3 port ${IPERF_PORT}."
+  else
+    IPERF_PORT=62001
+    log "Could not determine random iperf3 port; falling back to ${IPERF_PORT}."
   fi
 }
 
@@ -515,7 +567,7 @@ parse_args() {
     --config <path>          Source port variables from a file before applying flags
     --deploy-remote          Deploy agents to hosts listed in an inventory file
     --agent-port <port>      Agent API port to expose (default: 8000)
-    --iperf-port <port>      iperf3 TCP/UDP port to expose (default: 62001)
+    --iperf-port <port>      iperf3 TCP/UDP port to expose (default: random available port)
     --master-port <port>     Master API host port (default: 9000)
     --master-api-port <port> Same as --master-port for convenience
     --web-port <port>        Dashboard host port (default: 9100)
@@ -539,6 +591,7 @@ main() {
   preprocess_config_arg "$@"
   maybe_load_port_config
   parse_args "$@"
+  ensure_random_iperf_port
   if [ "${UNINSTALL}" = true ]; then
     uninstall_master_stack
   fi
