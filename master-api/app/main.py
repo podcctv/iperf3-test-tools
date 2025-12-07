@@ -488,39 +488,31 @@ def _login_html() -> str:
               <p class="text-xs text-slate-500">可在不同实例之间迁移配置，便于备份。</p>
             </div>
 
-            <div class="grid gap-4 lg:grid-cols-3">
-              <div id="add-node-card" class="panel-card rounded-2xl p-5 space-y-4">
-                <div class="flex items-center justify-between gap-2">
-                  <h3 class="text-lg font-semibold text-white">添加节点</h3>
-                  <span class="rounded-full bg-slate-800/70 px-3 py-1 text-xs font-semibold text-slate-300 ring-1 ring-slate-700">Agent 注册表</span>
-                </div>
-                <div id="add-node-alert" class="hidden rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100"></div>
-                <div class="grid gap-3 sm:grid-cols-2">
-                  <div class="space-y-2">
-                    <label class="text-sm font-medium text-slate-200">名称</label>
-                    <input id="node-name" placeholder="node-a" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+            <div class="space-y-4">
+              <div class="panel-card rounded-2xl p-5 space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 class="text-lg font-semibold text-white">节点列表</h3>
+                    <p class="text-sm text-slate-400">实时状态与检测到的 iperf 端口。</p>
                   </div>
-                  <div class="space-y-2">
-                    <label class="text-sm font-medium text-slate-200">IP 地址</label>
-                    <input id="node-ip" placeholder="10.0.0.11" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
-                  </div>
-                  <div class="space-y-2">
-                    <label class="text-sm font-medium text-slate-200">Agent 端口</label>
-                    <input id="node-port" type="number" value="8000" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
-                  </div>
-                  <div class="space-y-2">
-                    <label class="text-sm font-medium text-slate-200">iperf 端口</label>
-                    <input id="node-iperf-port" type="number" value="5201" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+                  <div class="flex flex-wrap gap-2">
+                    <button data-refresh-nodes class="rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200">刷新</button>
+                    <button id="open-add-node" class="rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-100 shadow-sm transition hover:bg-emerald-500/25">添加节点</button>
                   </div>
                 </div>
-                <div class="space-y-2">
-                  <label class="text-sm font-medium text-slate-200">描述（可选）</label>
-                  <textarea id="node-desc" rows="2" class="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60"></textarea>
+                <div id="streaming-progress" class="hidden space-y-2 rounded-xl border border-slate-800 bg-slate-900/50 p-3">
+                  <div class="flex items-center justify-between text-xs text-slate-400">
+                    <span>流媒体解锁检测</span>
+                    <span id="streaming-progress-label" class="font-medium text-slate-200"></span>
+                  </div>
+                  <div class="h-2 w-full rounded-full bg-slate-800/80">
+                    <div id="streaming-progress-bar" class="h-2 w-0 rounded-full bg-gradient-to-r from-emerald-500 to-sky-500 transition-all duration-300"></div>
+                  </div>
                 </div>
-                <button id="save-node" class="w-full rounded-xl bg-gradient-to-r from-emerald-500 to-sky-500 px-4 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-500/20 transition hover:scale-[1.01] hover:shadow-xl">保存节点</button>
+                <div id="nodes-list" class="text-sm text-slate-400 space-y-3">暂无节点。</div>
               </div>
 
-              <div class="panel-card rounded-2xl p-5 space-y-4 lg:col-span-3">
+              <div class="panel-card rounded-2xl p-5 space-y-4">
                 <div class="flex items-center justify-between gap-2">
                   <h3 class="text-lg font-semibold text-white">发起测试</h3>
                   <span class="rounded-full bg-slate-800/70 px-3 py-1 text-xs font-semibold text-slate-300 ring-1 ring-slate-700">快速启动</span>
@@ -570,34 +562,7 @@ def _login_html() -> str:
                   </div>
                 </div>
               </div>
-            </div>
 
-            <div class="grid gap-4">
-              <div class="panel-card rounded-2xl p-5 space-y-4">
-                <div class="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <h3 class="text-lg font-semibold text-white">节点列表</h3>
-                    <p class="text-sm text-slate-400">实时状态与检测到的 iperf 端口。</p>
-                  </div>
-                  <div class="flex flex-wrap gap-2">
-                    <button data-refresh-nodes class="rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200">刷新</button>
-                    <button id="open-add-node" class="rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-100 shadow-sm transition hover:bg-emerald-500/25">添加节点</button>
-                  </div>
-                </div>
-                <div id="streaming-progress" class="hidden space-y-2 rounded-xl border border-slate-800 bg-slate-900/50 p-3">
-                  <div class="flex items-center justify-between text-xs text-slate-400">
-                    <span>流媒体解锁检测</span>
-                    <span id="streaming-progress-label" class="font-medium text-slate-200"></span>
-                  </div>
-                  <div class="h-2 w-full rounded-full bg-slate-800/80">
-                    <div id="streaming-progress-bar" class="h-2 w-0 rounded-full bg-gradient-to-r from-emerald-500 to-sky-500 transition-all duration-300"></div>
-                  </div>
-                </div>
-                <div id="nodes-list" class="text-sm text-slate-400 space-y-3">暂无节点。</div>
-              </div>
-            </div>
-
-            <div class="grid gap-4">
               <div class="panel-card rounded-2xl p-5 space-y-4">
                 <div class="flex flex-wrap items-center justify-between gap-3">
                   <div>
@@ -614,6 +579,46 @@ def _login_html() -> str:
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="add-node-modal" class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-950/80 px-4 py-6 backdrop-blur">
+    <div class="relative w-full max-w-xl rounded-3xl border border-slate-800 bg-slate-900/80 p-6 shadow-2xl shadow-black/40">
+      <button id="close-add-node" class="absolute right-4 top-4 rounded-full border border-slate-700/80 bg-slate-800/80 p-2 text-slate-300 transition hover:bg-slate-700/80">✕</button>
+      <div class="mb-4 flex items-center justify-between gap-2">
+        <div>
+          <p class="text-xs uppercase tracking-[0.2em] text-sky-300/80">Agent 注册表</p>
+          <h3 id="add-node-title" class="text-xl font-semibold text-white">添加节点</h3>
+        </div>
+        <span class="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-200 ring-1 ring-emerald-500/40">本地弹窗</span>
+      </div>
+      <div id="add-node-alert" class="hidden rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100"></div>
+      <div class="grid gap-3 sm:grid-cols-2">
+        <div class="space-y-2">
+          <label class="text-sm font-medium text-slate-200">名称</label>
+          <input id="node-name" placeholder="node-a" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+        </div>
+        <div class="space-y-2">
+          <label class="text-sm font-medium text-slate-200">IP 地址</label>
+          <input id="node-ip" placeholder="10.0.0.11" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+        </div>
+        <div class="space-y-2">
+          <label class="text-sm font-medium text-slate-200">Agent 端口</label>
+          <input id="node-port" type="number" value="8000" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+        </div>
+        <div class="space-y-2">
+          <label class="text-sm font-medium text-slate-200">iperf 端口</label>
+          <input id="node-iperf-port" type="number" value="5201" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+        </div>
+      </div>
+      <div class="mt-3 space-y-2">
+        <label class="text-sm font-medium text-slate-200">描述（可选）</label>
+        <textarea id="node-desc" rows="2" class="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60"></textarea>
+      </div>
+      <div class="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+        <button id="cancel-add-node" class="w-full sm:w-auto rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-slate-500">取消</button>
+        <button id="save-node" class="w-full sm:w-auto rounded-xl bg-gradient-to-r from-emerald-500 to-sky-500 px-4 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-500/20 transition hover:scale-[1.01] hover:shadow-xl">保存节点</button>
       </div>
     </div>
   </div>
@@ -649,7 +654,10 @@ def _login_html() -> str:
     const testProgressBar = document.getElementById('test-progress-bar');
     const testProgressLabel = document.getElementById('test-progress-label');
     const reverseToggle = document.getElementById('reverse');
-    const addNodeCard = document.getElementById('add-node-card');
+    const addNodeModal = document.getElementById('add-node-modal');
+    const addNodeTitle = document.getElementById('add-node-title');
+    const closeAddNodeBtn = document.getElementById('close-add-node');
+    const cancelAddNodeBtn = document.getElementById('cancel-add-node');
     const openAddNodeBtn = document.getElementById('open-add-node');
     let nodeCache = [];
     let editingNodeId = null;
@@ -685,6 +693,27 @@ def _login_html() -> str:
     function hide(el) { el.classList.add('hidden'); }
     function setAlert(el, message) { el.textContent = message; show(el); }
     function clearAlert(el) { el.textContent = ''; hide(el); }
+
+    function toggleAddNodeModal(isOpen) {
+      if (!addNodeModal) return;
+      if (isOpen) {
+        addNodeModal.classList.remove('hidden');
+        addNodeModal.classList.add('flex');
+      } else {
+        addNodeModal.classList.add('hidden');
+        addNodeModal.classList.remove('flex');
+      }
+    }
+
+    function openAddNodeModal() {
+      toggleAddNodeModal(true);
+      addNodeTitle.textContent = editingNodeId ? '编辑节点' : '添加节点';
+      nodeName?.focus({ preventScroll: true });
+    }
+
+    function closeAddNodeModal() {
+      toggleAddNodeModal(false);
+    }
 
     function startProgressBar(container, bar, label, expectedMs, initialText, showCountdown = true) {
       const start = Date.now();
@@ -795,6 +824,8 @@ def _login_html() -> str:
       nodeDesc.value = '';
       editingNodeId = null;
       saveNodeBtn.textContent = '保存节点';
+      addNodeTitle.textContent = '添加节点';
+      hide(addNodeAlert);
     }
 
     async function removeNode(nodeId) {
@@ -810,6 +841,7 @@ def _login_html() -> str:
 
       if (editingNodeId === nodeId) {
         resetNodeForm();
+        closeAddNodeModal();
       }
 
       await refreshNodes();
@@ -966,6 +998,8 @@ def _login_html() -> str:
       nodeDesc.value = node.description || '';
       editingNodeId = nodeId;
       saveNodeBtn.textContent = '保存修改';
+      addNodeTitle.textContent = '编辑节点';
+      openAddNodeModal();
     }
 
     async function saveNodeInline(nodeId, payload) {
@@ -990,21 +1024,49 @@ def _login_html() -> str:
       }
       testsList.innerHTML = '';
 
-      const table = document.createElement('table');
-      table.className = styles.table;
-      const headerRow = document.createElement('tr');
-      headerRow.className = styles.tableHeader;
-      ['序号', '节点信息', '类型', 'TLS RTT (ms)', 'HTTP 延迟 (ms)', '平均速度 (Mbps)', '峰值速度 (Mbps)', '每秒连接', 'UDP 类型', '操作'].forEach((label) => {
-        const th = document.createElement('th');
-        th.textContent = label;
-        th.className = styles.tableCell + ' font-semibold';
-        headerRow.appendChild(th);
-      });
-      table.appendChild(headerRow);
-
-      const detailsContainer = document.createElement('div');
-      detailsContainer.className = 'flex flex-col gap-3 mt-3';
       const detailBlocks = new Map();
+      const enrichedTests = tests.slice().reverse().map((test) => {
+        const metrics = summarizeTestMetrics(test.raw_result || {});
+        const rateSummary = summarizeRateTable(test.raw_result || {});
+        const latencyValue = metrics.latencyMs !== undefined && metrics.latencyMs !== null ? metrics.latencyMs : null;
+        const jitterValue = metrics.jitterMs !== undefined && metrics.jitterMs !== null ? metrics.jitterMs : null;
+        return { test, metrics, rateSummary, latencyValue, jitterValue };
+      });
+
+      const maxRate = Math.max(
+        1,
+        ...enrichedTests.map(({ rateSummary }) => Math.max(rateSummary.receiverRateValue || 0, rateSummary.senderRateValue || 0))
+      );
+
+      const makePill = (label) => {
+        const span = document.createElement('span');
+        span.className = 'inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/70 px-3 py-1 text-xs font-semibold text-slate-200';
+        span.textContent = label;
+        return span;
+      };
+
+      const buildRateRow = (label, value, displayValue, gradient) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'space-y-1';
+        const header = document.createElement('div');
+        header.className = 'flex items-center justify-between text-xs text-slate-400';
+        header.innerHTML = `<span>${label}</span><span class="font-semibold text-slate-100">${displayValue}</span>`;
+
+        const barWrap = document.createElement('div');
+        barWrap.className = 'h-2 w-full rounded-full bg-slate-800/80';
+        const bar = document.createElement('div');
+        if (value) {
+          bar.className = `h-2 rounded-full bg-gradient-to-r ${gradient}`;
+          bar.style.width = `${Math.min(100, (value / maxRate) * 100)}%`;
+        } else {
+          bar.className = 'h-2 rounded-full bg-slate-700';
+          bar.style.width = '12%';
+        }
+        barWrap.appendChild(bar);
+        wrap.appendChild(header);
+        wrap.appendChild(barWrap);
+        return wrap;
+      };
 
       const toggleDetail = (testId, btn) => {
         const block = detailBlocks.get(testId);
@@ -1019,55 +1081,91 @@ def _login_html() -> str:
         }
       };
 
-      tests.slice().reverse().forEach((test) => {
-        const metrics = summarizeTestMetrics(test.raw_result || {});
-        const rateSummary = summarizeRateTable(test.raw_result || {});
-        const latencyValue = metrics.latencyMs !== undefined && metrics.latencyMs !== null ? metrics.latencyMs : null;
-        const jitterValue = metrics.jitterMs !== undefined && metrics.jitterMs !== null ? metrics.jitterMs : null;
+      enrichedTests.forEach(({ test, metrics, rateSummary, latencyValue, jitterValue }) => {
         const pathLabel = `${formatNodeLabel(test.src_node_id)} → ${formatNodeLabel(test.dst_node_id)}`;
         const typeLabel = `${test.protocol.toUpperCase()}${test.params?.reverse ? ' (-R)' : ''}`;
 
-        const row = document.createElement('tr');
-        const cells = [
-          `#${test.id}`,
-          pathLabel,
-          typeLabel,
-          latencyValue !== null ? formatMetric(latencyValue) : 'N/A',
-          jitterValue !== null ? formatMetric(jitterValue) : 'N/A',
-          rateSummary.receiverRateMbps,
-          rateSummary.senderRateMbps,
-          test.params.parallel ?? 'N/A',
-          test.protocol.toLowerCase() === 'udp' ? 'UDP' : 'TCP',
-        ];
-        cells.forEach((value) => {
-          const td = document.createElement('td');
-          td.textContent = value;
-          td.className = styles.tableCell;
-          row.appendChild(td);
-        });
+        const card = document.createElement('div');
+        card.className = 'space-y-3 rounded-2xl border border-slate-800/70 bg-slate-900/60 p-4 shadow-sm shadow-black/30';
 
-        const actionTd = document.createElement('td');
-        actionTd.className = styles.tableCell;
+        const header = document.createElement('div');
+        header.className = 'flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between';
+        const title = document.createElement('div');
+        title.innerHTML = `<p class="text-xs uppercase tracking-[0.2em] text-sky-300/70">#${test.id} · ${typeLabel}</p>` +
+          `<p class="text-lg font-semibold text-white">${pathLabel}</p>`;
+        header.appendChild(title);
+
+        const statusPill = document.createElement('span');
+        statusPill.className = 'inline-flex items-center gap-2 rounded-full bg-slate-800/70 px-3 py-1 text-xs font-semibold text-slate-200 ring-1 ring-slate-700';
+        statusPill.textContent = rateSummary.status === 'ok' ? '完成' : (rateSummary.status || '未知');
+        header.appendChild(statusPill);
+        card.appendChild(header);
+
+        const pills = document.createElement('div');
+        pills.className = 'flex flex-wrap gap-2';
+        pills.appendChild(makePill(typeLabel));
+        pills.appendChild(makePill(`时长 ${test.params.duration || 'N/A'}s`));
+        pills.appendChild(makePill(`并行 ${test.params.parallel ?? 'N/A'}`));
+        pills.appendChild(makePill(`端口 ${test.params.port || 'N/A'}`));
+        pills.appendChild(makePill(test.protocol.toUpperCase()));
+        card.appendChild(pills);
+
+        const metricsGrid = document.createElement('div');
+        metricsGrid.className = 'grid gap-3 sm:grid-cols-3';
+        const metricEntries = [
+          { label: '延迟 (ms)', value: latencyValue !== null ? `${formatMetric(latencyValue)}` : 'N/A' },
+          { label: '抖动 (ms)', value: jitterValue !== null ? `${formatMetric(jitterValue)}` : 'N/A' },
+          { label: '丢包率 (%)', value: metrics.lostPercent !== undefined && metrics.lostPercent !== null ? `${formatMetric(metrics.lostPercent)}%` : 'N/A' },
+        ];
+        metricEntries.forEach((entry) => {
+          const metric = document.createElement('div');
+          metric.className = 'rounded-lg border border-slate-800/70 bg-slate-900/70 p-3';
+          metric.innerHTML = `<p class="text-xs text-slate-400">${entry.label}</p><p class="text-lg font-semibold text-white">${entry.value}</p>`;
+          metricsGrid.appendChild(metric);
+        });
+        card.appendChild(metricsGrid);
+
+        const ratesGrid = document.createElement('div');
+        ratesGrid.className = 'grid gap-3 sm:grid-cols-2';
+        ratesGrid.appendChild(buildRateRow('接收速率 (Mbps)', rateSummary.receiverRateValue, rateSummary.receiverRateMbps, 'from-emerald-400 to-sky-500'));
+        ratesGrid.appendChild(buildRateRow('发送速率 (Mbps)', rateSummary.senderRateValue, rateSummary.senderRateMbps, 'from-amber-400 to-rose-500'));
+        card.appendChild(ratesGrid);
+
+        const congestion = document.createElement('p');
+        congestion.className = 'text-xs text-slate-500';
+        congestion.textContent = `拥塞控制：发送 ${rateSummary.senderCongestion} · 接收 ${rateSummary.receiverCongestion}`;
+        card.appendChild(congestion);
+
+        const actions = document.createElement('div');
+        actions.className = 'flex flex-wrap items-center justify-between gap-3';
+
+        const buttons = document.createElement('div');
+        buttons.className = 'flex flex-wrap gap-2';
         const detailsBtn = document.createElement('button');
         detailsBtn.textContent = '详情';
         detailsBtn.className = styles.pillInfo;
         detailsBtn.onclick = () => toggleDetail(test.id, detailsBtn);
         const deleteBtn = document.createElement('button');
         deleteBtn.textContent = '删除';
-        deleteBtn.className = styles.pillDanger + ' ml-2';
+        deleteBtn.className = styles.pillDanger;
         deleteBtn.onclick = () => deleteTestResult(test.id);
-        actionTd.appendChild(detailsBtn);
-        actionTd.appendChild(deleteBtn);
-        row.appendChild(actionTd);
-        table.appendChild(row);
+        buttons.appendChild(detailsBtn);
+        buttons.appendChild(deleteBtn);
+
+        const udpLabel = document.createElement('span');
+        udpLabel.className = 'rounded-full bg-slate-800/80 px-3 py-1 text-xs font-semibold text-slate-300 ring-1 ring-slate-700';
+        udpLabel.textContent = test.protocol.toLowerCase() === 'udp' ? 'UDP 测试' : 'TCP 测试';
+
+        actions.appendChild(buttons);
+        actions.appendChild(udpLabel);
+        card.appendChild(actions);
 
         const block = buildTestDetailsBlock(test, metrics, latencyValue, pathLabel);
         detailBlocks.set(test.id, block);
-        detailsContainer.appendChild(block);
-      });
 
-      testsList.appendChild(table);
-      testsList.appendChild(detailsContainer);
+        testsList.appendChild(card);
+        testsList.appendChild(block);
+      });
     }
 
     async function deleteTestResult(testId) {
@@ -1117,6 +1215,7 @@ def _login_html() -> str:
 
       resetNodeForm();
       await refreshNodes();
+      closeAddNodeModal();
       clearAlert(addNodeAlert);
     }
 
@@ -1206,6 +1305,8 @@ def _login_html() -> str:
       return {
         senderRateMbps: sumSent.bits_per_second ? formatMetric(sumSent.bits_per_second / 1e6, 2) : 'N/A',
         receiverRateMbps: sumReceived.bits_per_second ? formatMetric(sumReceived.bits_per_second / 1e6, 2) : 'N/A',
+        senderRateValue: sumSent.bits_per_second ? sumSent.bits_per_second / 1e6 : null,
+        receiverRateValue: sumReceived.bits_per_second ? sumReceived.bits_per_second / 1e6 : null,
         senderCongestion: end.sender_tcp_congestion || 'N/A',
         receiverCongestion: end.receiver_tcp_congestion || 'N/A',
         status: raw && raw.status ? raw.status : 'unknown',
@@ -1352,10 +1453,31 @@ def _login_html() -> str:
 
     if (openAddNodeBtn) {
       openAddNodeBtn.addEventListener('click', () => {
-        if (addNodeCard) {
-          addNodeCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        resetNodeForm();
+        openAddNodeModal();
+      });
+    }
+
+    if (closeAddNodeBtn) {
+      closeAddNodeBtn.addEventListener('click', () => {
+        closeAddNodeModal();
+        resetNodeForm();
+      });
+    }
+
+    if (cancelAddNodeBtn) {
+      cancelAddNodeBtn.addEventListener('click', () => {
+        closeAddNodeModal();
+        resetNodeForm();
+      });
+    }
+
+    if (addNodeModal) {
+      addNodeModal.addEventListener('click', (event) => {
+        if (event.target === addNodeModal) {
+          closeAddNodeModal();
+          resetNodeForm();
         }
-        nodeName.focus({ preventScroll: true });
       });
     }
 
