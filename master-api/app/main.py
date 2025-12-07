@@ -607,10 +607,9 @@ def _login_html() -> str:
   <style>
     body {
       font-family: 'Inter', system-ui, -apple-system, sans-serif;
-      background:
-        radial-gradient(circle at 12% 20%, rgba(56, 189, 248, 0.08), transparent 32%),
-        radial-gradient(circle at 88% 12%, rgba(16, 185, 129, 0.08), transparent 40%),
-        linear-gradient(135deg, rgba(15, 23, 42, 0.94), rgba(2, 6, 23, 0.96));
+      background: radial-gradient(circle at 20% 20%, rgba(56, 189, 248, 0.12), transparent 35%),
+        radial-gradient(circle at 85% 15%, rgba(139, 92, 246, 0.12), transparent 40%),
+        linear-gradient(140deg, rgba(9, 12, 23, 0.98), rgba(5, 10, 24, 0.96));
       background-attachment: fixed;
       color: #e2e8f0;
       margin: 0;
@@ -634,46 +633,38 @@ def _login_html() -> str:
 </head>
 <body>
   <div class="radix-themes min-h-screen" data-theme="dark">
-    <div class="relative mx-auto max-w-6xl px-6 py-10 lg:px-10">
-      <div class="absolute inset-0 -z-10 overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900/90 via-slate-950 to-slate-950 shadow-[0_30px_120px_rgba(0,0,0,0.55)]"></div>
-      <div class="relative z-10 space-y-6">
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p class="text-sm uppercase tracking-[0.25em] text-sky-300/80">iperf3 控制中心</p>
-            <h1 class="text-3xl font-bold text-white sm:text-4xl">主控面板</h1>
-            <p class="mt-2 text-slate-400 text-sm leading-relaxed max-w-3xl">通过浏览器即可管理节点、发起测试并查看最新结果。</p>
-          </div>
-          <div class="flex items-center gap-3">
-            <span class="inline-flex items-center gap-2 rounded-full bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-300 ring-1 ring-emerald-500/30">
-              <span class="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              实时控制
-            </span>
-          </div>
+    <div class="relative flex min-h-screen items-center justify-center px-6 py-12 lg:px-10">
+      <div class="absolute inset-0 -z-10 overflow-hidden rounded-[28px] bg-gradient-to-br from-slate-900/90 via-slate-950 to-slate-950 shadow-[0_30px_120px_rgba(0,0,0,0.55)]"></div>
+      <div class="relative z-10 w-full max-w-4xl space-y-8">
+        <div class="text-center space-y-3">
+          <p class="text-sm uppercase tracking-[0.35em] text-sky-300/80">iperf3 控制中心</p>
+          <h1 class="text-3xl font-bold text-white sm:text-4xl">主控面板</h1>
+          <p class="mx-auto max-w-2xl text-sm leading-relaxed text-slate-400">集中管理节点、发起测试并查看最新结果，稳定的远程运维体验从这里开始。</p>
         </div>
 
-        <div class="glass-card rounded-3xl p-6 ring-1 ring-slate-800/60">
+        <div class="glass-card rounded-3xl p-8 ring-1 ring-slate-800/60">
           <div class="gradient-bar mb-6"></div>
           <div id="login-card" class="space-y-6">
-            <div class="flex items-center justify-between gap-4">
+            <div class="flex flex-col items-center justify-between gap-4 text-center sm:flex-row sm:text-left">
               <div>
                 <h2 class="text-2xl font-semibold text-white">解锁控制台</h2>
                 <p class="text-sm text-slate-400">输入共享密码以进入运维面板。</p>
               </div>
-              <div class="hidden sm:inline-flex items-center gap-2 rounded-full bg-slate-800/70 px-3 py-2 text-xs font-medium text-slate-200 ring-1 ring-slate-700">
+              <div class="inline-flex items-center gap-2 rounded-full bg-slate-800/70 px-3 py-2 text-xs font-medium text-slate-200 ring-1 ring-slate-700">
                 <span class="h-2 w-2 rounded-full bg-amber-400 animate-ping"></span>
                 会话未解锁
               </div>
             </div>
             <div id="login-alert" class="hidden rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100"></div>
-            <div class="grid gap-4 md:grid-cols-3">
-              <div class="md:col-span-2 space-y-3">
+            <div class="grid gap-4 md:grid-cols-[2fr_1fr] md:items-end">
+              <div class="space-y-3">
                 <label class="text-sm font-medium text-slate-200" for="password">控制台密码</label>
                 <input id="password" type="password" placeholder="请输入控制台密码"
                   class="w-full rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
-                <p class="text-xs text-slate-500">默认密码为 <code class="font-semibold text-sky-300">iperf-pass</code>，可通过环境变量覆盖。</p>
+                <p class="text-xs text-slate-500">密码仅由管理员提供，请妥善保管。</p>
               </div>
-              <div class="flex items-end">
-                <button id="login-btn" class="w-full rounded-xl bg-gradient-to-r from-sky-500 to-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-500/20 transition hover:scale-[1.01] hover:shadow-xl">解锁</button>
+              <div class="flex justify-center md:justify-end">
+                <button id="login-btn" class="w-full rounded-xl bg-gradient-to-r from-sky-500 to-emerald-400 px-5 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-500/20 transition hover:scale-[1.01] hover:shadow-xl">解锁</button>
               </div>
             </div>
           </div>
