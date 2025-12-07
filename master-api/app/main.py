@@ -573,7 +573,6 @@ def _login_html() -> str:
                     <p class="text-sm text-slate-400">实时状态与检测到的 iperf 端口。</p>
                   </div>
                   <div class="flex flex-wrap gap-2">
-                    <button id="run-streaming-checks" class="rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-100 shadow-sm transition hover:bg-emerald-500/25">流媒体解锁测试</button>
                     <button data-refresh-nodes class="rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200">刷新</button>
                   </div>
                 </div>
@@ -630,7 +629,6 @@ def _login_html() -> str:
     const streamingProgress = document.getElementById('streaming-progress');
     const streamingProgressBar = document.getElementById('streaming-progress-bar');
     const streamingProgressLabel = document.getElementById('streaming-progress-label');
-    const runStreamingChecksBtn = document.getElementById('run-streaming-checks');
     const testsList = document.getElementById('tests-list');
     const saveNodeBtn = document.getElementById('save-node');
     const srcSelect = document.getElementById('src-select');
@@ -874,15 +872,16 @@ def _login_html() -> str:
         item.innerHTML = `
           <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div>
-              <div class="flex flex-wrap items-center gap-2">${statusBadge}<span class="text-base font-semibold text-white">${node.name}</span>${streamingBadges}</div>
-              <p class="${styles.textMuted}">${node.ip}:${node.agent_port} · iperf ${ports}${node.description ? ' · ' + node.description : ''}</p>
-            </div>
-            <div class="flex flex-wrap gap-2">
-              <button class="${styles.pillInfo}" onclick="editNode(${node.id})">编辑</button>
-              <button class="${styles.pillDanger}" onclick="removeNode(${node.id})">删除</button>
-            </div>
-          </div>
-        `;
+          <div class="flex flex-wrap items-center gap-2">${statusBadge}<span class="text-base font-semibold text-white">${node.name}</span>${streamingBadges}</div>
+          <p class="${styles.textMuted}">${node.ip}:${node.agent_port} · iperf ${ports}${node.description ? ' · ' + node.description : ''}</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button class="${styles.pillInfo}" onclick="runStreamingCheck(${node.id})">流媒体解锁</button>
+          <button class="${styles.pillInfo}" onclick="editNode(${node.id})">编辑</button>
+          <button class="${styles.pillDanger}" onclick="removeNode(${node.id})">删除</button>
+        </div>
+      </div>
+      `;
         nodesList.appendChild(item);
 
         const optionA = document.createElement('option');
@@ -895,39 +894,31 @@ def _login_html() -> str:
       });
 
       syncTestPort();
-
-      const missingStreamingStatus = nodeCache.some((node) => !streamingStatusCache[node.id]);
-      if (nodeCache.length && missingStreamingStatus && !isStreamingTestRunning) {
-        runStreamingChecks();
-      }
     }
 
-    async function runStreamingChecks() {
+    async function runStreamingCheck(nodeId) {
       if (isStreamingTestRunning) return;
-      if (!nodeCache.length) {
-        setAlert(addNodeAlert, '请先添加节点再进行解锁检测。');
+      const targetNode = nodeCache.find((n) => n.id === nodeId);
+      if (!targetNode) {
+        setAlert(addNodeAlert, '节点不存在或尚未加载。');
         return;
       }
 
       isStreamingTestRunning = true;
       streamingProgressLabel.textContent = '流媒体测试中...';
-      const expectedMs = Math.max(nodeCache.length * 3500, 2000);
+      const expectedMs = Math.max(3500, 2000);
       const stopProgress = startProgressBar(streamingProgress, streamingProgressBar, streamingProgressLabel, expectedMs, '准备发起检测...', false);
 
       try {
-        for (let i = 0; i < nodeCache.length; i++) {
-          const node = nodeCache[i];
-          streamingStatusCache[node.id] = { inProgress: true };
-          streamingProgressLabel.textContent = `${node.name} (${i + 1}/${nodeCache.length}) 测试中`;
-          try {
-            const res = await fetch(`/nodes/${node.id}/streaming-test`, { method: 'POST' });
-            if (!res.ok) {
-              streamingStatusCache[node.id] = streamingStatusCache[node.id] || {};
-              streamingStatusCache[node.id].error = true;
-              streamingStatusCache[node.id].message = `请求失败 (${res.status})`;
-              continue;
-            }
-
+        streamingStatusCache[nodeId] = { inProgress: true };
+        streamingProgressLabel.textContent = `${targetNode.name} 测试中`;
+        try {
+          const res = await fetch(`/nodes/${nodeId}/streaming-test`, { method: 'POST' });
+          if (!res.ok) {
+            streamingStatusCache[nodeId] = streamingStatusCache[nodeId] || {};
+            streamingStatusCache[nodeId].error = true;
+            streamingStatusCache[nodeId].message = `请求失败 (${res.status})`;
+          } else {
             const data = await res.json();
             const byService = {};
             (data.services || []).forEach((svc) => {
@@ -939,10 +930,10 @@ def _login_html() -> str:
                 byService[svc.key] = { unlocked: false, detail: '未检测' };
               }
             });
-            streamingStatusCache[node.id] = byService;
-          } catch (err) {
-            streamingStatusCache[node.id] = { error: true, message: err?.message || '请求异常' };
+            streamingStatusCache[nodeId] = byService;
           }
+        } catch (err) {
+          streamingStatusCache[nodeId] = { error: true, message: err?.message || '请求异常' };
         }
 
         stopProgress('检测完成');
@@ -1341,7 +1332,6 @@ def _login_html() -> str:
     document.getElementById('login-btn').addEventListener('click', login);
     document.getElementById('logout-btn').addEventListener('click', logout);
     document.getElementById('run-test').addEventListener('click', runTest);
-    runStreamingChecksBtn.addEventListener('click', runStreamingChecks);
     saveNodeBtn.addEventListener('click', saveNode);
 
     importConfigsBtn.addEventListener('click', () => configFileInput.click());
