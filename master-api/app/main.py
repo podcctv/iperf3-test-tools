@@ -100,6 +100,28 @@ def _persist_state(db: Session) -> None:
         logger.exception("Failed to persist state to %s", settings.state_file)
 
 
+def _agent_config_from_node(node: Node) -> AgentConfigCreate:
+    return AgentConfigCreate(
+        name=node.name,
+        host=node.ip,
+        agent_port=node.agent_port,
+        iperf_port=node.iperf_port,
+        description=node.description,
+    )
+
+
+def _sync_agent_config(node: Node, previous_name: str | None = None) -> None:
+    """Ensure the agent config inventory mirrors the current node state."""
+
+    agent_store.upsert(_agent_config_from_node(node))
+
+    if previous_name and previous_name != node.name:
+        try:
+            agent_store.delete(previous_name)
+        except KeyError:  # pragma: no cover - defensive cleanup
+            pass
+
+
 def _summarize_metrics(raw: dict | None) -> dict | None:
     if not raw:
         return None
@@ -1439,6 +1461,7 @@ def create_node(node: NodeCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(obj)
     _persist_state(db)
+    _sync_agent_config(obj)
     return obj
 
 
@@ -1454,6 +1477,7 @@ def update_node(node_id: int, payload: NodeUpdate, db: Session = Depends(get_db)
     if not node:
         raise HTTPException(status_code=404, detail="node not found")
 
+    previous_name = node.name
     updates = payload.model_dump(exclude_unset=True)
     for key, value in updates.items():
         setattr(node, key, value)
@@ -1461,6 +1485,7 @@ def update_node(node_id: int, payload: NodeUpdate, db: Session = Depends(get_db)
     db.commit()
     db.refresh(node)
     _persist_state(db)
+    _sync_agent_config(node, previous_name=previous_name)
     return node
 
 
@@ -1484,6 +1509,10 @@ def delete_node(node_id: int, db: Session = Depends(get_db)):
     db.delete(node)
     db.commit()
     _persist_state(db)
+    try:
+        agent_store.delete(node.name)
+    except KeyError:
+        pass
     return {"status": "deleted"}
 
 
