@@ -52,6 +52,7 @@ class StreamingServiceStatus(BaseModel):
     key: Optional[str] = None
     status_code: Optional[int] = None
     detail: Optional[str] = None
+    tier: Optional[str] = None
 
 
 class NodeWithStatus(NodeRead):

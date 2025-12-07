@@ -179,15 +179,20 @@ def _service_result(
     unlocked: bool,
     status_code: int | None,
     detail_parts: list[str | None],
+    *,
+    tier: str | None = None,
 ) -> dict[str, Any]:
     detail = " | ".join([part for part in detail_parts if part]) or None
-    return {
+    result = {
         "key": key,
         "service": service,
         "unlocked": unlocked,
         "status_code": status_code,
         "detail": detail,
     }
+    if tier:
+        result["tier"] = tier
+    return result
 
 
 def _probe_tiktok() -> dict[str, Any]:
@@ -231,6 +236,7 @@ def _probe_netflix() -> dict[str, Any]:
     test_title = "https://www.netflix.com/title/80018499"
     headers = {"User-Agent": STREAMING_UA}
     dns_info = _dns_detail("www.netflix.com")
+    tier = "none"
     try:
         resp = requests.get(
             test_title, headers=headers, timeout=10, allow_redirects=False
@@ -244,7 +250,8 @@ def _probe_netflix() -> dict[str, Any]:
             redirected = redirected_to or ""
             login_redirect = any(token in redirected.lower() for token in ["login", "signin", "browse", "title"])
             geo_block = any(token in redirected.lower() for token in ["unavailable", "sorry"])
-            unlocked = login_redirect and not geo_block
+            tier = "full" if login_redirect and not geo_block else "none"
+            unlocked = tier == "full"
             detail_parts = [
                 dns_info,
                 f"HTTP {status}",
@@ -253,10 +260,12 @@ def _probe_netflix() -> dict[str, Any]:
                 "地域限制" if geo_block else None,
             ]
         elif status == 200:
-            unlocked = not blocked_text
+            tier = "full" if not blocked_text else "none"
+            unlocked = tier == "full"
             detail_parts = [dns_info, f"HTTP {status}", "全片库" if unlocked else "地域限制"]
         elif status == 404:
             unlocked = True
+            tier = "originals"
             detail_parts = [dns_info, f"HTTP {status}", "自制片库"]
         else:
             unlocked = False
@@ -266,7 +275,9 @@ def _probe_netflix() -> dict[str, Any]:
         status = None
         detail_parts = [dns_info, f"请求失败: {exc}"[:150]]
 
-    return _service_result("netflix", "Netflix", unlocked, status, detail_parts)
+    return _service_result(
+        "netflix", "Netflix", unlocked, status, detail_parts, tier=tier
+    )
 
 
 def _probe_youtube_premium() -> dict[str, Any]:
@@ -289,7 +300,9 @@ def _probe_youtube_premium() -> dict[str, Any]:
             "consent.youtube" in h.headers.get("location", "").lower()
             for h in resp.history or []
         )
-        unlocked = status == 200 and not unavailable and not captcha_block and not consent_flow
+        unlocked = status == 200 and not unavailable and not captcha_block
+        if consent_flow and not unavailable and not captcha_block:
+            unlocked = True
         detail_parts = [
             dns_info,
             f"HTTP {status}",
