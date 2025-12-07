@@ -81,6 +81,14 @@ STREAMING_UA = (
 )
 
 
+def _extract_region_from_url(url: str | None) -> str | None:
+    if not url:
+        return None
+    match = re.search(r"/([A-Za-z]{2})(?:[/?#]|$)", url)
+    code = match.group(1) if match else None
+    return code.upper() if code else None
+
+
 def _measure_backbone_target(target: dict) -> Dict[str, Any]:
     samples: list[float] = []
     detail: str | None = None
@@ -224,15 +232,26 @@ def _probe_netflix() -> dict[str, Any]:
     headers = {"User-Agent": STREAMING_UA}
     dns_info = _dns_detail("www.netflix.com")
     try:
-        resp = requests.get(test_title, headers=headers, timeout=10, allow_redirects=False)
+        resp = requests.get(
+            test_title, headers=headers, timeout=10, allow_redirects=False
+        )
         status = resp.status_code
         text_lower = resp.text.lower()
         blocked_text = "not available to watch" in text_lower or "proxy" in text_lower
         redirected_to = resp.headers.get("location")
 
         if status in {301, 302, 307, 308}:
-            unlocked = False
-            detail_parts = [dns_info, f"HTTP {status}", f"Redirect: {redirected_to}" if redirected_to else None]
+            redirected = redirected_to or ""
+            login_redirect = any(token in redirected.lower() for token in ["login", "signin", "browse", "title"])
+            geo_block = any(token in redirected.lower() for token in ["unavailable", "sorry"])
+            unlocked = login_redirect and not geo_block
+            detail_parts = [
+                dns_info,
+                f"HTTP {status}",
+                f"Redirect: {redirected_to}" if redirected_to else None,
+                "需要登录/地区确认" if login_redirect and not geo_block else None,
+                "地域限制" if geo_block else None,
+            ]
         elif status == 200:
             unlocked = not blocked_text
             detail_parts = [dns_info, f"HTTP {status}", "全片库" if unlocked else "地域限制"]
@@ -291,17 +310,21 @@ def _probe_prime_video() -> dict[str, Any]:
     headers = {"User-Agent": STREAMING_UA}
     dns_info = _dns_detail("www.primevideo.com")
     try:
-        resp = requests.get(url, headers=headers, timeout=10)
+        resp = requests.get(url, headers=headers, timeout=10, allow_redirects=False)
         status = resp.status_code
         region_match = re.search(r'"currentTerritory"\s*:\s*"([A-Z]{2})"', resp.text)
         region = region_match.group(1) if region_match else None
+        redirected_to = resp.headers.get("location", "")
         blocked = "not available" in resp.text.lower() or "vpn" in resp.text.lower()
-        unlocked = status == 200 and not blocked
+        geo_block = any(token in redirected_to.lower() for token in ["geo", "unavailable"])
+        region_hint = region or _extract_region_from_url(redirected_to)
+        unlocked = status in {200, 301, 302, 307, 308} and not blocked and not geo_block
         detail_parts = [
             dns_info,
             f"HTTP {status}",
-            f"Region: {region}" if region else "Region: unknown",
-            "疑似地域限制" if blocked else None,
+            f"Region: {region_hint}" if region_hint else "Region: unknown",
+            f"Redirect: {redirected_to}" if redirected_to else None,
+            "疑似地域限制" if blocked or geo_block else None,
         ]
     except requests.RequestException as exc:
         unlocked = False
