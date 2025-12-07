@@ -2,6 +2,7 @@ import json
 import os
 import re
 import shlex
+import socket
 import subprocess
 import threading
 import time
@@ -34,6 +35,9 @@ STREAMING_SCRIPT_TTL = int(os.environ.get("STREAMING_SCRIPT_TTL", 60 * 60 * 12))
 # The builtin mode is the default to avoid long-running external scripts.
 STREAMING_PROBE_MODE = os.environ.get("STREAMING_PROBE_MODE", "builtin").lower()
 STREAMING_HTTP_TIMEOUT = float(os.environ.get("STREAMING_HTTP_TIMEOUT", 5))
+STREAMING_CACHE_PATH = Path(os.environ.get("STREAMING_CACHE_PATH", "/tmp/streaming_probe_cache.json"))
+STREAMING_AUTO_INTERVAL = int(os.environ.get("STREAMING_AUTO_INTERVAL", 60 * 60 * 24))
+STREAMING_AUTO_ENABLED = os.environ.get("STREAMING_AUTO_ENABLED", "true").lower() != "false"
 
 SCRIPT_SERVICE_MAP = {
     "Youtube": {"key": "youtube", "name": "YouTube"},
@@ -42,6 +46,319 @@ SCRIPT_SERVICE_MAP = {
     "DisneyPlus": {"key": "disney_plus", "name": "Disney+"},
     "HBO": {"key": "hbo", "name": "HBO"},
 }
+
+STREAMING_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+)
+
+
+def _resolve_hostname(hostname: str) -> tuple[str | None, list[str]]:
+    """Return the preferred nameserver and resolved IP list for a hostname."""
+
+    nameserver: str | None = None
+    try:
+        with open("/etc/resolv.conf", "r", encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("nameserver"):
+                    nameserver = line.split()[1]
+                    break
+    except FileNotFoundError:
+        nameserver = None
+
+    ips: list[str] = []
+    try:
+        infos = socket.getaddrinfo(hostname, None)
+        for info in infos:
+            addr = info[4][0]
+            if addr not in ips:
+                ips.append(addr)
+    except socket.gaierror:
+        pass
+
+    if not ips:
+        try:
+            proc = subprocess.run(
+                ["dig", "+short", hostname], capture_output=True, text=True, timeout=5
+            )
+            if proc.returncode == 0:
+                for line in proc.stdout.splitlines():
+                    line = line.strip()
+                    if line and re.match(r"^\d+\.\d+\.\d+\.\d+$", line):
+                        ips.append(line)
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+
+    return nameserver, ips
+
+
+def _dns_detail(hostname: str) -> str:
+    nameserver, ips = _resolve_hostname(hostname)
+    nameserver_display = nameserver or "unknown"
+    ip_display = ", ".join(ips[:3]) if ips else "unresolved"
+    return f"DNS {nameserver_display} -> {ip_display}"
+
+
+def _service_result(
+    key: str,
+    service: str,
+    unlocked: bool,
+    status_code: int | None,
+    detail_parts: list[str | None],
+) -> dict[str, Any]:
+    detail = " | ".join([part for part in detail_parts if part]) or None
+    return {
+        "key": key,
+        "service": service,
+        "unlocked": unlocked,
+        "status_code": status_code,
+        "detail": detail,
+    }
+
+
+def _probe_tiktok() -> dict[str, Any]:
+    url = "https://www.tiktok.com/"
+    headers = {"User-Agent": STREAMING_UA}
+    dns_info = _dns_detail("www.tiktok.com")
+    try:
+        resp = requests.get(url, headers=headers, timeout=10)
+        status = resp.status_code
+        region_match = re.search(r'"region"\s*:\s*"([A-Z]{2})"', resp.text)
+        region = region_match.group(1) if region_match else None
+        unlocked = status == 200 and region is not None
+        detail_parts = [dns_info, f"HTTP {status}", f"Region: {region}" if region else None]
+    except requests.RequestException as exc:
+        unlocked = False
+        status = None
+        detail_parts = [dns_info, f"请求失败: {exc}"[:150]]
+
+    return _service_result("tiktok", "TikTok", unlocked, status, detail_parts)
+
+
+def _probe_disney_plus() -> dict[str, Any]:
+    url = "https://www.disneyplus.com/"
+    headers = {"User-Agent": STREAMING_UA}
+    dns_info = _dns_detail("www.disneyplus.com")
+    try:
+        resp = requests.get(url, headers=headers, timeout=10, allow_redirects=True)
+        status = resp.status_code
+        unlocked = status == 200 and "not available in your region" not in resp.text.lower()
+        region_header = resp.headers.get("X-Region") or resp.headers.get("CF-IPCountry")
+        detail_parts = [dns_info, f"HTTP {status}", f"Region: {region_header}" if region_header else None]
+    except requests.RequestException as exc:
+        unlocked = False
+        status = None
+        detail_parts = [dns_info, f"请求失败: {exc}"[:150]]
+
+    return _service_result("disney_plus", "Disney+", unlocked, status, detail_parts)
+
+
+def _probe_netflix() -> dict[str, Any]:
+    test_title = "https://www.netflix.com/title/80018499"
+    headers = {"User-Agent": STREAMING_UA}
+    dns_info = _dns_detail("www.netflix.com")
+    try:
+        resp = requests.get(test_title, headers=headers, timeout=10)
+        status = resp.status_code
+        blocked_text = "not available to watch" in resp.text.lower() or "proxy" in resp.text.lower()
+        unlocked = status == 200 and not blocked_text
+        detail_parts = [dns_info, f"HTTP {status}", "自制片库" if status == 404 else None]
+    except requests.RequestException as exc:
+        unlocked = False
+        status = None
+        detail_parts = [dns_info, f"请求失败: {exc}"[:150]]
+
+    return _service_result("netflix", "Netflix", unlocked, status, detail_parts)
+
+
+def _probe_youtube_premium() -> dict[str, Any]:
+    url = "https://www.youtube.com/premium"
+    headers = {"User-Agent": STREAMING_UA}
+    dns_info = _dns_detail("www.youtube.com")
+    try:
+        resp = requests.get(url, headers=headers, timeout=10)
+        status = resp.status_code
+        region_match = re.search(r'"countryCode"\s*:\s*"([A-Z]{2})"', resp.text)
+        region_match = region_match or re.search(r'"contentRegion"\s*:\s*"([A-Z]{2})"', resp.text)
+        region = region_match.group(1) if region_match else None
+        unavailable = "not available in your country" in resp.text.lower()
+        unlocked = status == 200 and not unavailable
+        detail_parts = [dns_info, f"HTTP {status}", f"Region: {region}" if region else None]
+    except requests.RequestException as exc:
+        unlocked = False
+        status = None
+        detail_parts = [dns_info, f"请求失败: {exc}"[:150]]
+
+    return _service_result("youtube_premium", "YouTube Premium", unlocked, status, detail_parts)
+
+
+def _probe_prime_video() -> dict[str, Any]:
+    url = "https://www.primevideo.com/"
+    headers = {"User-Agent": STREAMING_UA}
+    dns_info = _dns_detail("www.primevideo.com")
+    try:
+        resp = requests.get(url, headers=headers, timeout=10)
+        status = resp.status_code
+        region_match = re.search(r'"currentTerritory"\s*:\s*"([A-Z]{2})"', resp.text)
+        region = region_match.group(1) if region_match else None
+        unlocked = status == 200 and region is not None
+        detail_parts = [dns_info, f"HTTP {status}", f"Region: {region}" if region else None]
+    except requests.RequestException as exc:
+        unlocked = False
+        status = None
+        detail_parts = [dns_info, f"请求失败: {exc}"[:150]]
+
+    return _service_result("prime_video", "Prime Video", unlocked, status, detail_parts)
+
+
+def _probe_spotify() -> dict[str, Any]:
+    url = "https://www.spotify.com/api/ip-address"
+    headers = {"User-Agent": STREAMING_UA}
+    dns_info = _dns_detail("www.spotify.com")
+    try:
+        resp = requests.get(url, headers=headers, timeout=10)
+        status = resp.status_code
+        country = None
+        if resp.headers.get("content-type", "").startswith("application/json"):
+            payload = resp.json()
+            country = payload.get("country") or payload.get("ip_country")
+        unlocked = status == 200 and country is not None
+        detail_parts = [dns_info, f"HTTP {status}", f"Country: {country}" if country else None]
+    except requests.RequestException as exc:
+        unlocked = False
+        status = None
+        detail_parts = [dns_info, f"请求失败: {exc}"[:150]]
+
+    return _service_result("spotify", "Spotify", unlocked, status, detail_parts)
+
+
+def _probe_openai() -> dict[str, Any]:
+    dns_info = _dns_detail("api.openai.com")
+    compliance_url = "https://api.openai.com/compliance/cookie_requirements"
+    trace_url = "https://chat.openai.com/cdn-cgi/trace"
+    headers = {"User-Agent": STREAMING_UA}
+
+    unsupported_country = None
+    api_status: int | None = None
+    trace_loc: str | None = None
+    api_error: str | None = None
+
+    try:
+        resp = requests.get(compliance_url, headers=headers, timeout=10)
+        api_status = resp.status_code
+        if resp.headers.get("content-type", "").startswith("application/json"):
+            payload = resp.json()
+            unsupported_country = payload.get("unsupported_country")
+    except requests.RequestException as exc:
+        api_error = f"API 请求失败: {exc}"[:150]
+
+    try:
+        trace_resp = requests.get(trace_url, headers=headers, timeout=10)
+        if trace_resp.status_code == 200:
+            for line in trace_resp.text.splitlines():
+                if line.startswith("loc="):
+                    trace_loc = line.split("=", 1)[1].strip()
+                    break
+    except requests.RequestException:
+        pass
+
+    unlocked = api_status == 200 and not unsupported_country
+    detail_parts = [
+        dns_info,
+        f"API HTTP {api_status}" if api_status else api_error,
+        f"Unsupported: {unsupported_country}" if unsupported_country else None,
+        f"loc={trace_loc}" if trace_loc else None,
+    ]
+    return _service_result("openai", "OpenAI/ChatGPT", unlocked, api_status, detail_parts)
+
+
+def _run_streaming_suite() -> tuple[list[dict[str, Any]], int]:
+    start = time.time()
+    checks = [
+        _probe_tiktok,
+        _probe_disney_plus,
+        _probe_netflix,
+        _probe_youtube_premium,
+        _probe_prime_video,
+        _probe_spotify,
+        _probe_openai,
+    ]
+
+    results: list[dict[str, Any]] = []
+    for fn in checks:
+        try:
+            results.append(fn())
+        except Exception as exc:  # pragma: no cover - defensive
+            results.append(
+                {
+                    "service": getattr(fn, "__name__", "unknown"),
+                    "unlocked": False,
+                    "detail": f"内部错误: {exc}"[:150],
+                    "status_code": None,
+                    "key": getattr(fn, "__name__", "unknown"),
+                }
+            )
+
+    elapsed_ms = int((time.time() - start) * 1000)
+    return results, elapsed_ms
+
+
+def _load_cached_probe(max_age: int | None = None) -> dict[str, Any] | None:
+    if not STREAMING_CACHE_PATH.exists():
+        return None
+
+    try:
+        payload = json.loads(STREAMING_CACHE_PATH.read_text())
+    except Exception:
+        return None
+
+    if max_age is not None:
+        ts = payload.get("timestamp")
+        if not ts or (time.time() - ts) > max_age:
+            return None
+
+    return payload
+
+
+def _save_cached_probe(payload: dict[str, Any]) -> None:
+    payload["timestamp"] = int(time.time())
+    STREAMING_CACHE_PATH.write_text(json.dumps(payload))
+
+
+def _run_and_cache_probe() -> dict[str, Any]:
+    results, elapsed_ms = _run_streaming_suite()
+    payload = {"status": "ok", "results": results, "elapsed_ms": elapsed_ms}
+    _save_cached_probe(payload)
+    return payload
+
+
+class StreamingAutoRunner(threading.Thread):
+    def __init__(self, interval_seconds: int) -> None:
+        super().__init__(daemon=True)
+        self.interval_seconds = interval_seconds
+        self._stop_event = threading.Event()
+
+    def run(self) -> None:
+        # Run immediately on startup, then on the configured interval.
+        try:
+            _run_and_cache_probe()
+        except Exception:
+            pass
+
+        while not self._stop_event.wait(self.interval_seconds):
+            try:
+                _run_and_cache_probe()
+            except Exception:
+                continue
+
+    def stop(self) -> None:
+        self._stop_event.set()
+
+
+auto_runner: StreamingAutoRunner | None = None
+if STREAMING_AUTO_ENABLED:
+    auto_runner = StreamingAutoRunner(STREAMING_AUTO_INTERVAL)
+    auto_runner.start()
 
 
 def _ensure_streaming_script() -> Path:
@@ -157,6 +474,14 @@ def _probe_streaming_targets_http() -> list[dict[str, Any]]:
     return results
 
 
+def _probe_streaming_targets_full() -> dict[str, Any]:
+    cached = _load_cached_probe(max_age=STREAMING_AUTO_INTERVAL // 2)
+    if cached:
+        return cached
+
+    return _run_and_cache_probe()
+
+
 def _read_port_from_request(data: Dict[str, Any]) -> int:
     port = int(data.get("port", DEFAULT_IPERF_PORT))
     if port <= 0 or port > 65535:
@@ -254,6 +579,7 @@ def run_test() -> Any:
 @app.route("/streaming_probe", methods=["GET"])
 def streaming_probe() -> Any:
     start = time.time()
+    refresh = request.args.get("refresh", "false").lower() in ["1", "true", "yes"]
 
     if STREAMING_PROBE_MODE == "external":
         try:
@@ -306,11 +632,19 @@ def streaming_probe() -> Any:
                     "elapsed_ms": int((time.time() - start) * 1000),
                 }
             ), 500
-    else:
-        results = _probe_streaming_targets_http()
+        elapsed_ms = int((time.time() - start) * 1000)
+        payload = {"status": "ok", "results": results, "elapsed_ms": elapsed_ms}
+        _save_cached_probe(payload)
+        return jsonify(payload)
 
-    elapsed_ms = int((time.time() - start) * 1000)
-    return jsonify({"status": "ok", "results": results, "elapsed_ms": elapsed_ms})
+    if refresh:
+        payload = _run_and_cache_probe()
+    else:
+        payload = _probe_streaming_targets_full()
+
+    payload.setdefault("elapsed_ms", int((time.time() - start) * 1000))
+    payload["status"] = payload.get("status") or "ok"
+    return jsonify(payload)
 
 
 if __name__ == "__main__":
