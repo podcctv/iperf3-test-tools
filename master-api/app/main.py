@@ -1730,7 +1730,7 @@ def export_agent_configs(db: Session = Depends(get_db)) -> Response:
 
 
 @app.post("/agent-configs/import", response_model=List[AgentConfigRead])
-def import_agent_configs(configs: List[AgentConfigCreate]) -> List[AgentConfigRead]:
+def import_agent_configs(configs: List[AgentConfigCreate], db: Session = Depends(get_db)) -> List[AgentConfigRead]:
     seen: set[str] = set()
     normalized: List[AgentConfigCreate] = []
     for config in configs:
@@ -1742,9 +1742,33 @@ def import_agent_configs(configs: List[AgentConfigCreate]) -> List[AgentConfigRe
         )
 
     try:
-        return agent_store.replace_all(normalized)
+        imported = agent_store.replace_all(normalized)
     except ValueError as exc:  # pragma: no cover - defensive
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    existing_nodes = {node.name: node for node in db.scalars(select(Node)).all()}
+    for config in normalized:
+        node = existing_nodes.get(config.name)
+        if node:
+            node.ip = config.host
+            node.agent_port = config.agent_port
+            node.iperf_port = config.iperf_port
+            node.description = config.description
+        else:
+            db.add(
+                Node(
+                    name=config.name,
+                    ip=config.host,
+                    agent_port=config.agent_port,
+                    iperf_port=config.iperf_port,
+                    description=config.description,
+                )
+            )
+
+    db.commit()
+    _persist_state(db)
+
+    return imported
 
 
 @app.get("/agent-configs", response_model=List[AgentConfigRead])
