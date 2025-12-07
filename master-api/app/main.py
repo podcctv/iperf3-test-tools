@@ -832,6 +832,8 @@ def _login_html() -> str:
     let nodeCache = [];
     let editingNodeId = null;
     const ipPrivacyState = {};
+    let nodeRefreshInterval = null;
+    let isRefreshingNodes = false;
     const streamingServices = [
       { key: 'youtube', label: 'YouTube', icon: '▶', color: 'text-rose-300', bg: 'border-rose-500/30 bg-rose-500/10' },
       { key: 'prime_video', label: 'Prime', icon: '🛒', color: 'text-amber-300', bg: 'border-amber-400/40 bg-amber-500/10' },
@@ -999,6 +1001,11 @@ def _login_html() -> str:
       return `${parts[0] || '***'}.***.***.***`;
     }
 
+    function maskPort(port, shouldMask) {
+      if (!port) return port;
+      return shouldMask ? '****' : `${port}`;
+    }
+
     function renderStreamingBadges(nodeId) {
       const cache = streamingStatusCache[nodeId];
       if (isStreamingTestRunning && (!cache || cache.inProgress)) {
@@ -1148,35 +1155,41 @@ def _login_html() -> str:
     }
 
     async function refreshNodes() {
-      const res = await fetch('/nodes/status');
-      const nodes = await res.json();
-      nodeCache = nodes;
-      nodesList.innerHTML = '';
-      srcSelect.innerHTML = '';
-      dstSelect.innerHTML = '';
+      if (isRefreshingNodes) return;
+      isRefreshingNodes = true;
+      try {
+        const res = await fetch('/nodes/status');
+        const nodes = await res.json();
+        nodeCache = nodes;
+        nodesList.innerHTML = '';
+        srcSelect.innerHTML = '';
+        dstSelect.innerHTML = '';
 
-      if (!nodes.length) {
-        nodesList.textContent = '暂无节点。';
-        return;
-      }
+        if (!nodes.length) {
+          nodesList.textContent = '暂无节点。';
+          return;
+        }
 
-      nodes.forEach((node) => {
-        const statusBadge = node.status === 'online'
-          ? `<span class="${styles.badgeOnline}"><span class=\"h-2 w-2 rounded-full bg-emerald-400\"></span> 在线</span>`
-          : `<span class="${styles.badgeOffline}"><span class=\"h-2 w-2 rounded-full bg-rose-400\"></span> 离线</span>`;
+        nodes.forEach((node) => {
+          const privacyEnabled = !!ipPrivacyState[node.id];
+          const statusBadge = node.status === 'online'
+            ? `<span class="${styles.badgeOnline}"><span class=\"h-2 w-2 rounded-full bg-emerald-400\"></span> 在线</span>`
+            : `<span class="${styles.badgeOffline}"><span class=\"h-2 w-2 rounded-full bg-rose-400\"></span> 离线</span>`;
 
-        const ports = node.detected_iperf_port ? `${node.detected_iperf_port}` : `${node.iperf_port}`;
-        const streamingBadges = renderStreamingBadges(node.id);
-        const backboneBadges = renderBackboneBadges(node.backbone_latency);
-        const ipMasked = maskIp(node.ip, ipPrivacyState[node.id]);
-        const flagPlaceholder = resolveLocalFlag(node);
+          const ports = node.detected_iperf_port ? `${node.detected_iperf_port}` : `${node.iperf_port}`;
+          const agentPortDisplay = maskPort(node.agent_port, privacyEnabled);
+          const iperfPortDisplay = maskPort(ports, privacyEnabled);
+          const streamingBadges = renderStreamingBadges(node.id);
+          const backboneBadges = renderBackboneBadges(node.backbone_latency);
+          const ipMasked = maskIp(node.ip, privacyEnabled);
+          const flagPlaceholder = resolveLocalFlag(node);
 
-        const item = document.createElement('div');
-        item.className = styles.rowCard;
-        item.innerHTML = `
-          <div class="pointer-events-none absolute inset-0 opacity-80">
-            <div class="absolute inset-0 bg-gradient-to-br from-emerald-500/8 via-transparent to-sky-500/10"></div>
-            <div class="absolute -left-10 top-0 h-32 w-32 rounded-full bg-sky-500/10 blur-3xl"></div>
+          const item = document.createElement('div');
+          item.className = styles.rowCard;
+          item.innerHTML = `
+            <div class="pointer-events-none absolute inset-0 opacity-80">
+              <div class="absolute inset-0 bg-gradient-to-br from-emerald-500/8 via-transparent to-sky-500/10"></div>
+              <div class="absolute -left-10 top-0 h-32 w-32 rounded-full bg-sky-500/10 blur-3xl"></div>
           </div>
           <div class="relative flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div class="flex-1 space-y-2">
@@ -1188,12 +1201,12 @@ def _login_html() -> str:
                 </button>
               </div>
               ${backboneBadges ? `<div class=\"flex flex-wrap items-center gap-2\">${backboneBadges}</div>` : ''}
-              ${streamingBadges ? `<div class=\"flex flex-wrap items-center gap-2\">${streamingBadges}</div>` : ''}
+              <div class="flex flex-wrap items-center gap-2" data-streaming-badges="${node.id}">${streamingBadges || ''}</div>
               <p class="${styles.textMuted} flex items-center gap-2">
                 <span class="text-lg font-semibold drop-shadow-sm" data-node-flag="${node.id}" title="服务器所在地区">${flagPlaceholder}</span>
                 <span class="font-mono" data-node-ip-display="${node.id}">${ipMasked}</span>
-                <span class="text-slate-500">:${node.agent_port}</span>
-                <span>· iperf ${ports}${node.description ? ' · ' + node.description : ''}</span>
+                <span class="text-slate-500" data-node-agent-port="${node.id}">:${agentPortDisplay}</span>
+                <span data-node-iperf-display="${node.id}">· iperf ${iperfPortDisplay}${node.description ? ' · ' + node.description : ''}</span>
               </p>
             </div>
             <div class="flex flex-wrap items-center justify-start gap-2 lg:flex-col lg:items-end lg:justify-center lg:min-w-[170px]">
@@ -1208,11 +1221,19 @@ def _login_html() -> str:
         const toggleBtn = item.querySelector('[data-privacy-toggle]');
         const ipDisplay = item.querySelector(`[data-node-ip-display="${node.id}"]`);
         const flagDisplay = item.querySelector(`[data-node-flag="${node.id}"]`);
+        const agentPortSpan = item.querySelector(`[data-node-agent-port="${node.id}"]`);
+        const iperfPortSpan = item.querySelector(`[data-node-iperf-display="${node.id}"]`);
         toggleBtn?.addEventListener('click', () => {
           const nextState = !ipPrivacyState[node.id];
           ipPrivacyState[node.id] = nextState;
           if (ipDisplay) {
             ipDisplay.textContent = maskIp(node.ip, nextState);
+          }
+          if (agentPortSpan) {
+            agentPortSpan.textContent = `:${maskPort(node.agent_port, nextState)}`;
+          }
+          if (iperfPortSpan) {
+            iperfPortSpan.textContent = `· iperf ${maskPort(ports, nextState)}${node.description ? ' · ' + node.description : ''}`;
           }
           toggleBtn.innerHTML = `<span class="text-base">${nextState ? '🙈' : '👁️'}</span>`;
           toggleBtn.setAttribute('aria-pressed', String(nextState));
@@ -1222,7 +1243,7 @@ def _login_html() -> str:
 
         const optionA = document.createElement('option');
         optionA.value = node.id;
-        optionA.textContent = `${node.name} (${node.ip} | iperf ${ports})`;
+        optionA.textContent = `${node.name} (${maskIp(node.ip, privacyEnabled)} | iperf ${maskPort(ports, privacyEnabled)})`;
         srcSelect.appendChild(optionA);
 
         const optionB = optionA.cloneNode(true);
@@ -1230,6 +1251,9 @@ def _login_html() -> str:
       });
 
       syncTestPort();
+      } finally {
+        isRefreshingNodes = false;
+      }
     }
 
     async function runStreamingCheck(nodeId) {
@@ -1247,6 +1271,7 @@ def _login_html() -> str:
 
       try {
         streamingStatusCache[nodeId] = { inProgress: true };
+        updateNodeStreamingBadges(nodeId);
         streamingProgressLabel.textContent = `${targetNode.name} 测试中`;
         try {
           const res = await fetch(`/nodes/${nodeId}/streaming-test`, { method: 'POST' });
@@ -1254,6 +1279,7 @@ def _login_html() -> str:
             streamingStatusCache[nodeId] = streamingStatusCache[nodeId] || {};
             streamingStatusCache[nodeId].error = true;
             streamingStatusCache[nodeId].message = `请求失败 (${res.status})`;
+            updateNodeStreamingBadges(nodeId);
           } else {
             const data = await res.json();
             const byService = {};
@@ -1267,13 +1293,14 @@ def _login_html() -> str:
               }
             });
             streamingStatusCache[nodeId] = byService;
+            updateNodeStreamingBadges(nodeId);
           }
         } catch (err) {
           streamingStatusCache[nodeId] = { error: true, message: err?.message || '请求异常' };
+          updateNodeStreamingBadges(nodeId);
         }
 
         stopProgress('检测完成');
-        await refreshNodes();
       } finally {
         isStreamingTestRunning = false;
       }
@@ -1811,7 +1838,20 @@ def _login_html() -> str:
     dstSelect.addEventListener('change', syncTestPort);
     document.getElementById('password').addEventListener('keyup', (e) => { if (e.key === 'Enter') login(); });
 
+    function updateNodeStreamingBadges(nodeId) {
+      const container = document.querySelector(`[data-streaming-badges="${nodeId}"]`);
+      if (container) {
+        container.innerHTML = renderStreamingBadges(nodeId);
+      }
+    }
+
+    function ensureAutoRefresh() {
+      if (nodeRefreshInterval) return;
+      nodeRefreshInterval = setInterval(() => refreshNodes(), 10000);
+    }
+
     checkAuth();
+    ensureAutoRefresh();
   </script>
 
 </body>
