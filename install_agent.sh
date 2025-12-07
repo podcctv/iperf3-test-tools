@@ -5,7 +5,7 @@ set -euo pipefail
 AGENT_IMAGE=${AGENT_IMAGE:-"iperf-agent:latest"}
 AGENT_PORT=${AGENT_PORT:-8000}
 AGENT_LISTEN_PORT=${AGENT_LISTEN_PORT:-8000}
-IPERF_PORT=${IPERF_PORT:-62001}
+IPERF_PORT=${IPERF_PORT:-}
 START_IPERF_SERVER=${START_IPERF_SERVER:-true}
 UNINSTALL=${UNINSTALL:-false}
 REPO_REF=${REPO_REF:-""}
@@ -66,6 +66,39 @@ select_python() {
   fi
 }
 
+choose_random_port() {
+  local py
+  py=$(select_python)
+
+  if [ -z "${py}" ]; then
+    echo ""
+    return
+  fi
+
+  "${py}" <<'PY'
+import random
+import socket
+
+def find_port():
+    for _ in range(50):
+        port = random.randint(20000, 64000)
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            try:
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                sock.bind(("", port))
+            except OSError:
+                continue
+            return port
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("", 0))
+        return sock.getsockname()[1]
+
+
+print(find_port())
+PY
+}
+
 port_in_use() {
   local port=$1 py
   py=$(select_python)
@@ -90,7 +123,7 @@ def can_bind(family, address):
             return True
 
         print(f"[install-agent] Port probe on {address}:{port} skipped: {exc}", file=sys.stderr)
-        return False
+    return False
 
 
 if can_bind(socket.AF_INET, "0.0.0.0"):
@@ -104,6 +137,23 @@ except OSError:
 
 sys.exit(0)
 PY
+}
+
+ensure_random_iperf_port() {
+  if [ -n "${IPERF_PORT}" ]; then
+    return
+  fi
+
+  local random_port
+  random_port=$(choose_random_port)
+
+  if [ -n "${random_port}" ]; then
+    IPERF_PORT="${random_port}"
+    log "Selected random iperf3 port ${IPERF_PORT}."
+  else
+    IPERF_PORT=62001
+    log "Could not determine random iperf3 port; falling back to ${IPERF_PORT}."
+  fi
 }
 
 prompt_for_port() {
@@ -397,7 +447,7 @@ Usage: install_agent.sh [options]
   --config <path>            Source port variables from a file before applying flags
   --agent-port <port>         Host port where the agent API is exposed (default: 8000)
   --agent-listen-port <port>  Container port the agent listens on (default: 8000)
-  --iperf-port <port>         iperf3 TCP/UDP port to expose (default: 62001)
+  --iperf-port <port>         iperf3 TCP/UDP port to expose (default: random available port)
   --no-start-server           Skip auto-starting iperf3 server inside the agent
   --uninstall                 Remove iperf-agent container and image
   --repo-url <url>            Git remote URL used for auto-update
@@ -415,6 +465,7 @@ main() {
   preprocess_config_arg "$@"
   maybe_load_port_config
   parse_args "$@"
+  ensure_random_iperf_port
   if [ "${UNINSTALL}" = true ]; then
     uninstall_agent
   fi

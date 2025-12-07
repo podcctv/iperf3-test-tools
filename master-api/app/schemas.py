@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime
 from typing import Any, List, Optional
 
@@ -30,7 +32,7 @@ class NodeRead(NodeBase):
     id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class BackboneLatency(BaseModel):
@@ -42,6 +44,14 @@ class BackboneLatency(BaseModel):
     status: str = "unknown"
     detail: str | None = None
     checked_at: int | None = None
+
+
+class StreamingServiceStatus(BaseModel):
+    service: str
+    unlocked: bool
+    key: Optional[str] = None
+    status_code: Optional[int] = None
+    detail: Optional[str] = None
 
 
 class NodeWithStatus(NodeRead):
@@ -76,7 +86,7 @@ class TestRead(BaseModel):
     created_at: datetime | None = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class TestScheduleBase(BaseModel):
@@ -115,15 +125,7 @@ class TestScheduleRead(TestScheduleBase):
     next_run_at: Optional[datetime] = None
 
     class Config:
-        orm_mode = True
-
-
-class StreamingServiceStatus(BaseModel):
-    service: str
-    unlocked: bool
-    key: Optional[str] = None
-    status_code: Optional[int] = None
-    detail: Optional[str] = None
+        from_attributes = True
 
 
 class StreamingTestResult(BaseModel):
