@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Dict, List
 
 import httpx
-from fastapi import Body, Depends, FastAPI, HTTPException, Request, Response
+from fastapi import Body, Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse
 from sqlalchemy import or_, select, text
 from sqlalchemy.orm import Session
@@ -82,6 +82,8 @@ _ensure_test_result_columns()
 
 state_store = StateStore(settings.state_file, settings.state_recent_tests)
 logger = logging.getLogger(__name__)
+_geo_cache: dict[str, tuple[str | None, float]] = {}
+GEO_CACHE_TTL_SECONDS = 60 * 60 * 6
 
 ZHEJIANG_TARGETS = [
     {
@@ -485,6 +487,33 @@ async def _on_shutdown() -> None:
     await backbone_monitor.stop()
 
 
+@app.get("/geo")
+async def geo_lookup(ip: str = Query(..., description="IP 地址")) -> dict:
+    code = await lookup_geo_country_code(ip)
+    return {"country_code": code}
+
+
+async def lookup_geo_country_code(ip: str) -> str | None:
+    now = time.time()
+    cached = _geo_cache.get(ip)
+    if cached and now - cached[1] < GEO_CACHE_TTL_SECONDS:
+        return cached[0]
+
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            resp = await client.get(f"https://ipapi.co/{ip}/country/")
+            if resp.status_code == 200:
+                code = resp.text.strip().upper()
+                if len(code) == 2:
+                    _geo_cache[ip] = (code, now)
+                    return code
+    except Exception:  # pragma: no cover - external dependency
+        logger.exception("Failed to lookup geo country code for %s", ip)
+
+    _geo_cache[ip] = (None, now)
+    return None
+
+
 def _login_html() -> str:
     return """
 <!DOCTYPE html>
@@ -509,9 +538,29 @@ def _login_html() -> str:
     };
   </script>
   <style>
-    body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: radial-gradient(circle at 20% 20%, rgba(56,189,248,0.06), transparent 35%), radial-gradient(circle at 80% 0%, rgba(16,185,129,0.05), transparent 40%), #020617; color: #e2e8f0; margin: 0; padding: 0; }
-    .glass-card { border: 1px solid rgba(148, 163, 184, 0.15); background: rgba(15, 23, 42, 0.8); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35); backdrop-filter: blur(12px); }
-    .panel-card { border: 1px solid rgba(148, 163, 184, 0.18); background: rgba(15, 23, 42, 0.7); box-shadow: 0 12px 35px rgba(0, 0, 0, 0.25); backdrop-filter: blur(10px); }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background:
+        radial-gradient(circle at 12% 20%, rgba(56, 189, 248, 0.08), transparent 32%),
+        radial-gradient(circle at 88% 12%, rgba(16, 185, 129, 0.08), transparent 40%),
+        linear-gradient(135deg, rgba(15, 23, 42, 0.94), rgba(2, 6, 23, 0.96));
+      background-attachment: fixed;
+      color: #e2e8f0;
+      margin: 0;
+      padding: 0;
+    }
+    .glass-card {
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      background: linear-gradient(160deg, rgba(15, 23, 42, 0.92), rgba(22, 33, 61, 0.82));
+      box-shadow: 0 26px 80px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      backdrop-filter: blur(14px);
+    }
+    .panel-card {
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      background: linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(12, 20, 38, 0.82));
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      backdrop-filter: blur(12px);
+    }
     .gradient-bar { background: linear-gradient(120deg, #22c55e 0%, #0ea5e9 35%, #a855f7 100%); height: 4px; border-radius: 999px; }
     .hidden { display: none; }
   </style>
@@ -778,16 +827,16 @@ def _login_html() -> str:
     let streamingStatusCache = {};
     let isStreamingTestRunning = false;
     const styles = {
-      rowCard: 'flex flex-col gap-3 rounded-xl border border-slate-800/70 bg-slate-900/60 p-5 shadow-sm shadow-black/30',
+      rowCard: 'group relative overflow-hidden rounded-2xl border border-slate-800/80 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-slate-950/80 p-5 shadow-[0_25px_80px_rgba(0,0,0,0.5)] ring-1 ring-white/5 transition hover:border-sky-500/40 hover:shadow-sky-500/10',
       inline: 'flex flex-wrap items-center gap-3',
-      badgeOnline: 'inline-flex items-center gap-2 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300 ring-1 ring-emerald-500/40',
-      badgeOffline: 'inline-flex items-center gap-2 rounded-full bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-200 ring-1 ring-rose-500/40',
-      pillInfo: 'inline-flex items-center justify-center gap-2 rounded-lg bg-sky-500/15 px-3 py-2 text-xs font-semibold text-sky-100 ring-1 ring-sky-500/40 transition hover:bg-sky-500/25',
-      pillDanger: 'inline-flex items-center justify-center gap-2 rounded-lg bg-rose-500/15 px-3 py-2 text-xs font-semibold text-rose-100 ring-1 ring-rose-500/40 transition hover:bg-rose-500/25',
-      pillWarn: 'inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500/15 px-3 py-2 text-xs font-semibold text-amber-100 ring-1 ring-amber-500/40 transition hover:bg-amber-500/25',
-      pillMuted: 'inline-flex items-center justify-center gap-2 rounded-lg bg-slate-800/70 px-3 py-2 text-xs font-semibold text-slate-200 ring-1 ring-slate-700',
-      iconButton: 'inline-flex items-center justify-center gap-1 rounded-full border border-slate-700/70 bg-slate-800/80 px-2 py-1 text-xs font-semibold text-slate-200 transition hover:border-sky-500 hover:text-sky-100',
-      textMuted: 'text-slate-400 text-sm',
+      badgeOnline: 'inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-emerald-500/20 to-teal-400/15 px-3 py-1 text-xs font-semibold text-emerald-100 ring-1 ring-emerald-400/40 shadow-[0_10px_30px_rgba(16,185,129,0.15)]',
+      badgeOffline: 'inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-rose-500/15 to-orange-400/10 px-3 py-1 text-xs font-semibold text-rose-100 ring-1 ring-rose-400/35 shadow-[0_10px_30px_rgba(244,63,94,0.12)]',
+      pillInfo: 'inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-sky-500/20 via-sky-500/15 to-indigo-500/20 px-3 py-2 text-xs font-semibold text-sky-50 ring-1 ring-sky-400/40 shadow-[0_12px_30px_rgba(14,165,233,0.18)] transition hover:scale-[1.01] hover:ring-sky-300/60',
+      pillDanger: 'inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-rose-500/20 via-rose-500/15 to-orange-500/20 px-3 py-2 text-xs font-semibold text-rose-50 ring-1 ring-rose-400/40 shadow-[0_12px_30px_rgba(244,63,94,0.18)] transition hover:scale-[1.01] hover:ring-rose-300/60',
+      pillWarn: 'inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-amber-500/20 via-amber-500/15 to-yellow-500/20 px-3 py-2 text-xs font-semibold text-amber-50 ring-1 ring-amber-400/40 shadow-[0_12px_30px_rgba(251,191,36,0.18)] transition hover:scale-[1.01] hover:ring-amber-300/60',
+      pillMuted: 'inline-flex items-center justify-center gap-2 rounded-lg bg-slate-800/70 px-3 py-2 text-xs font-semibold text-slate-200 ring-1 ring-slate-700/70 shadow-inner shadow-black/20',
+      iconButton: 'inline-flex items-center justify-center gap-1 rounded-full border border-slate-700/70 bg-slate-800/80 px-2 py-1 text-xs font-semibold text-slate-200 transition hover:border-sky-400 hover:text-sky-100 hover:shadow-[0_10px_30px_rgba(14,165,233,0.15)]',
+      textMuted: 'text-slate-300/90 text-sm drop-shadow-sm',
       textMutedSm: 'text-slate-500 text-xs',
       table: 'w-full border-collapse overflow-hidden rounded-xl border border-slate-800/60 bg-slate-900/50 text-sm text-slate-100',
       tableHeader: 'bg-slate-900/70 text-slate-300',
@@ -849,6 +898,9 @@ def _login_html() -> str:
       return (key || label || 'unknown').toLowerCase().replace(/[^a-z0-9+]+/g, '_');
     }
 
+    const flagCache = {};
+    const FLAG_CACHE_TTL = 1000 * 60 * 60 * 6;
+
     function extractCountryCode(text) {
       const match = (text || '').match(/\b([A-Za-z]{2})\b/);
       return match ? match[1].toUpperCase() : null;
@@ -861,11 +913,59 @@ def _login_html() -> str:
       return String.fromCodePoint(...chars.map((c) => c.codePointAt(0) + base));
     }
 
-    function resolveNodeFlag(node) {
+    function isPrivateIp(ip) {
+      if (!ip) return false;
+      return (
+        /^10\\./.test(ip) ||
+        /^192\\.168\\./.test(ip) ||
+        /^172\\.(1[6-9]|2\\d|3[0-1])\\./.test(ip) ||
+        ip === '127.0.0.1'
+      );
+    }
+
+    function resolveLocalFlag(node) {
       const codeFromDescription = extractCountryCode(node.description);
       const codeFromName = extractCountryCode(node.name);
       const flag = countryCodeToFlag(codeFromDescription || codeFromName);
       return flag || '🌐';
+    }
+
+    async function getNodeFlag(node) {
+      const now = Date.now();
+      const cached = flagCache[node.ip];
+      if (cached && now - cached.timestamp < FLAG_CACHE_TTL) {
+        return cached.flag;
+      }
+
+      const fallback = resolveLocalFlag(node);
+      if (!node.ip || isPrivateIp(node.ip)) {
+        flagCache[node.ip || node.id] = { flag: fallback, timestamp: now };
+        return fallback;
+      }
+
+      try {
+        const res = await fetch(`/geo?ip=${encodeURIComponent(node.ip)}`);
+        if (!res.ok) {
+          throw new Error('geo lookup failed');
+        }
+        const data = await res.json();
+        const flag = countryCodeToFlag(data?.country_code) || fallback;
+        flagCache[node.ip] = { flag, timestamp: now };
+        return flag;
+      } catch (error) {
+        console.warn('无法获取 IP 归属地国旗，将使用回退旗帜。', error);
+        return fallback;
+      }
+    }
+
+    function attachFlagUpdater(node, el) {
+      if (!el) return;
+      el.textContent = resolveLocalFlag(node);
+      getNodeFlag(node).then((flag) => {
+        if (flag && flag !== el.textContent) {
+          el.textContent = flag;
+        }
+      });
     }
 
     function maskIp(ip, shouldMask) {
@@ -1051,17 +1151,21 @@ def _login_html() -> str:
         const ports = node.detected_iperf_port ? `${node.detected_iperf_port}` : `${node.iperf_port}`;
         const streamingBadges = renderStreamingBadges(node.id);
         const backboneBadges = renderBackboneBadges(node.backbone_latency);
-        const flagEmoji = resolveNodeFlag(node);
         const ipMasked = maskIp(node.ip, ipPrivacyState[node.id]);
+        const flagPlaceholder = resolveLocalFlag(node);
 
         const item = document.createElement('div');
         item.className = styles.rowCard;
         item.innerHTML = `
-          <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div class="pointer-events-none absolute inset-0 opacity-80">
+            <div class="absolute inset-0 bg-gradient-to-br from-emerald-500/8 via-transparent to-sky-500/10"></div>
+            <div class="absolute -left-10 top-0 h-32 w-32 rounded-full bg-sky-500/10 blur-3xl"></div>
+          </div>
+          <div class="relative flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div class="flex-1 space-y-2">
               <div class="flex flex-wrap items-center gap-2">
                 ${statusBadge}
-                <span class="text-base font-semibold text-white">${node.name}</span>
+                <span class="text-base font-semibold text-white drop-shadow">${node.name}</span>
                 <button type="button" class="${styles.iconButton}" data-privacy-toggle="${node.id}" aria-label="切换 IP 隐藏">
                   <span class="text-base">${ipPrivacyState[node.id] ? '🙈' : '👁️'}</span>
                 </button>
@@ -1069,7 +1173,7 @@ def _login_html() -> str:
               ${backboneBadges ? `<div class=\"flex flex-wrap items-center gap-2\">${backboneBadges}</div>` : ''}
               ${streamingBadges ? `<div class=\"flex flex-wrap items-center gap-2\">${streamingBadges}</div>` : ''}
               <p class="${styles.textMuted} flex items-center gap-2">
-                <span class="text-lg" title="服务器所在地区">${flagEmoji}</span>
+                <span class="text-lg font-semibold drop-shadow-sm" data-node-flag="${node.id}" title="服务器所在地区">${flagPlaceholder}</span>
                 <span class="font-mono" data-node-ip-display="${node.id}">${ipMasked}</span>
                 <span class="text-slate-500">:${node.agent_port}</span>
                 <span>· iperf ${ports}${node.description ? ' · ' + node.description : ''}</span>
@@ -1086,6 +1190,7 @@ def _login_html() -> str:
 
         const toggleBtn = item.querySelector('[data-privacy-toggle]');
         const ipDisplay = item.querySelector(`[data-node-ip-display="${node.id}"]`);
+        const flagDisplay = item.querySelector(`[data-node-flag="${node.id}"]`);
         toggleBtn?.addEventListener('click', () => {
           const nextState = !ipPrivacyState[node.id];
           ipPrivacyState[node.id] = nextState;
@@ -1095,6 +1200,8 @@ def _login_html() -> str:
           toggleBtn.innerHTML = `<span class="text-base">${nextState ? '🙈' : '👁️'}</span>`;
           toggleBtn.setAttribute('aria-pressed', String(nextState));
         });
+
+        attachFlagUpdater(node, flagDisplay);
 
         const optionA = document.createElement('option');
         optionA.value = node.id;
@@ -1720,9 +1827,29 @@ def _schedule_html() -> str:
     };
   </script>
   <style>
-    body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: radial-gradient(circle at 20% 20%, rgba(56,189,248,0.06), transparent 35%), radial-gradient(circle at 80% 0%, rgba(16,185,129,0.05), transparent 40%), #020617; color: #e2e8f0; margin: 0; padding: 0; }
-    .glass-card { border: 1px solid rgba(148, 163, 184, 0.15); background: rgba(15, 23, 42, 0.8); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35); backdrop-filter: blur(12px); }
-    .panel-card { border: 1px solid rgba(148, 163, 184, 0.18); background: rgba(15, 23, 42, 0.7); box-shadow: 0 12px 35px rgba(0, 0, 0, 0.25); backdrop-filter: blur(10px); }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background:
+        radial-gradient(circle at 12% 20%, rgba(56, 189, 248, 0.08), transparent 32%),
+        radial-gradient(circle at 88% 12%, rgba(16, 185, 129, 0.08), transparent 40%),
+        linear-gradient(135deg, rgba(15, 23, 42, 0.94), rgba(2, 6, 23, 0.96));
+      background-attachment: fixed;
+      color: #e2e8f0;
+      margin: 0;
+      padding: 0;
+    }
+    .glass-card {
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      background: linear-gradient(160deg, rgba(15, 23, 42, 0.92), rgba(22, 33, 61, 0.82));
+      box-shadow: 0 26px 80px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      backdrop-filter: blur(14px);
+    }
+    .panel-card {
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      background: linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(12, 20, 38, 0.82));
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      backdrop-filter: blur(12px);
+    }
     .gradient-bar { background: linear-gradient(120deg, #22c55e 0%, #0ea5e9 35%, #a855f7 100%); height: 4px; border-radius: 999px; }
     .hidden { display: none; }
   </style>
@@ -1827,11 +1954,11 @@ def _schedule_html() -> str:
     let nodeCache = [];
 
     const styles = {
-      rowCard: 'rounded-xl border border-slate-800/70 bg-slate-900/60 p-4 shadow-sm shadow-black/30 space-y-3',
+      rowCard: 'relative overflow-hidden rounded-2xl border border-slate-800/80 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-slate-950/80 p-4 shadow-[0_25px_80px_rgba(0,0,0,0.45)] ring-1 ring-white/5 space-y-3',
       inline: 'flex flex-wrap items-center gap-3',
-      pillInfo: 'inline-flex items-center justify-center gap-2 rounded-lg bg-sky-500/15 px-3 py-2 text-xs font-semibold text-sky-100 ring-1 ring-sky-500/40 transition hover:bg-sky-500/25',
-      pillDanger: 'inline-flex items-center justify-center gap-2 rounded-lg bg-rose-500/15 px-3 py-2 text-xs font-semibold text-rose-100 ring-1 ring-rose-500/40 transition hover:bg-rose-500/25',
-      textMuted: 'text-slate-400 text-sm',
+      pillInfo: 'inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-sky-500/20 via-sky-500/15 to-indigo-500/20 px-3 py-2 text-xs font-semibold text-sky-50 ring-1 ring-sky-400/40 shadow-[0_12px_30px_rgba(14,165,233,0.18)] transition hover:scale-[1.01] hover:ring-sky-300/60',
+      pillDanger: 'inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-rose-500/20 via-rose-500/15 to-orange-500/20 px-3 py-2 text-xs font-semibold text-rose-50 ring-1 ring-rose-400/40 shadow-[0_12px_30px_rgba(244,63,94,0.18)] transition hover:scale-[1.01] hover:ring-rose-300/60',
+      textMuted: 'text-slate-300/90 text-sm drop-shadow-sm',
       textMutedSm: 'text-slate-500 text-xs',
     };
 
