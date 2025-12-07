@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import json
 import logging
+import time
 from datetime import datetime, timezone
 from typing import Dict, List
 
@@ -31,6 +32,7 @@ from .schemas import (
     TestScheduleUpdate,
     TestCreate,
     TestRead,
+    BackboneLatency,
     StreamingServiceStatus,
     StreamingTestResult,
 )
@@ -81,6 +83,27 @@ _ensure_test_result_columns()
 state_store = StateStore(settings.state_file, settings.state_recent_tests)
 logger = logging.getLogger(__name__)
 
+ZHEJIANG_TARGETS = [
+    {
+        "key": "zj_cu",
+        "name": "浙江联通",
+        "host": "zj-cu-v4.ip.zstaticcdn.com",
+        "port": 443,
+    },
+    {
+        "key": "zj_cm",
+        "name": "浙江移动",
+        "host": "zj-cm-v4.ip.zstaticcdn.com",
+        "port": 443,
+    },
+    {
+        "key": "zj_ct",
+        "name": "浙江电信",
+        "host": "zj-ct-v4.ip.zstaticcdn.com",
+        "port": 443,
+    },
+]
+
 
 def _bootstrap_state() -> None:
     db = SessionLocal()
@@ -94,6 +117,84 @@ _bootstrap_state()
 
 app = FastAPI(title="iperf3 master api")
 agent_store = AgentConfigStore(settings.agent_config_file)
+
+
+class BackboneLatencyMonitor:
+    def __init__(self, targets: List[dict], interval_seconds: int = 60) -> None:
+        self.targets = targets
+        self.interval_seconds = interval_seconds
+        self._cache: Dict[str, BackboneLatency] = {}
+        self._task: asyncio.Task | None = None
+        self._lock = asyncio.Lock()
+
+    async def start(self) -> None:
+        if self._task:
+            return
+        await self.refresh()
+        self._task = asyncio.create_task(self._run())
+
+    async def stop(self) -> None:
+        if self._task:
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
+            self._task = None
+
+    async def _run(self) -> None:
+        while True:
+            try:
+                await self.refresh()
+            except Exception:
+                logger.exception("Failed to refresh backbone latency")
+            await asyncio.sleep(self.interval_seconds)
+
+    async def _measure_target(self, target: dict) -> BackboneLatency:
+        samples: list[float] = []
+        detail: str | None = None
+        for _ in range(2):
+            start = time.perf_counter()
+            try:
+                reader, writer = await asyncio.wait_for(
+                    asyncio.open_connection(target["host"], int(target["port"])),
+                    timeout=5,
+                )
+                writer.close()
+                try:
+                    await writer.wait_closed()
+                except Exception:
+                    pass
+                samples.append((time.perf_counter() - start) * 1000)
+            except Exception as exc:  # pragma: no cover - network dependent
+                detail = str(exc)
+
+        latency_ms = sum(samples) / len(samples) if samples else None
+        checked_at = int(datetime.now(timezone.utc).timestamp())
+        return BackboneLatency(
+            key=target["key"],
+            name=target["name"],
+            host=target["host"],
+            port=int(target["port"]),
+            latency_ms=round(latency_ms, 2) if latency_ms is not None else None,
+            status="ok" if latency_ms is not None else "error",
+            detail=None if latency_ms is not None else detail,
+            checked_at=checked_at,
+        )
+
+    async def refresh(self) -> List[BackboneLatency]:
+        async with self._lock:
+            results = await asyncio.gather(
+                *[self._measure_target(target) for target in self.targets]
+            )
+            self._cache = {result.key: result for result in results}
+            return results
+
+    async def get_statuses(self) -> List[BackboneLatency]:
+        if not self._cache:
+            return await self.refresh()
+        ordered = [self._cache[target["key"]] for target in self.targets if target["key"] in self._cache]
+        return ordered
 
 
 def _hydrate_agent_store() -> None:
@@ -194,7 +295,7 @@ def _summarize_metrics(raw: dict | None) -> dict | None:
         (receiver_stream or {}).get("rtt") if receiver_stream else None,
     )
 
-    if latency_ms and latency_ms > 1000:
+    if latency_ms is not None and latency_ms > 1000:
         latency_ms = latency_ms / 1000
 
     return {
@@ -369,16 +470,19 @@ class NodeHealthMonitor:
 
 
 health_monitor = NodeHealthMonitor(settings.health_check_interval)
+backbone_monitor = BackboneLatencyMonitor(ZHEJIANG_TARGETS, interval_seconds=60)
 
 
 @app.on_event("startup")
 async def _on_startup() -> None:
     await health_monitor.start()
+    await backbone_monitor.start()
 
 
 @app.on_event("shutdown")
 async def _on_shutdown() -> None:
     await health_monitor.stop()
+    await backbone_monitor.stop()
 
 
 def _login_html() -> str:
@@ -508,6 +612,13 @@ def _login_html() -> str:
                   <div class="h-2 w-full rounded-full bg-slate-800/80">
                     <div id="streaming-progress-bar" class="h-2 w-0 rounded-full bg-gradient-to-r from-emerald-500 to-sky-500 transition-all duration-300"></div>
                   </div>
+                </div>
+                <div id="zhejiang-latency" class="space-y-2 rounded-xl border border-slate-800 bg-slate-900/50 p-3 text-sm text-slate-300">
+                  <div class="flex items-center justify-between">
+                    <span class="font-semibold">三网到浙江链路延迟</span>
+                    <span class="text-xs text-slate-500">每分钟自动刷新</span>
+                  </div>
+                  <div class="text-xs text-slate-500">正在加载链路状态...</div>
                 </div>
                 <div id="nodes-list" class="text-sm text-slate-400 space-y-3">暂无节点。</div>
               </div>
@@ -639,6 +750,7 @@ def _login_html() -> str:
     const nodeIperf = document.getElementById('node-iperf-port');
     const nodeDesc = document.getElementById('node-desc');
     const nodesList = document.getElementById('nodes-list');
+    const zhejiangLatencyBox = document.getElementById('zhejiang-latency');
     const streamingProgress = document.getElementById('streaming-progress');
     const streamingProgressBar = document.getElementById('streaming-progress-bar');
     const streamingProgressLabel = document.getElementById('streaming-progress-label');
@@ -672,6 +784,8 @@ def _login_html() -> str:
     ];
     let streamingStatusCache = {};
     let isStreamingTestRunning = false;
+    let zhejiangLatencyCache = [];
+    let zhejiangLatencyTimer = null;
     const styles = {
       rowCard: 'rounded-xl border border-slate-800/70 bg-slate-900/60 p-4 shadow-sm shadow-black/30 space-y-3',
       inline: 'flex flex-wrap items-center gap-3',
@@ -769,6 +883,69 @@ def _login_html() -> str:
         .join('');
     }
 
+    function renderZhejiangLatency() {
+      if (!zhejiangLatencyBox) return;
+      const header = `<div class="flex items-center justify-between"><span class="font-semibold">三网到浙江链路延迟</span><span class="text-xs text-slate-500">每分钟自动刷新</span></div>`;
+
+      if (!zhejiangLatencyCache.length) {
+        zhejiangLatencyBox.innerHTML = `${header}<div class="text-xs text-slate-500">暂无链路数据。</div>`;
+        return;
+      }
+
+      const grid = zhejiangLatencyCache
+        .map((item) => {
+          const ok = item.latency_ms !== undefined && item.latency_ms !== null;
+          const latencyText = ok ? `${formatMetric(item.latency_ms, 1)} ms` : '不可达';
+          const chip = ok
+            ? 'bg-emerald-500/10 text-emerald-200 border-emerald-500/40'
+            : 'bg-rose-500/10 text-rose-200 border-rose-500/40';
+          const detail = item.detail ? `<p class="text-[11px] text-slate-500">${item.detail}</p>` : '';
+          return `<div class="space-y-1 rounded-lg border border-slate-800/70 bg-slate-900/70 p-3">
+            <div class="flex items-center justify-between text-sm font-semibold text-white">
+              <span>${item.name}</span>
+              <span class="rounded-full border px-2 py-0.5 text-[11px] ${chip}">${latencyText}</span>
+            </div>
+            <p class="text-[11px] text-slate-500">${item.host}:${item.port}</p>
+            ${detail}
+          </div>`;
+        })
+        .join('');
+
+      zhejiangLatencyBox.innerHTML = `${header}<div class="grid gap-2 sm:grid-cols-3">${grid}</div>`;
+    }
+
+    async function refreshZhejiangLatency() {
+      if (!zhejiangLatencyBox) return;
+      try {
+        const res = await fetch('/latency/zhejiang');
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+        zhejiangLatencyCache = await res.json();
+        renderZhejiangLatency();
+      } catch (err) {
+        zhejiangLatencyBox.innerHTML = `<div class="flex items-center justify-between"><span class="font-semibold">三网到浙江链路延迟</span><span class="text-xs text-amber-300">链路刷新失败：${err?.message || err}</span></div>`;
+      }
+    }
+
+    function startLatencyPolling() {
+      if (zhejiangLatencyTimer) {
+        clearInterval(zhejiangLatencyTimer);
+      }
+      refreshZhejiangLatency();
+      zhejiangLatencyTimer = setInterval(refreshZhejiangLatency, 60 * 1000);
+    }
+
+    function stopLatencyPolling(message = '未登录或未开始刷新') {
+      if (zhejiangLatencyTimer) {
+        clearInterval(zhejiangLatencyTimer);
+        zhejiangLatencyTimer = null;
+      }
+      if (zhejiangLatencyBox) {
+        zhejiangLatencyBox.innerHTML = `<div class="flex items-center justify-between"><span class="font-semibold">三网到浙江链路延迟</span><span class="text-xs text-slate-500">${message}</span></div>`;
+      }
+    }
+
     async function exportAgentConfigs() {
       clearAlert(configAlert);
       const res = await fetch('/agent-configs/export');
@@ -857,9 +1034,11 @@ def _login_html() -> str:
         authHint.textContent = '已通过认证，可管理节点与测速任务。';
         await refreshNodes();
         await refreshTests();
+        startLatencyPolling();
       } else {
         appCard.classList.add('hidden');
         loginCard.classList.remove('hidden');
+        stopLatencyPolling('等待登录');
       }
     }
 
@@ -1267,29 +1446,41 @@ def _login_html() -> str:
       const firstStream = (end.streams && end.streams.length) ? end.streams[0] : null;
       const receiverStream = firstStream && firstStream.receiver ? firstStream.receiver : null;
       const senderStream = firstStream && firstStream.sender ? firstStream.sender : null;
+      const pickFirst = (...values) => values.find((v) => v !== undefined && v !== null);
 
-      const bitsPerSecond =
-        (sumReceived && sumReceived.bits_per_second) ||
-        (receiverStream && receiverStream.bits_per_second) ||
-        (sumSent && sumSent.bits_per_second) ||
-        (senderStream && senderStream.bits_per_second);
+      const lossFromPackets = sumReceived && sumReceived.lost_packets !== undefined && sumReceived.packets
+        ? (sumReceived.lost_packets / sumReceived.packets) * 100
+        : undefined;
 
-      const jitterMs =
-        (sumReceived && sumReceived.jitter_ms) ||
-        (sumSent && sumSent.jitter_ms) ||
-        (receiverStream && receiverStream.jitter_ms) ||
-        (senderStream && senderStream.jitter_ms);
+      const bitsPerSecond = pickFirst(
+        sumReceived?.bits_per_second,
+        receiverStream?.bits_per_second,
+        sumSent?.bits_per_second,
+        senderStream?.bits_per_second,
+      );
 
-      const lostPercent =
-        (sumReceived && (sumReceived.lost_percent ?? (sumReceived.lost_packets && sumReceived.packets ? (sumReceived.lost_packets / sumReceived.packets) * 100 : undefined))) ||
-        (sumSent && sumSent.lost_percent) ||
-        (receiverStream && receiverStream.lost_percent) ||
-        (senderStream && senderStream.lost_percent);
+      const jitterMs = pickFirst(
+        sumReceived?.jitter_ms,
+        sumSent?.jitter_ms,
+        receiverStream?.jitter_ms,
+        senderStream?.jitter_ms,
+      );
 
-      let latencyMs =
-        (senderStream && (senderStream.mean_rtt || senderStream.rtt)) ||
-        (receiverStream && (receiverStream.mean_rtt || receiverStream.rtt));
-      if (latencyMs && latencyMs > 1000) {
+      const lostPercent = pickFirst(
+        sumReceived?.lost_percent,
+        lossFromPackets,
+        sumSent?.lost_percent,
+        receiverStream?.lost_percent,
+        senderStream?.lost_percent,
+      );
+
+      let latencyMs = pickFirst(
+        senderStream?.mean_rtt,
+        senderStream?.rtt,
+        receiverStream?.mean_rtt,
+        receiverStream?.rtt,
+      );
+      if (latencyMs !== undefined && latencyMs !== null && latencyMs > 1000) {
         latencyMs = latencyMs / 1000;
       }
 
@@ -1921,6 +2112,11 @@ def delete_node(node_id: int, db: Session = Depends(get_db)):
 @app.get("/nodes/status", response_model=List[NodeWithStatus])
 async def nodes_with_status(db: Session = Depends(get_db)):
     return await health_monitor.get_statuses()
+
+
+@app.get("/latency/zhejiang", response_model=List[BackboneLatency])
+async def zhejiang_latency() -> List[BackboneLatency]:
+    return await backbone_monitor.get_statuses()
 
 
 @app.post("/nodes/{node_id}/streaming-test", response_model=StreamingTestResult)

@@ -39,6 +39,17 @@ class NodeWithStatus(NodeRead):
     detected_iperf_port: int | None = None
 
 
+class BackboneLatency(BaseModel):
+    key: str
+    name: str
+    host: str
+    port: int
+    latency_ms: float | None = None
+    status: str = "unknown"
+    detail: str | None = None
+    checked_at: int | None = None
+
+
 class TestCreate(BaseModel):
     src_node_id: int
     dst_node_id: int

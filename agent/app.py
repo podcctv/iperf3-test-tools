@@ -222,7 +222,7 @@ def _probe_youtube_premium() -> dict[str, Any]:
         status = None
         detail_parts = [dns_info, f"请求失败: {exc}"[:150]]
 
-    return _service_result("youtube_premium", "YouTube Premium", unlocked, status, detail_parts)
+    return _service_result("youtube", "YouTube Premium", unlocked, status, detail_parts)
 
 
 def _probe_prime_video() -> dict[str, Any]:
@@ -234,8 +234,14 @@ def _probe_prime_video() -> dict[str, Any]:
         status = resp.status_code
         region_match = re.search(r'"currentTerritory"\s*:\s*"([A-Z]{2})"', resp.text)
         region = region_match.group(1) if region_match else None
-        unlocked = status == 200 and region is not None
-        detail_parts = [dns_info, f"HTTP {status}", f"Region: {region}" if region else None]
+        blocked = "not available" in resp.text.lower() or "vpn" in resp.text.lower()
+        unlocked = status == 200 and not blocked
+        detail_parts = [
+            dns_info,
+            f"HTTP {status}",
+            f"Region: {region}" if region else "Region: unknown",
+            "疑似地域限制" if blocked else None,
+        ]
     except requests.RequestException as exc:
         unlocked = False
         status = None
