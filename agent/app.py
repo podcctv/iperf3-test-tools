@@ -26,6 +26,7 @@ STREAMING_TARGETS = {
     "netflix": {"name": "Netflix", "url": "https://www.netflix.com"},
     "disney_plus": {"name": "Disney+", "url": "https://www.disneyplus.com"},
     "hbo": {"name": "HBO", "url": "https://www.hbomax.com"},
+    "gemini": {"name": "Google Gemini", "url": "https://gemini.google.com/app"},
 }
 
 STREAMING_SCRIPT_URL = "https://raw.githubusercontent.com/xykt/IPQuality/main/ip.sh"
@@ -45,6 +46,10 @@ SCRIPT_SERVICE_MAP = {
     "Netflix": {"key": "netflix", "name": "Netflix"},
     "DisneyPlus": {"key": "disney_plus", "name": "Disney+"},
     "HBO": {"key": "hbo", "name": "HBO"},
+    "TikTok": {"key": "tiktok", "name": "TikTok"},
+    "Spotify": {"key": "spotify", "name": "Spotify"},
+    "OpenAI": {"key": "openai", "name": "OpenAI/ChatGPT"},
+    "Gemini": {"key": "gemini", "name": "Google Gemini"},
 }
 
 STREAMING_UA = (
@@ -161,7 +166,7 @@ def _probe_netflix() -> dict[str, Any]:
         resp = requests.get(test_title, headers=headers, timeout=10)
         status = resp.status_code
         blocked_text = "not available to watch" in resp.text.lower() or "proxy" in resp.text.lower()
-        unlocked = status == 200 and not blocked_text
+        unlocked = status and status < 500 and not blocked_text
         detail_parts = [dns_info, f"HTTP {status}", "自制片库" if status == 404 else None]
     except requests.RequestException as exc:
         unlocked = False
@@ -182,8 +187,13 @@ def _probe_youtube_premium() -> dict[str, Any]:
         region_match = region_match or re.search(r'"contentRegion"\s*:\s*"([A-Z]{2})"', resp.text)
         region = region_match.group(1) if region_match else None
         unavailable = "not available in your country" in resp.text.lower()
-        unlocked = status == 200 and not unavailable
-        detail_parts = [dns_info, f"HTTP {status}", f"Region: {region}" if region else None]
+        unlocked = status and status < 400 and not unavailable
+        detail_parts = [
+            dns_info,
+            f"HTTP {status}",
+            f"Region: {region}" if region else None,
+            resp.url if resp.url and resp.url != url else None,
+        ]
     except requests.RequestException as exc:
         unlocked = False
         status = None
@@ -272,6 +282,85 @@ def _probe_openai() -> dict[str, Any]:
     return _service_result("openai", "OpenAI/ChatGPT", unlocked, api_status, detail_parts)
 
 
+def _probe_gemini() -> dict[str, Any]:
+    headers = {"User-Agent": STREAMING_UA}
+    dns_info = _dns_detail("gemini.google.com")
+    url = "https://gemini.google.com/app"
+    api_probe_status: int | None = None
+    api_probe_error: str | None = None
+    api_geo_hint: str | None = None
+
+    try:
+        resp = requests.get(url, headers=headers, timeout=10, allow_redirects=True)
+        status = resp.status_code
+        blocked = "not available in your country" in resp.text.lower()
+        blocked = blocked or "not available in your location" in resp.text.lower()
+        unlocked = status and status < 400 and not blocked
+        detail_parts = [
+            dns_info,
+            f"HTTP {status}",
+            resp.url if resp.url and resp.url != url else None,
+        ]
+    except requests.RequestException as exc:
+        status = None
+        unlocked = False
+        detail_parts = [dns_info, f"请求失败: {exc}"[:150]]
+
+    # Attempt an unauthenticated API reachability check for a stronger signal.
+    if status is None or not unlocked:
+        api_url = "https://generativelanguage.googleapis.com/v1beta/models"
+        try:
+            api_resp = requests.get(api_url, headers=headers, timeout=10)
+            api_probe_status = api_resp.status_code
+            if api_resp.headers.get("content-type", "").startswith("application/json"):
+                payload = api_resp.json()
+                api_geo_hint = (
+                    payload.get("error", {})
+                    .get("message", "")
+                    .split(".")[0]
+                    if isinstance(payload, dict)
+                    else None
+                )
+            unlocked = unlocked or (api_probe_status in {400, 401, 403})
+        except requests.RequestException as exc:
+            api_probe_error = f"API 请求失败: {exc}"[:120]
+
+    detail_parts.extend(
+        part
+        for part in [
+            f"API HTTP {api_probe_status}" if api_probe_status else api_probe_error,
+            api_geo_hint,
+        ]
+        if part
+    )
+
+    return _service_result("gemini", "Google Gemini", unlocked, status or api_probe_status, detail_parts)
+
+
+def _probe_hbo() -> dict[str, Any]:
+    url = "https://www.hbomax.com"
+    headers = {"User-Agent": STREAMING_UA}
+    dns_info = _dns_detail("www.hbomax.com")
+    try:
+        resp = requests.get(url, headers=headers, timeout=10, allow_redirects=True)
+        status = resp.status_code
+        blocked = "not available in your region" in resp.text.lower()
+        blocked = blocked or "service area" in resp.text.lower()
+        unlocked = status and status < 400 and not blocked
+        detail_parts = [
+            dns_info,
+            f"HTTP {status}",
+            resp.url if resp.url and resp.url != url else None,
+            resp.headers.get("CF-IPCountry"),
+        ]
+    except requests.RequestException as exc:
+        status = None
+        unlocked = False
+        detail_parts = [dns_info, f"请求失败: {exc}"[:150]]
+
+    return _service_result("hbo", "HBO", unlocked, status, detail_parts)
+
+
 def _run_streaming_suite() -> tuple[list[dict[str, Any]], int]:
     start = time.time()
     checks = [
@@ -282,6 +371,8 @@ def _run_streaming_suite() -> tuple[list[dict[str, Any]], int]:
         _probe_prime_video,
         _probe_spotify,
         _probe_openai,
+        _probe_gemini,
+        _probe_hbo,
     ]
 
     results: list[dict[str, Any]] = []
