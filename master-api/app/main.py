@@ -263,179 +263,240 @@ def _login_html() -> str:
   <meta charset=\"UTF-8\" />
   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />
   <title>iperf3 Master Dashboard</title>
+  <link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/@radix-ui/themes@3.1.1/dist/css/themes.css\" />
+  <script src=\"https://cdn.tailwindcss.com\"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            slate: {
+              950: '#020617',
+            },
+          },
+        },
+      },
+    };
+  </script>
   <style>
-    body { font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0; margin: 0; padding: 0; }
-    .container { max-width: 1080px; margin: 0 auto; padding: 32px; }
-    .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.25); margin-bottom: 20px; }
-    h1, h2, h3 { margin: 0 0 12px; color: #f8fafc; }
-    label { display: block; margin: 10px 0 6px; font-weight: 600; }
-    input, select, button, textarea { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid #334155; background: #0b1220; color: #e2e8f0; }
-    button { background: linear-gradient(120deg, #22c55e, #16a34a); color: #0b1220; font-weight: 700; cursor: pointer; border: none; transition: transform 0.1s ease, box-shadow 0.1s ease; }
-    button:hover { transform: translateY(-1px); box-shadow: 0 6px 14px rgba(34,197,94,0.35); }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
-    .badge { padding: 4px 10px; border-radius: 999px; font-size: 12px; display: inline-block; }
-    .badge.online { background: #065f46; color: #d1fae5; }
-    .badge.offline { background: #7f1d1d; color: #fee2e2; }
-    .pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; font-size: 13px; font-weight: 700; border: none; cursor: pointer; }
-    .pill.tag { cursor: default; }
-    .pill.success { background: #22c55e; color: #0b1220; }
-    .pill.warn { background: #f59e0b; color: #0b1220; }
-    .pill.info { background: #38bdf8; color: #0b1220; }
-    .pill.danger { background: #ef4444; color: #0b1220; }
-    .pill.muted { background: #475569; color: #e2e8f0; }
-    .muted { color: #94a3b8; font-size: 14px; }
-    pre { background: #0b1220; padding: 12px; border-radius: 8px; overflow: auto; border: 1px solid #1f2937; }
+    body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: radial-gradient(circle at 20% 20%, rgba(56,189,248,0.06), transparent 35%), radial-gradient(circle at 80% 0%, rgba(16,185,129,0.05), transparent 40%), #020617; color: #e2e8f0; margin: 0; padding: 0; }
+    .glass-card { border: 1px solid rgba(148, 163, 184, 0.15); background: rgba(15, 23, 42, 0.8); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35); backdrop-filter: blur(12px); }
+    .panel-card { border: 1px solid rgba(148, 163, 184, 0.18); background: rgba(15, 23, 42, 0.7); box-shadow: 0 12px 35px rgba(0, 0, 0, 0.25); backdrop-filter: blur(10px); }
+    .gradient-bar { background: linear-gradient(120deg, #22c55e 0%, #0ea5e9 35%, #a855f7 100%); height: 4px; border-radius: 999px; }
     .hidden { display: none; }
-    .inline { display: inline-flex; gap: 8px; align-items: center; }
-    .alert { padding: 12px; border-radius: 8px; margin-bottom: 12px; }
-    .alert.error { background: #7f1d1d; color: #fee2e2; }
-    .alert.success { background: #064e3b; color: #bbf7d0; }
-    .topbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px; }
-    .topbar button { width: auto; padding: 10px 14px; background: #f97316; color: #0b1220; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { padding: 8px 10px; border-bottom: 1px solid #1f2937; text-align: left; }
-    th { color: #cbd5e1; font-weight: 700; }
-    .flex-between { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
-    .muted-sm { color: #94a3b8; font-size: 13px; }
-    .node-row { border-bottom: 1px solid #1f2937; padding: 10px 0; }
-    .input-inline { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; width: 100%; }
-    .test-block { border-bottom: 1px solid #1f2937; padding: 10px 0; }
-    .table-scroll { overflow: auto; }
-    .raw-table { width: 100%; border-collapse: collapse; }
-    .raw-table th, .raw-table td { padding: 6px 8px; border-bottom: 1px solid #1f2937; }
-    .row-list { display: flex; flex-direction: column; gap: 12px; }
-    .tests-summary { margin-bottom: 12px; }
-    .config-warning { color: #fbbf24; font-size: 13px; margin-top: 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   </style>
 </head>
 <body>
-  <div class=\"container\">
-    <div class=\"card\" id=\"login-card\">
-      <h1>iperf3 Master Dashboard</h1>
-      <p class=\"muted\">Enter the dashboard password to continue.</p>
-      <div id=\"login-alert\" class=\"alert error hidden\"></div>
-      <label for=\"password\">Password</label>
-      <input id=\"password\" type=\"password\" placeholder=\"Enter dashboard password\" />
-      <button id=\"login-btn\" style=\"margin-top: 14px;\">Unlock Dashboard</button>
-    </div>
-
-    <div class=\"card hidden\" id=\"app-card\">
-      <div class=\"topbar\">
-        <div>
-          <h1 style=\"margin: 0;\">iperf3 Master Dashboard</h1>
-          <p class=\"muted\" id=\"auth-hint\"></p>
-        </div>
-        <button id=\"logout-btn\">Logout</button>
-      </div>
-
-      <div class=\"grid\">
-        <div class=\"card\">
-          <h2>Add Node</h2>
-          <div id=\"add-node-alert\" class=\"alert error hidden\"></div>
-          <label>Name</label>
-          <input id=\"node-name\" placeholder=\"node-a\" />
-          <label>IP Address</label>
-          <input id=\"node-ip\" placeholder=\"10.0.0.11\" />
-          <label>Agent Port</label>
-          <input id=\"node-port\" type=\"number\" value=\"8000\" />
-          <label>iperf Port</label>
-          <input id=\"node-iperf-port\" type=\"number\" value=\"5201\" />
-          <label>Description (optional)</label>
-          <textarea id=\"node-desc\" rows=\"2\"></textarea>
-          <button id=\"save-node\" style=\"margin-top: 12px;\">Save Node</button>
-        </div>
-
-        <div class=\"card\">
-          <h2>Run Test</h2>
-          <div id=\"test-alert\" class=\"alert error hidden\"></div>
-          <label>Source Node</label>
-          <select id=\"src-select\"></select>
-          <label>Destination Node</label>
-          <select id=\"dst-select\"></select>
-          <label>Protocol</label>
-          <select id=\"protocol\"><option value=\"tcp\">TCP</option><option value=\"udp\">UDP</option></select>
-          <label>Duration (seconds)</label>
-          <input id=\"duration\" type=\"number\" value=\"10\" />
-          <label>Parallel Streams</label>
-          <input id=\"parallel\" type=\"number\" value=\"1\" />
-          <label>Port</label>
-          <input id=\"test-port\" type=\"number\" value=\"5201\" />
-          <button id=\"run-test\" style=\"margin-top: 12px;\">Start Test</button>
-        </div>
-      </div>
-
-      <div class=\"grid\" style=\"margin-top: 16px; grid-template-columns: 1fr;\">
-        <div class=\"card\">
-          <div class=\"inline\" style=\"justify-content: space-between; width: 100%;\">
-            <h2>Nodes</h2>
-            <button id=\"refresh-nodes\" style=\"width: auto;\">Refresh</button>
+  <div class=\"radix-themes min-h-screen\" data-theme=\"dark\"> 
+    <div class=\"relative mx-auto max-w-6xl px-6 py-10 lg:px-10\">
+      <div class=\"absolute inset-0 -z-10 overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900/90 via-slate-950 to-slate-950 shadow-[0_30px_120px_rgba(0,0,0,0.55)]\"></div>
+      <div class=\"relative z-10 space-y-6\">
+        <div class=\"flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between\">
+          <div>
+            <p class=\"text-sm uppercase tracking-[0.25em] text-sky-300/80\">iperf3 orchestration</p>
+            <h1 class=\"text-3xl font-bold text-white sm:text-4xl\">Master Dashboard</h1>
+            <p class=\"mt-2 text-slate-400 text-sm leading-relaxed max-w-3xl\">Securely manage agents, dispatch iperf3 tests, and keep an eye on live performance without leaving this page.</p>
           </div>
-          <div id=\"nodes-list\" class=\"muted row-list\">No nodes yet.</div>
+          <div class=\"flex items-center gap-3\">
+            <span class=\"inline-flex items-center gap-2 rounded-full bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-300 ring-1 ring-emerald-500/30\">
+              <span class=\"h-2 w-2 rounded-full bg-emerald-400 animate-pulse\"></span>
+              Live control plane
+            </span>
+          </div>
         </div>
-      </div>
 
-      <div class=\"grid\" style=\"margin-top: 8px; grid-template-columns: 1fr;\">
-        <div class=\"card\">
-          <div class=\"inline\" style=\"justify-content: space-between; width: 100%;\">
-            <h2>Recent Tests</h2>
-            <div class=\"inline\" style=\"gap: 8px;\">
-              <button id=\"refresh-tests\" style=\"width: auto;\">Refresh</button>
-              <button id=\"delete-all-tests\" style=\"width: auto; background: #ef4444;\">Delete All</button>
+        <div class=\"glass-card rounded-3xl p-6 ring-1 ring-slate-800/60\"> 
+          <div class=\"gradient-bar mb-6\"></div>
+          <div id=\"login-card\" class=\"space-y-6\"> 
+            <div class=\"flex items-center justify-between gap-4\">
+              <div>
+                <h2 class=\"text-2xl font-semibold text-white\">Unlock dashboard</h2>
+                <p class=\"text-sm text-slate-400\">Enter the shared password to access orchestration controls.</p>
+              </div>
+              <div class=\"hidden sm:inline-flex items-center gap-2 rounded-full bg-slate-800/70 px-3 py-2 text-xs font-medium text-slate-200 ring-1 ring-slate-700\">
+                <span class=\"h-2 w-2 rounded-full bg-amber-400 animate-ping\"></span>
+                Session locked
+              </div>
+            </div>
+            <div id=\"login-alert\" class=\"hidden rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100\"></div>
+            <div class=\"grid gap-4 md:grid-cols-3\">
+              <div class=\"md:col-span-2 space-y-3\">
+                <label class=\"text-sm font-medium text-slate-200\" for=\"password\">Dashboard password</label>
+                <input id=\"password\" type=\"password\" placeholder=\"Enter dashboard password\"
+                  class=\"w-full rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\" />
+                <p class=\"text-xs text-slate-500\">Default password is <code class=\"font-semibold text-sky-300\">iperf-pass</code> unless overridden via environment.</p>
+              </div>
+              <div class=\"flex items-end\">
+                <button id=\"login-btn\" class=\"w-full rounded-xl bg-gradient-to-r from-sky-500 to-emerald-400 px-4 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-500/20 transition hover:scale-[1.01] hover:shadow-xl\">Unlock dashboard</button>
+              </div>
             </div>
           </div>
-          <div id=\"tests-list\" class=\"muted row-list\">No tests yet.</div>
-        </div>
-      </div>
 
-      <div class=\"card\">
-        <div class=\"inline\" style=\"justify-content: space-between; width: 100%;\">
-          <h2>Scheduled Tests</h2>
-          <button id=\"refresh-schedules\" style=\"width: auto;\">Refresh</button>
+          <div id=\"app-card\" class=\"hidden space-y-8\"> 
+            <div class=\"flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between\"> 
+              <div> 
+                <p class=\"text-sm uppercase tracking-[0.25em] text-sky-300/80\">Control plane</p>
+                <h2 class=\"text-2xl font-semibold text-white\">iperf3 Master Dashboard</h2>
+                <p class=\"text-sm text-slate-400\" id=\"auth-hint\"></p>
+              </div>
+              <div class=\"flex flex-wrap items-center gap-3\">
+                <button data-refresh-nodes class=\"rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200\">Refresh nodes</button>
+                <button id=\"logout-btn\" class=\"rounded-lg border border-rose-500/40 bg-rose-500/15 px-4 py-2 text-sm font-semibold text-rose-100 shadow-sm transition hover:bg-rose-500/25\">Logout</button>
+              </div>
+            </div>
+
+            <div class=\"grid gap-4 lg:grid-cols-2\"> 
+              <div class=\"panel-card rounded-2xl p-5 space-y-4\"> 
+                <div class=\"flex items-center justify-between gap-2\">
+                  <h3 class=\"text-lg font-semibold text-white\">Add node</h3>
+                  <span class=\"rounded-full bg-slate-800/70 px-3 py-1 text-xs font-semibold text-slate-300 ring-1 ring-slate-700\">Agent registry</span>
+                </div>
+                <div id=\"add-node-alert\" class=\"hidden rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100\"></div>
+                <div class=\"grid gap-3 sm:grid-cols-2\"> 
+                  <div class=\"space-y-2\">
+                    <label class=\"text-sm font-medium text-slate-200\">Name</label>
+                    <input id=\"node-name\" placeholder=\"node-a\" class=\"rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\" />
+                  </div>
+                  <div class=\"space-y-2\">
+                    <label class=\"text-sm font-medium text-slate-200\">IP Address</label>
+                    <input id=\"node-ip\" placeholder=\"10.0.0.11\" class=\"rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\" />
+                  </div>
+                  <div class=\"space-y-2\">
+                    <label class=\"text-sm font-medium text-slate-200\">Agent Port</label>
+                    <input id=\"node-port\" type=\"number\" value=\"8000\" class=\"rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\" />
+                  </div>
+                  <div class=\"space-y-2\">
+                    <label class=\"text-sm font-medium text-slate-200\">iperf Port</label>
+                    <input id=\"node-iperf-port\" type=\"number\" value=\"5201\" class=\"rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\" />
+                  </div>
+                </div>
+                <div class=\"space-y-2\">
+                  <label class=\"text-sm font-medium text-slate-200\">Description (optional)</label>
+                  <textarea id=\"node-desc\" rows=\"2\" class=\"w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\"></textarea>
+                </div>
+                <button id=\"save-node\" class=\"w-full rounded-xl bg-gradient-to-r from-emerald-500 to-sky-500 px-4 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-500/20 transition hover:scale-[1.01] hover:shadow-xl\">Save node</button>
+              </div>
+
+              <div class=\"panel-card rounded-2xl p-5 space-y-4\"> 
+                <div class=\"flex items-center justify-between gap-2\">
+                  <h3 class=\"text-lg font-semibold text-white\">Run test</h3>
+                  <span class=\"rounded-full bg-slate-800/70 px-3 py-1 text-xs font-semibold text-slate-300 ring-1 ring-slate-700\">Quick launch</span>
+                </div>
+                <div id=\"test-alert\" class=\"hidden rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100\"></div>
+                <div class=\"grid gap-3 sm:grid-cols-2\"> 
+                  <div class=\"space-y-2\">
+                    <label class=\"text-sm font-medium text-slate-200\">Source Node</label>
+                    <select id=\"src-select\" class=\"rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\"></select>
+                  </div>
+                  <div class=\"space-y-2\">
+                    <label class=\"text-sm font-medium text-slate-200\">Destination Node</label>
+                    <select id=\"dst-select\" class=\"rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\"></select>
+                  </div>
+                  <div class=\"space-y-2\">
+                    <label class=\"text-sm font-medium text-slate-200\">Protocol</label>
+                    <select id=\"protocol\" class=\"rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\"><option value=\"tcp\">TCP</option><option value=\"udp\">UDP</option></select>
+                  </div>
+                  <div class=\"space-y-2\">
+                    <label class=\"text-sm font-medium text-slate-200\">Duration (seconds)</label>
+                    <input id=\"duration\" type=\"number\" value=\"10\" class=\"rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\" />
+                  </div>
+                  <div class=\"space-y-2\">
+                    <label class=\"text-sm font-medium text-slate-200\">Parallel Streams</label>
+                    <input id=\"parallel\" type=\"number\" value=\"1\" class=\"rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\" />
+                  </div>
+                  <div class=\"space-y-2\">
+                    <label class=\"text-sm font-medium text-slate-200\">Port</label>
+                    <input id=\"test-port\" type=\"number\" value=\"5201\" class=\"rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\" />
+                  </div>
+                </div>
+                <button id=\"run-test\" class=\"w-full rounded-xl bg-gradient-to-r from-sky-500 to-indigo-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-sky-500/20 transition hover:scale-[1.01] hover:shadow-xl\">Start test</button>
+              </div>
+            </div>
+
+            <div class=\"grid gap-4\"> 
+              <div class=\"panel-card rounded-2xl p-5 space-y-4\"> 
+                <div class=\"flex flex-wrap items-center justify-between gap-3\"> 
+                  <div>
+                    <h3 class=\"text-lg font-semibold text-white\">Nodes</h3>
+                    <p class=\"text-sm text-slate-400\">Live agent status with detected iperf ports.</p>
+                  </div>
+                  <button data-refresh-nodes class=\"rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200\">Refresh</button>
+                </div>
+                <div id=\"nodes-list\" class=\"text-sm text-slate-400 space-y-3\">No nodes yet.</div>
+              </div>
+            </div>
+
+            <div class=\"grid gap-4\"> 
+              <div class=\"panel-card rounded-2xl p-5 space-y-4\"> 
+                <div class=\"flex flex-wrap items-center justify-between gap-3\"> 
+                  <div>
+                    <h3 class=\"text-lg font-semibold text-white\">Recent tests</h3>
+                    <p class=\"text-sm text-slate-400\">Lightweight summary with expandable raw iperf output.</p>
+                  </div>
+                  <div class=\"flex flex-wrap items-center gap-2\"> 
+                    <button id=\"refresh-tests\" class=\"rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200\">Refresh</button>
+                    <button id=\"delete-all-tests\" class=\"rounded-lg border border-rose-500/40 bg-rose-500/15 px-4 py-2 text-sm font-semibold text-rose-100 shadow-sm transition hover:bg-rose-500/25\">Delete All</button>
+                  </div>
+                </div>
+                <div id=\"tests-list\" class=\"text-sm text-slate-400 space-y-3\">No tests yet.</div>
+              </div>
+            </div>
+
+            <div class=\"panel-card rounded-2xl p-5 space-y-4\"> 
+              <div class=\"flex flex-wrap items-center justify-between gap-3\"> 
+                <div>
+                  <h3 class=\"text-lg font-semibold text-white\">Scheduled tests</h3>
+                  <p class=\"text-sm text-slate-400\">Capture recurring test intents for future automation.</p>
+                </div>
+                <button id=\"refresh-schedules\" class=\"rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200\">Refresh</button>
+              </div>
+              <div class=\"grid gap-3 md:grid-cols-2 lg:grid-cols-3\"> 
+                <div class=\"space-y-2\"> 
+                  <label class=\"text-sm font-medium text-slate-200\">Schedule Name</label>
+                  <input id=\"schedule-name\" placeholder=\"nightly tcp baseline\" class=\"rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\" />
+                </div>
+                <div class=\"space-y-2\"> 
+                  <label class=\"text-sm font-medium text-slate-200\">Source Node</label>
+                  <select id=\"schedule-src\" class=\"rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\"></select>
+                </div>
+                <div class=\"space-y-2\"> 
+                  <label class=\"text-sm font-medium text-slate-200\">Destination Node</label>
+                  <select id=\"schedule-dst\" class=\"rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\"></select>
+                </div>
+                <div class=\"space-y-2\"> 
+                  <label class=\"text-sm font-medium text-slate-200\">Protocol</label>
+                  <select id=\"schedule-protocol\" class=\"rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\"><option value=\"tcp\">TCP</option><option value=\"udp\">UDP</option></select>
+                </div>
+                <div class=\"space-y-2\"> 
+                  <label class=\"text-sm font-medium text-slate-200\">Duration (s)</label>
+                  <input id=\"schedule-duration\" type=\"number\" value=\"10\" class=\"rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\" />
+                </div>
+                <div class=\"space-y-2\"> 
+                  <label class=\"text-sm font-medium text-slate-200\">Parallel Streams</label>
+                  <input id=\"schedule-parallel\" type=\"number\" value=\"1\" class=\"rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\" />
+                </div>
+                <div class=\"space-y-2\"> 
+                  <label class=\"text-sm font-medium text-slate-200\">Port</label>
+                  <input id=\"schedule-port\" type=\"number\" value=\"5201\" class=\"rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\" />
+                </div>
+                <div class=\"space-y-2\"> 
+                  <label class=\"text-sm font-medium text-slate-200\">Interval (minutes)</label>
+                  <input id=\"schedule-interval\" type=\"number\" value=\"60\" class=\"rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\" />
+                </div>
+                <div class=\"space-y-2\"> 
+                  <label class=\"text-sm font-medium text-slate-200\">Notes (optional)</label>
+                  <input id=\"schedule-notes\" placeholder=\"for weekly report\" class=\"rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60\" />
+                </div>
+              </div>
+              <button id=\"save-schedule\" class=\"w-full rounded-xl bg-gradient-to-r from-emerald-500 to-sky-500 px-4 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-500/20 transition hover:scale-[1.01] hover:shadow-xl\">Save schedule</button>
+              <div id=\"schedules-list\" class=\"text-sm text-slate-400 space-y-3\">No schedules yet.</div>
+            </div>
+          </div>
         </div>
-        <div class=\"grid\">
-          <div>
-            <label>Schedule Name</label>
-            <input id=\"schedule-name\" placeholder=\"nightly tcp baseline\" />
-          </div>
-          <div>
-            <label>Source Node</label>
-            <select id=\"schedule-src\"></select>
-          </div>
-          <div>
-            <label>Destination Node</label>
-            <select id=\"schedule-dst\"></select>
-          </div>
-          <div>
-            <label>Protocol</label>
-            <select id=\"schedule-protocol\"><option value=\"tcp\">TCP</option><option value=\"udp\">UDP</option></select>
-          </div>
-          <div>
-            <label>Duration (s)</label>
-            <input id=\"schedule-duration\" type=\"number\" value=\"10\" />
-          </div>
-          <div>
-            <label>Parallel Streams</label>
-            <input id=\"schedule-parallel\" type=\"number\" value=\"1\" />
-          </div>
-          <div>
-            <label>Port</label>
-            <input id=\"schedule-port\" type=\"number\" value=\"5201\" />
-          </div>
-          <div>
-            <label>Interval (minutes)</label>
-            <input id=\"schedule-interval\" type=\"number\" value=\"60\" />
-          </div>
-          <div>
-            <label>Notes (optional)</label>
-            <input id=\"schedule-notes\" placeholder=\"for weekly report\" />
-          </div>
-        </div>
-        <button id=\"save-schedule\" style=\"margin-top: 12px;\">Save Schedule</button>
-        <div id=\"schedules-list\" class=\"muted\" style=\"margin-top: 12px;\">No schedules yet.</div>
       </div>
     </div>
   </div>
-
+  
   <script>
     const loginCard = document.getElementById('login-card');
     const appCard = document.getElementById('app-card');
@@ -469,6 +530,22 @@ def _login_html() -> str:
       const testPortInput = document.getElementById('test-port');
       let nodeCache = [];
       let editingNodeId = null;
+      const styles = {
+        rowCard: 'rounded-xl border border-slate-800/70 bg-slate-900/60 p-4 shadow-sm shadow-black/30 space-y-3',
+        inline: 'flex flex-wrap items-center gap-3',
+        badgeOnline: 'inline-flex items-center gap-2 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300 ring-1 ring-emerald-500/40',
+        badgeOffline: 'inline-flex items-center gap-2 rounded-full bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-200 ring-1 ring-rose-500/40',
+        pillInfo: 'inline-flex items-center justify-center gap-2 rounded-lg bg-sky-500/15 px-3 py-2 text-xs font-semibold text-sky-100 ring-1 ring-sky-500/40 transition hover:bg-sky-500/25',
+        pillDanger: 'inline-flex items-center justify-center gap-2 rounded-lg bg-rose-500/15 px-3 py-2 text-xs font-semibold text-rose-100 ring-1 ring-rose-500/40 transition hover:bg-rose-500/25',
+        pillWarn: 'inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500/15 px-3 py-2 text-xs font-semibold text-amber-100 ring-1 ring-amber-500/40 transition hover:bg-amber-500/25',
+        pillMuted: 'inline-flex items-center justify-center gap-2 rounded-lg bg-slate-800/70 px-3 py-2 text-xs font-semibold text-slate-200 ring-1 ring-slate-700',
+        textMuted: 'text-slate-400 text-sm',
+        textMutedSm: 'text-slate-500 text-xs',
+        table: 'w-full border-collapse overflow-hidden rounded-xl border border-slate-800/60 bg-slate-900/50 text-sm text-slate-100',
+        tableHeader: 'bg-slate-900/70 text-slate-300',
+        tableCell: 'border-b border-slate-800 px-3 py-2',
+        codeBlock: 'overflow-auto rounded-lg border border-slate-800 bg-slate-950/80 p-3 text-xs text-slate-200 shadow-inner shadow-black/30',
+      };
 
 
     function show(el) { el.classList.remove('hidden'); }
@@ -586,11 +663,10 @@ def _login_html() -> str:
 
       nodesList.innerHTML = '';
       nodeCache.forEach((node) => {
-        const badge = `<span class=\"badge ${node.status}\">${node.status}</span>`;
         const server = node.server_running ? 'running' : 'stopped';
         const isEditing = editingNodeId === node.id;
         const item = document.createElement('div');
-        item.className = 'node-row';
+        item.className = styles.rowCard;
 
         const detectedPort = node.detected_iperf_port;
         const portLabel = detectedPort && detectedPort !== node.iperf_port
@@ -598,33 +674,31 @@ def _login_html() -> str:
           : `iperf ${node.iperf_port || detectedPort || 'n/a'}`;
 
         const header = document.createElement('div');
-        header.className = 'flex-between';
+        header.className = 'flex flex-col gap-3 md:flex-row md:items-center md:justify-between';
         const info = document.createElement('div');
-        info.innerHTML = `<strong>${node.name}</strong> <span class=\"muted\">(${node.ip}:${node.agent_port}, ${portLabel})</span><br/>` +
-          `<span class=\"muted-sm\">${node.description || 'No description'} | Server: ${server}</span>`;
+        info.innerHTML = `<div class=\"text-base font-semibold text-white\">${node.name}</div>` +
+          `<div class=\"${styles.textMuted}\">${node.ip}:${node.agent_port} • ${portLabel}</div>` +
+          `<div class=\"${styles.textMutedSm}\">${node.description || 'No description'} · Server ${server}</div>`;
         header.appendChild(info);
 
         const actions = document.createElement('div');
-        actions.className = 'inline';
-        actions.style.gap = '8px';
+        actions.className = `${styles.inline} justify-end`;
 
         const statusBadge = document.createElement('span');
-        statusBadge.className = `pill tag ${node.status === 'online' ? 'success' : 'danger'}`;
+        statusBadge.className = node.status === 'online' ? styles.badgeOnline : styles.badgeOffline;
         statusBadge.textContent = node.status;
         actions.appendChild(statusBadge);
 
         const editBtn = document.createElement('button');
         editBtn.textContent = isEditing ? 'Editing' : 'Edit';
         editBtn.disabled = isEditing;
-        editBtn.style.width = 'auto';
-        editBtn.className = 'pill info';
+        editBtn.className = styles.pillInfo;
         editBtn.onclick = () => { editingNodeId = node.id; refreshNodes(); };
         actions.appendChild(editBtn);
 
         const deleteBtn = document.createElement('button');
         deleteBtn.textContent = 'Delete';
-        deleteBtn.style.width = 'auto';
-        deleteBtn.className = 'pill danger';
+        deleteBtn.className = styles.pillDanger;
         deleteBtn.onclick = () => removeNode(node.id);
         actions.appendChild(deleteBtn);
 
@@ -633,12 +707,11 @@ def _login_html() -> str:
 
         if (detectedPort && detectedPort !== node.iperf_port) {
           const warning = document.createElement('div');
-          warning.className = 'config-warning';
+          warning.className = 'flex flex-wrap items-center gap-3 text-amber-200 text-sm';
           warning.textContent = `Agent reports iperf port ${detectedPort}. Configured ${node.iperf_port || 'n/a'}.`;
 
           const applyBtn = document.createElement('button');
-          applyBtn.className = 'pill warn';
-          applyBtn.style.width = 'auto';
+          applyBtn.className = styles.pillWarn;
           applyBtn.textContent = 'Apply detected port';
           applyBtn.onclick = () => saveNodeInline(node.id, { iperf_port: detectedPort });
 
@@ -648,27 +721,32 @@ def _login_html() -> str:
 
         if (isEditing) {
           const form = document.createElement('div');
-          form.className = 'input-inline';
+          form.className = 'grid w-full grid-cols-1 gap-3 md:grid-cols-2';
 
           const nameInput = document.createElement('input');
+          nameInput.className = 'rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100';
           nameInput.value = node.name || '';
           nameInput.placeholder = 'Name';
 
           const ipInput = document.createElement('input');
+          ipInput.className = 'rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100';
           ipInput.value = node.ip || '';
           ipInput.placeholder = 'IP';
 
           const agentPortInput = document.createElement('input');
           agentPortInput.type = 'number';
+          agentPortInput.className = 'rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100';
           agentPortInput.value = node.agent_port || 8000;
           agentPortInput.placeholder = 'Agent port';
 
           const iperfPortInput = document.createElement('input');
           iperfPortInput.type = 'number';
+          iperfPortInput.className = 'rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100';
           iperfPortInput.value = node.iperf_port || 5201;
           iperfPortInput.placeholder = 'iperf port';
 
           const descInput = document.createElement('input');
+          descInput.className = 'rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100';
           descInput.value = node.description || '';
           descInput.placeholder = 'Description';
 
@@ -680,13 +758,11 @@ def _login_html() -> str:
           item.appendChild(form);
 
           const buttonBar = document.createElement('div');
-          buttonBar.className = 'inline';
-          buttonBar.style.gap = '10px';
-          buttonBar.style.marginTop = '8px';
+          buttonBar.className = `${styles.inline} mt-2`;
 
           const saveBtn = document.createElement('button');
           saveBtn.textContent = 'Save';
-          saveBtn.style.width = 'auto';
+          saveBtn.className = 'rounded-lg bg-emerald-500/90 px-3 py-2 text-xs font-semibold text-slate-950 shadow-sm shadow-emerald-500/30 transition hover:bg-emerald-400';
           saveBtn.onclick = () => saveNodeInline(node.id, {
             name: nameInput.value,
             ip: ipInput.value,
@@ -698,8 +774,7 @@ def _login_html() -> str:
 
           const cancelBtn = document.createElement('button');
           cancelBtn.textContent = 'Cancel';
-          cancelBtn.style.width = 'auto';
-          cancelBtn.style.background = '#64748b';
+          cancelBtn.className = styles.pillMuted;
           cancelBtn.onclick = () => { editingNodeId = null; refreshNodes(); };
           buttonBar.appendChild(cancelBtn);
 
@@ -796,7 +871,7 @@ def _login_html() -> str:
 
     function renderRawResult(raw) {
       const wrap = document.createElement('div');
-      wrap.className = 'table-scroll';
+      wrap.className = 'overflow-auto rounded-xl border border-slate-800/70 bg-slate-950/60 p-3';
 
       if (!raw) {
         wrap.textContent = 'No raw result available.';
@@ -809,14 +884,16 @@ def _login_html() -> str:
       const sumReceived = end.sum_received || {};
 
       const summaryTable = document.createElement('table');
-      summaryTable.className = 'raw-table tests-summary';
+      summaryTable.className = styles.table + ' mb-3';
 
       const addSummaryRow = (label, value) => {
         const row = document.createElement('tr');
         const l = document.createElement('th');
         l.textContent = label;
+        l.className = styles.tableCell + ' font-semibold text-slate-200';
         const v = document.createElement('td');
         v.textContent = value;
+        v.className = styles.tableCell + ' text-slate-100';
         row.appendChild(l);
         row.appendChild(v);
         summaryTable.appendChild(row);
@@ -832,17 +909,20 @@ def _login_html() -> str:
       const intervals = result.intervals || [];
       if (!intervals.length) {
         const fallback = document.createElement('pre');
+        fallback.className = styles.codeBlock;
         fallback.textContent = JSON.stringify(result, null, 2);
         wrap.appendChild(fallback);
         return wrap;
       }
 
       const intervalTable = document.createElement('table');
-      intervalTable.className = 'raw-table';
+      intervalTable.className = styles.table;
       const headerRow = document.createElement('tr');
+      headerRow.className = styles.tableHeader;
       ['Interval (s)', 'Rate (Mbps)', 'Retrans', 'RTT (ms)', 'CWND', 'Window'].forEach((label) => {
         const th = document.createElement('th');
         th.textContent = label;
+        th.className = styles.tableCell + ' font-semibold';
         headerRow.appendChild(th);
       });
       intervalTable.appendChild(headerRow);
@@ -868,6 +948,7 @@ def _login_html() -> str:
         cells.forEach((value) => {
           const td = document.createElement('td');
           td.textContent = value;
+          td.className = styles.tableCell;
           row.appendChild(td);
         });
         intervalTable.appendChild(row);
@@ -880,25 +961,23 @@ def _login_html() -> str:
 
     function buildTestDetailsBlock(test, metrics, latencyValue, pathLabel) {
       const block = document.createElement('div');
-      block.className = 'test-block hidden';
+      block.className = 'hidden rounded-xl border border-slate-800/60 bg-slate-900/60 p-3 shadow-inner shadow-black/20';
       block.dataset.testId = test.id;
 
       const header = document.createElement('div');
-      header.className = 'flex-between';
+      header.className = 'flex flex-col gap-3 md:flex-row md:items-center md:justify-between';
 
       const summary = document.createElement('div');
       summary.innerHTML = `<strong>#${test.id} ${pathLabel}</strong> · ${test.protocol.toUpperCase()} · port ${test.params.port} · duration ${test.params.duration}s<br/>` +
-        `<span class=\"muted-sm\">Rate: ${metrics.bitsPerSecond ? formatMetric(metrics.bitsPerSecond / 1e6, 2) + ' Mbps' : 'N/A'} | Latency: ${latencyValue !== null ? formatMetric(latencyValue) + ' ms' : 'N/A'} | Loss: ${metrics.lostPercent !== undefined && metrics.lostPercent !== null ? formatMetric(metrics.lostPercent) + '%' : 'N/A'}</span>`;
+        `<span class=\"${styles.textMutedSm}\">Rate: ${metrics.bitsPerSecond ? formatMetric(metrics.bitsPerSecond / 1e6, 2) + ' Mbps' : 'N/A'} | Latency: ${latencyValue !== null ? formatMetric(latencyValue) + ' ms' : 'N/A'} | Loss: ${metrics.lostPercent !== undefined && metrics.lostPercent !== null ? formatMetric(metrics.lostPercent) + '%' : 'N/A'}</span>`;
       header.appendChild(summary);
 
       const actions = document.createElement('div');
-      actions.className = 'inline';
-      actions.style.gap = '8px';
+      actions.className = styles.inline;
 
       const deleteBtn = document.createElement('button');
       deleteBtn.textContent = 'Delete';
-      deleteBtn.style.width = 'auto';
-      deleteBtn.className = 'pill danger';
+      deleteBtn.className = styles.pillDanger;
       deleteBtn.onclick = () => deleteTestResult(test.id);
       actions.appendChild(deleteBtn);
       header.appendChild(actions);
@@ -906,7 +985,7 @@ def _login_html() -> str:
       block.appendChild(header);
 
       const rawTable = renderRawResult(test.raw_result);
-      rawTable.style.marginTop = '8px';
+      rawTable.classList.add('mt-3');
       block.appendChild(rawTable);
 
       return block;
@@ -945,17 +1024,19 @@ def _login_html() -> str:
       testsList.innerHTML = '';
 
       const summaryTable = document.createElement('table');
-      summaryTable.className = 'raw-table tests-summary';
+      summaryTable.className = styles.table;
       const headerRow = document.createElement('tr');
+      headerRow.className = styles.tableHeader;
       ['#', 'Path', 'Protocol', 'Port', 'Duration (s)', 'Sender rate (Mbps)', 'Receiver rate (Mbps)', 'Latency (ms)', 'Loss %', 'Status', 'Actions'].forEach((label) => {
         const th = document.createElement('th');
         th.textContent = label;
+        th.className = styles.tableCell + ' font-semibold';
         headerRow.appendChild(th);
       });
       summaryTable.appendChild(headerRow);
 
       const detailsContainer = document.createElement('div');
-      detailsContainer.className = 'row-list';
+      detailsContainer.className = 'flex flex-col gap-3 mt-3';
 
       const detailBlocks = new Map();
 
@@ -993,16 +1074,17 @@ def _login_html() -> str:
         ].forEach((value) => {
           const td = document.createElement('td');
           td.textContent = value;
+          td.className = styles.tableCell;
           row.appendChild(td);
         });
 
         const actionTd = document.createElement('td');
         const detailsBtn = document.createElement('button');
         detailsBtn.textContent = 'Details';
-        detailsBtn.style.width = 'auto';
-        detailsBtn.className = 'pill info';
+        detailsBtn.className = styles.pillInfo;
         detailsBtn.onclick = () => toggleDetail(test.id, detailsBtn);
         actionTd.appendChild(detailsBtn);
+        actionTd.className = styles.tableCell;
         row.appendChild(actionTd);
         summaryTable.appendChild(row);
 
@@ -1036,19 +1118,18 @@ def _login_html() -> str:
       schedulesList.innerHTML = '';
       schedules.forEach((schedule) => {
         const row = document.createElement('div');
-        row.className = 'node-row';
+        row.className = styles.rowCard;
         const info = document.createElement('div');
         const intervalMinutes = Math.round(schedule.interval_seconds / 60);
         info.innerHTML = `<strong>${schedule.name}</strong> · ${schedule.protocol.toUpperCase()} every ${intervalMinutes}m<br/>` +
-          `<span class="muted-sm">${schedule.src_node_id} → ${schedule.dst_node_id}, duration ${schedule.duration}s, parallel ${schedule.parallel}, port ${schedule.port}${schedule.notes ? ' · ' + schedule.notes : ''}</span>`;
+          `<span class="${styles.textMutedSm}">${schedule.src_node_id} → ${schedule.dst_node_id}, duration ${schedule.duration}s, parallel ${schedule.parallel}, port ${schedule.port}${schedule.notes ? ' · ' + schedule.notes : ''}</span>`;
         row.appendChild(info);
 
         const actions = document.createElement('div');
-        actions.className = 'inline';
+        actions.className = styles.inline;
         const delBtn = document.createElement('button');
         delBtn.textContent = 'Delete';
-        delBtn.style.width = 'auto';
-        delBtn.style.background = '#ef4444';
+        delBtn.className = styles.pillDanger;
         delBtn.onclick = () => deleteSchedule(schedule.id);
         actions.appendChild(delBtn);
         row.appendChild(actions);
@@ -1152,7 +1233,7 @@ def _login_html() -> str:
       document.getElementById('save-node').addEventListener('click', saveNode);
       document.getElementById('run-test').addEventListener('click', runTest);
       saveScheduleBtn.addEventListener('click', saveSchedule);
-      document.getElementById('refresh-nodes').addEventListener('click', refreshNodes);
+      document.querySelectorAll('[data-refresh-nodes]').forEach((btn) => btn.addEventListener('click', refreshNodes));
       document.getElementById('refresh-tests').addEventListener('click', refreshTests);
       document.getElementById('refresh-schedules').addEventListener('click', refreshSchedules);
       deleteAllTestsBtn.addEventListener('click', clearAllTests);
