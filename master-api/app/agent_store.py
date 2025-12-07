@@ -76,3 +76,9 @@ class AgentConfigStore:
                 raise KeyError(f"config {name} not found")
             self._save_raw(new_data)
 
+    def replace_all(self, configs: List[AgentConfigCreate]) -> List[AgentConfigRead]:
+        payloads = [config.model_dump(exclude_none=True) for config in configs]
+        with self.lock:
+            self._save_raw(payloads)
+        return [AgentConfigRead(**payload) for payload in payloads]
+
