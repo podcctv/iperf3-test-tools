@@ -70,6 +70,15 @@ prompt_required_port() {
     echo "$value"
 }
 
+prompt_optional_port() {
+    local label="$1" default_value="$2" value
+    value="$default_value"
+    while [ -n "$value" ] && ! validate_port "$value"; do
+        read -rp "请输入 ${label} (1-65535，直接回车跳过)：" value
+    done
+    echo "$value"
+}
+
 echo "[INFO] Checking iperf3-test-tools..."
 
 # ------------ 仓库不存在则克隆 ------------
@@ -135,10 +144,11 @@ case "$choice" in
     3)
         # 手动安装 agent（NAT VPS、端口自行指定）
         echo "[INFO] Manual agent installation (NAT mode, custom ports)..."
-        AGENT_PORT=$(prompt_required_port "Agent API 端口" "${AGENT_PORT:-}")
-        IPERF_PORT=$(prompt_required_port "iperf3 端口" "${IPERF_PORT:-}")
+        AGENT_PORT=$(prompt_required_port "Agent API 端口（宿主机 NAT 映射端口）" "${AGENT_PORT:-}")
+        AGENT_LISTEN_PORT=$(prompt_optional_port "Agent API 端口（容器内监听，留空则与宿主机相同）" "${AGENT_LISTEN_PORT:-}")
+        IPERF_PORT=$(prompt_required_port "iperf3 端口（宿主机 NAT 映射端口）" "${IPERF_PORT:-}")
         if [ -x "$MANUAL_AGENT_SCRIPT" ]; then
-            AGENT_PORT="$AGENT_PORT" IPERF_PORT="$IPERF_PORT" bash "$MANUAL_AGENT_SCRIPT"
+            AGENT_PORT="$AGENT_PORT" AGENT_LISTEN_PORT="$AGENT_LISTEN_PORT" IPERF_PORT="$IPERF_PORT" bash "$MANUAL_AGENT_SCRIPT"
         else
             echo "[ERROR] 手动安装脚本未找到：$MANUAL_AGENT_SCRIPT"
             echo "[ERROR] 请确认 agent.sh 和 update_iperf3_master.sh 在同一目录，或修改脚本中的 MANUAL_AGENT_SCRIPT 路径。"
