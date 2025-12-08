@@ -2352,13 +2352,22 @@ def _login_html() -> str:
 
     function summarizeTestMetrics(raw) {
       if (raw?.mode === 'suite' && Array.isArray(raw.tests)) {
-        const entries = raw.tests.map((entry) => ({
-          label: entry.label || '子测试',
-          protocol: entry.protocol || 'tcp',
-          reverse: !!entry.reverse,
-          metrics: summarizeSingleMetrics(entry.summary || entry.raw || entry),
-          raw: entry.raw || entry,
-        }));
+        const entries = raw.tests.map((entry) => {
+          const detailed = entry.raw || entry;
+          const summary = entry.summary || {};
+          const merged = { ...summary, ...detailed };
+          if (!merged.server_output_json && detailed.server_output_json) {
+            merged.server_output_json = detailed.server_output_json;
+          }
+
+          return {
+            label: entry.label || '子测试',
+            protocol: entry.protocol || 'tcp',
+            reverse: !!entry.reverse,
+            metrics: summarizeSingleMetrics(merged),
+            raw: detailed,
+          };
+        });
         const valid = entries.map((e) => e.metrics).filter(Boolean);
         const avgBits = valid.length
           ? valid.reduce((sum, item) => sum + (item.bitsPerSecond || 0), 0) / valid.length
