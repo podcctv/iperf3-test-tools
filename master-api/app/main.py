@@ -1894,15 +1894,7 @@ def _login_html() -> str:
             badgeRow.className = 'flex items-center gap-1';
             const latencyValue = entry.metrics?.latencyStats?.avg ?? entry.metrics?.latencyMs;
             if (latencyValue !== undefined && latencyValue !== null) {
-              badgeRow.appendChild(createMiniStat('RTT', formatMetric(latencyValue, 2), 'ms', 'text-sky-200', entry.metrics?.latencyStats));
-            }
-            const jitterValue = entry.metrics?.jitterStats?.avg ?? entry.metrics?.jitterMs;
-            if (jitterValue !== undefined && jitterValue !== null) {
-              badgeRow.appendChild(createMiniStat('抖动', formatMetric(jitterValue, 2), 'ms', 'text-amber-200', entry.metrics?.jitterStats));
-            }
-            const lossValue = entry.metrics?.lossStats?.avg ?? entry.metrics?.lostPercent;
-            if (lossValue !== undefined && lossValue !== null) {
-              badgeRow.appendChild(createMiniStat('丢包', formatMetric(lossValue, 2), '%', 'text-rose-200', entry.metrics?.lossStats));
+              badgeRow.appendChild(createMiniStat('RTT', formatMetric(latencyValue, 2), 'ms'));
             }
             const jitterValue = entry.metrics?.jitterStats?.avg ?? entry.metrics?.jitterMs;
             if (jitterValue !== undefined && jitterValue !== null) {
@@ -1914,7 +1906,7 @@ def _login_html() -> str:
             }
             const retransValue = entry.metrics?.retransStats?.avg;
             if (retransValue !== undefined && retransValue !== null) {
-              badgeRow.appendChild(createMiniStat('重传', formatMetric(retransValue, 0), '次', 'text-indigo-200', entry.metrics?.retransStats));
+              badgeRow.appendChild(createMiniStat('重传', formatMetric(retransValue, 0)));
             }
             if (badgeRow.childNodes.length) {
               labelGroup.appendChild(badgeRow);
@@ -1927,6 +1919,9 @@ def _login_html() -> str:
             heading.appendChild(labelGroup);
             heading.appendChild(protoLabel);
             tile.appendChild(heading);
+
+            const metricGrid = buildMetricGrid(entry.metrics);
+            if (metricGrid) tile.appendChild(metricGrid);
 
             const rates = document.createElement('div');
             rates.className = 'grid grid-cols-2 gap-2 text-xs text-slate-400';
@@ -2011,6 +2006,9 @@ def _login_html() -> str:
         metaChips.appendChild(makeChip(test.protocol.toLowerCase() === 'udp' ? 'UDP 测试' : 'TCP 测试'));
         if (test.params?.reverse) metaChips.appendChild(makeChip('反向 (-R)'));
         card.appendChild(metaChips);
+
+        const metricGrid = buildMetricGrid(metrics);
+        if (metricGrid) card.appendChild(metricGrid);
 
         const actions = document.createElement('div');
         actions.className = 'flex flex-wrap items-center justify-between gap-3';
@@ -2213,39 +2211,12 @@ def _login_html() -> str:
       return { min, max, avg };
     }
 
-    function createMiniStat(label, value, unit = '', accent = 'text-sky-200', stats = null) {
-      const wrap = document.createElement('div');
-      wrap.className = 'relative inline-block';
-
+    function createMiniStat(label, value, unit = '', accent = 'text-sky-200') {
       const badge = document.createElement('div');
       badge.className = 'inline-flex items-center gap-1 rounded-lg border border-slate-800/80 bg-slate-900/70 px-2 py-1 text-[11px] font-semibold text-slate-200';
       const unitSpan = unit ? `<span class="text-slate-500">${unit}</span>` : '';
       badge.innerHTML = `<span class="text-slate-400">${label}</span><span class="${accent}">${value}</span>${unitSpan}`;
-      wrap.appendChild(badge);
-
-      if (stats) {
-        const detail = document.createElement('div');
-        detail.className = 'pointer-events-none absolute left-1/2 top-full z-20 mt-2 w-max min-w-[180px] -translate-x-1/2 scale-95 rounded-lg border border-slate-800/80 bg-slate-900/95 px-3 py-2 text-[11px] text-slate-200 opacity-0 shadow-2xl shadow-black/30 transition duration-150';
-        const primary = stats.avg ?? stats.mean ?? stats.max ?? stats.min;
-        const unitLabel = unit ? ` ${unit}` : '';
-        detail.innerHTML = `
-          <div class="text-[11px] font-semibold text-slate-300">${label} 均值${unit ? ` (${unit})` : ''}</div>
-          <div class="mt-1 text-sm font-bold text-white">${formatMetric(primary)}${unitLabel}</div>
-          <div class="mt-1 text-[10px] text-slate-500">max ${formatMetric(stats.max)}${unitLabel} · min ${formatMetric(stats.min)}${unitLabel}</div>
-        `;
-        wrap.appendChild(detail);
-
-        wrap.onmouseenter = () => {
-          detail.classList.remove('opacity-0', 'scale-95');
-          detail.classList.add('opacity-100', 'scale-100');
-        };
-        wrap.onmouseleave = () => {
-          detail.classList.add('opacity-0', 'scale-95');
-          detail.classList.remove('opacity-100', 'scale-100');
-        };
-      }
-
-      return wrap;
+      return badge;
     }
 
     function collectMetricStats(raw) {
