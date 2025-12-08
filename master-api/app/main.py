@@ -1207,11 +1207,11 @@ def _login_html() -> str:
           if (svc.key === 'netflix' && status) {
             const netflixTier = tier || (unlocked ? 'full' : 'none');
             if (netflixTier === 'full') {
-              statusLabel = '全片库';
+              statusLabel = '全解锁';
               badgeColor = `${svc.color} ${svc.bg}`;
               tags.push('全解锁');
             } else if (netflixTier === 'originals') {
-              statusLabel = '自制片库';
+              statusLabel = '仅解锁自制剧';
               badgeColor = mutedStyle;
               tags.push('自制剧');
             } else {
@@ -1220,17 +1220,14 @@ def _login_html() -> str:
             }
           }
 
-          if (region) {
-            tags.push(region);
-          }
+          const regionTag = region ? `<span class=\"rounded-sm px-1 text-[10px] font-bold ${svc.color}\">[${region}]</span>` : '';
+          const tagBadges = tags
+            .filter(Boolean)
+            .map((tag) => `<span class=\"rounded-sm bg-slate-800/60 px-1 text-[10px]\">[${tag}]</span>`)
+            .join('');
 
-          if (tags.length) {
-            badgeLabel = `${badgeLabel}[${tags.join('][')}]`;
-          }
-
-          const title = `${badgeLabel}：${statusLabel}${detail ? ' · ' + detail : ''}`;
-          const indicator = `<span class=\"inline-block h-2 w-2 rounded-sm ${svc.indicator || 'bg-slate-500'}\"></span>`;
-          return `<span class=\"inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold ${badgeColor}\" title=\"${title}\">${indicator}<span>${badgeLabel}</span></span>`;
+          const title = `${region ? `[${region}]` : ''}${badgeLabel}：${statusLabel}${detail ? ' · ' + detail : ''}`;
+          return `<span class=\"inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold ${badgeColor}\" title=\"${title}\">${regionTag}<span>${badgeLabel}</span>${tagBadges}</span>`;
         })
         .join('');
     }
