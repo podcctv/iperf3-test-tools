@@ -802,15 +802,15 @@ def _login_html() -> str:
               <div class="panel-card rounded-2xl p-5 space-y-4">
                 <div class="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p class="text-xs uppercase tracking-[0.2em] text-sky-300/70">链路调度</p>
-                    <h3 class="text-lg font-semibold text-white">测试控制台</h3>
+                    <p class="text-xs uppercase tracking-[0.2em] text-sky-300/70">IPERF3 测试</p>
+                    <h3 class="text-lg font-semibold text-white">测试计划</h3>
                   </div>
                   <div class="inline-flex items-center gap-2 rounded-full border border-slate-700/70 bg-slate-900/70 p-1 shadow-inner shadow-black/20">
-                    <button id="single-test-tab" class="rounded-full bg-gradient-to-r from-sky-500/80 to-indigo-500/80 px-4 py-1.5 text-xs font-semibold text-slate-50 shadow-lg shadow-sky-500/15 ring-1 ring-sky-400/40 transition hover:brightness-110">发起测试</button>
+                    <button id="single-test-tab" class="rounded-full bg-gradient-to-r from-sky-500/80 to-indigo-500/80 px-4 py-1.5 text-xs font-semibold text-slate-50 shadow-lg shadow-sky-500/15 ring-1 ring-sky-400/40 transition hover:brightness-110">单程测试</button>
                     <button id="suite-test-tab" class="rounded-full px-4 py-1.5 text-xs font-semibold text-slate-300 transition hover:text-white">双向 TCP/UDP 测试</button>
                   </div>
                 </div>
-                <p id="test-panel-intro" class="text-sm text-slate-400">快速发起单条 TCP/UDP 链路测试，支持限速、并行与反向 (-R)。</p>
+                <p id="test-panel-intro" class="text-sm text-slate-400">快速规划 iperf3 单程或双向链路测试，支持限速、并行与反向 (-R)。</p>
                 <div id="test-alert" class="hidden rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100"></div>
 
                 <div id="single-test-panel" class="space-y-4">
@@ -1885,6 +1885,9 @@ def _login_html() -> str:
             heading.innerHTML = `<span class="font-semibold">${entry.label}</span><span class="text-[11px] uppercase text-slate-400">${entry.protocol.toUpperCase()}${entry.reverse ? ' (-R)' : ''}</span>`;
             tile.appendChild(heading);
 
+            const metricGrid = buildMetricGrid(entry.metrics);
+            if (metricGrid) tile.appendChild(metricGrid);
+
             const rates = document.createElement('div');
             rates.className = 'grid grid-cols-2 gap-2 text-xs text-slate-400';
             rates.innerHTML = `
@@ -1895,18 +1898,6 @@ def _login_html() -> str:
                 <div class="flex items-center justify-between"><span>发送</span><span class="font-semibold text-amber-200">${entry.rateSummary.senderRateMbps}</span></div>
               </div>`;
             tile.appendChild(rates);
-
-            const metricGrid = document.createElement('div');
-            metricGrid.className = 'grid gap-2 sm:grid-cols-2 xl:grid-cols-4';
-            [
-              renderMetricStat('延迟', entry.metrics.latencyStats, 'ms', 'from-sky-500/30 via-slate-900/80 to-indigo-500/30'),
-              renderMetricStat('抖动', entry.metrics.jitterStats, 'ms', 'from-cyan-500/30 via-slate-900/80 to-emerald-500/30'),
-              renderMetricStat('丢包', entry.metrics.lossStats, '%', 'from-amber-500/30 via-slate-900/80 to-red-500/30'),
-              renderMetricStat('重传', entry.metrics.retransStats, '次', 'from-purple-500/30 via-slate-900/80 to-blue-500/30'),
-            ]
-              .filter(Boolean)
-              .forEach((node) => metricGrid.appendChild(node));
-            if (metricGrid.childNodes.length) tile.appendChild(metricGrid);
             suiteGrid.appendChild(tile);
           });
           card.appendChild(suiteGrid);
@@ -1965,17 +1956,8 @@ def _login_html() -> str:
         if (test.params?.reverse) metaChips.appendChild(makeChip('反向 (-R)'));
         card.appendChild(metaChips);
 
-        const metricGrid = document.createElement('div');
-        metricGrid.className = 'grid gap-2 sm:grid-cols-2 lg:grid-cols-4';
-        [
-          renderMetricStat('延迟', metrics.latencyStats, 'ms', 'from-sky-500/30 via-slate-900/80 to-indigo-500/30'),
-          renderMetricStat('抖动', metrics.jitterStats, 'ms', 'from-cyan-500/30 via-slate-900/80 to-emerald-500/30'),
-          renderMetricStat('丢包', metrics.lossStats, '%', 'from-amber-500/30 via-slate-900/80 to-red-500/30'),
-          renderMetricStat('重传', metrics.retransStats, '次', 'from-purple-500/30 via-slate-900/80 to-blue-500/30'),
-        ]
-          .filter(Boolean)
-          .forEach((node) => metricGrid.appendChild(node));
-        if (metricGrid.childNodes.length) card.appendChild(metricGrid);
+        const metricGrid = buildMetricGrid(metrics);
+        if (metricGrid) card.appendChild(metricGrid);
 
         const actions = document.createElement('div');
         actions.className = 'flex flex-wrap items-center justify-between gap-3';
@@ -2380,19 +2362,37 @@ def _login_html() -> str:
       return Number(value).toFixed(decimals);
     }
 
-    function renderMetricStat(label, stats, unit = '', gradient = 'from-slate-700 to-slate-800') {
+    function renderMetricStat(label, stats, unit = '') {
       if (!stats) return null;
       const unitLabel = unit ? ` ${unit}` : '';
+      const primary = stats.avg ?? stats.mean ?? stats.max ?? stats.min;
       const wrap = document.createElement('div');
-      wrap.className = `rounded-xl border border-slate-800/60 bg-slate-950/60 p-3 shadow-inner shadow-black/20 bg-gradient-to-br ${gradient}`;
+      wrap.className = 'border border-slate-800 bg-slate-950/70 p-3 text-xs text-slate-300 shadow-inner shadow-black/10';
       wrap.innerHTML = `
-        <div class="flex items-center justify-between text-xs text-slate-400">
-          <span>${label}</span>
-          <span class="text-sm font-semibold text-slate-50">${formatMetric(stats.max)}${unitLabel}</span>
+        <div class="flex items-center justify-between">
+          <span class="font-medium">${label}</span>
+          <span class="text-sm font-semibold text-slate-50">${formatMetric(primary)}${unitLabel}</span>
         </div>
-        <div class="mt-1 text-[11px] text-slate-500">均值 ${formatMetric(stats.avg)}${unitLabel} · 最小 ${formatMetric(stats.min)}${unitLabel}</div>
+        <div class="mt-1 text-[10px] text-slate-500">max ${formatMetric(stats.max)}${unitLabel} · min ${formatMetric(stats.min)}${unitLabel}</div>
       `;
       return wrap;
+    }
+
+    function buildMetricGrid(metrics) {
+      if (!metrics) return null;
+      const grid = document.createElement('div');
+      grid.className = 'grid gap-2 sm:grid-cols-2 lg:grid-cols-4';
+
+      [
+        renderMetricStat('RTT 均值 (ms)', metrics.latencyStats, 'ms'),
+        renderMetricStat('抖动均值 (ms)', metrics.jitterStats, 'ms'),
+        renderMetricStat('丢包均值 (%)', metrics.lossStats, '%'),
+        renderMetricStat('重传次数', metrics.retransStats, '次'),
+      ]
+        .filter(Boolean)
+        .forEach((node) => grid.appendChild(node));
+
+      return grid.childNodes.length ? grid : null;
     }
 
     function renderBackboneBadges(entries) {
