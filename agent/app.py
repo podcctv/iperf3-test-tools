@@ -29,8 +29,8 @@ STREAMING_TARGETS = {
     "gemini": {"name": "Google Gemini", "url": "https://gemini.google.com/app"},
 }
 
-STREAMING_SCRIPT_URL = "https://raw.githubusercontent.com/xykt/IPQuality/main/ip.sh"
-STREAMING_SCRIPT_PATH = Path("/tmp/ipquality_ip.sh")
+STREAMING_SCRIPT_URL = "https://raw.githubusercontent.com/1-stream/RegionRestrictionCheck/main/check.sh"
+STREAMING_SCRIPT_PATH = Path("/tmp/region_restriction_check.sh")
 STREAMING_SCRIPT_TTL = int(os.environ.get("STREAMING_SCRIPT_TTL", 60 * 60 * 12))
 # Streaming probe mode: "builtin" (fast HTTP reachability checks) or "external" (ip.sh).
 # The builtin mode is the default to avoid long-running external scripts.
@@ -79,6 +79,32 @@ STREAMING_UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
+
+YOUTUBE_PREMIUM_COOKIES = (
+    "YSC=BiCUU3-5Gdk; CONSENT=YES+cb.20220301-11-p0.en+FX+700; GPS=1; "
+    "VISITOR_INFO1_LIVE=4VwPMkB7W5A; PREF=tz=Asia.Shanghai; _gcl_au=1.1."
+    "1809531354.1646633279"
+)
+
+_media_cookie_cache: str | None = None
+
+
+def _get_media_cookie() -> str | None:
+    global _media_cookie_cache
+    if _media_cookie_cache:
+        return _media_cookie_cache
+
+    try:
+        resp = requests.get(
+            "https://raw.githubusercontent.com/1-stream/RegionRestrictionCheck/main/cookies",
+            timeout=10,
+        )
+        if resp.ok:
+            _media_cookie_cache = resp.text
+    except requests.RequestException:
+        return None
+
+    return _media_cookie_cache
 
 
 def _extract_region_from_url(url: str | None) -> str | None:
@@ -196,85 +222,230 @@ def _service_result(
 
 
 def _probe_tiktok() -> dict[str, Any]:
-    url = "https://www.tiktok.com/"
-    headers = {"User-Agent": STREAMING_UA}
     dns_info = _dns_detail("www.tiktok.com")
+    headers = {"User-Agent": STREAMING_UA}
     try:
-        resp = requests.get(url, headers=headers, timeout=10)
-        status = resp.status_code
-        region_match = re.search(r'"region"\s*:\s*"([A-Z]{2})"', resp.text)
-        region = region_match.group(1) if region_match else None
-        unlocked = status == 200 and region is not None
-        detail_parts = [dns_info, f"HTTP {status}", f"Region: {region}" if region else None]
+        resp = requests.get(
+            "https://www.tiktok.com/",
+            headers=headers,
+            timeout=10,
+            allow_redirects=True,
+        )
+        region_resp = requests.post(
+            "https://www.tiktok.com/passport/web/store_region/",
+            headers=headers,
+            timeout=10,
+        )
     except requests.RequestException as exc:
-        unlocked = False
-        status = None
         detail_parts = [dns_info, f"请求失败: {exc}"[:150]]
+        return _service_result("tiktok", "TikTok", False, None, detail_parts)
 
+    status = resp.status_code
+    region = None
+    try:
+        payload = region_resp.json()
+        region = payload.get("data", {}).get("store_region")
+    except Exception:
+        region = None
+
+    redirected_path = resp.url or ""
+    if any(token in redirected_path for token in ["about", "status", "landing"]):
+        unlocked = False
+        detail = f"Region: {region}" if region else "未解锁"
+        if region and region.lower() == "cn":
+            detail = "由抖音提供"
+    else:
+        unlocked = True
+        detail = f"Region: {region}" if region else "已解锁"
+
+    detail_parts = [dns_info, f"HTTP {status}", detail]
     return _service_result("tiktok", "TikTok", unlocked, status, detail_parts)
 
 
 def _probe_disney_plus() -> dict[str, Any]:
-    url = "https://www.disneyplus.com/"
-    headers = {"User-Agent": STREAMING_UA}
     dns_info = _dns_detail("www.disneyplus.com")
-    try:
-        resp = requests.get(url, headers=headers, timeout=10, allow_redirects=True)
-        status = resp.status_code
-        unlocked = status == 200 and "not available in your region" not in resp.text.lower()
-        region_header = resp.headers.get("X-Region") or resp.headers.get("CF-IPCountry")
-        detail_parts = [dns_info, f"HTTP {status}", f"Region: {region_header}" if region_header else None]
-    except requests.RequestException as exc:
-        unlocked = False
-        status = None
-        detail_parts = [dns_info, f"请求失败: {exc}"[:150]]
+    cookies_blob = _get_media_cookie()
+    if not cookies_blob:
+        return _service_result(
+            "disney_plus", "Disney+", False, None, [dns_info, "获取认证信息失败"]
+        )
 
-    return _service_result("disney_plus", "Disney+", unlocked, status, detail_parts)
+    cookie_lines = cookies_blob.splitlines()
+    pre_cookie = cookie_lines[0] if len(cookie_lines) >= 1 else None
+    fake_cookie = cookie_lines[7] if len(cookie_lines) >= 8 else None
+
+    if not pre_cookie or not fake_cookie:
+        return _service_result(
+            "disney_plus", "Disney+", False, None, [dns_info, "认证模板缺失"]
+        )
+
+    try:
+        pre_assertion = requests.post(
+            "https://disney.api.edge.bamgrid.com/devices",
+            headers={
+                "authorization": "Bearer ZGlzbmV5JmJyb3dzZXImMS4wLjA.Cu56AgSfBTDag5NiRA81oLHkDZfu5L3CKadnefEAY84",
+                "content-type": "application/json; charset=UTF-8",
+                "User-Agent": STREAMING_UA,
+            },
+            json={"deviceFamily": "browser", "applicationRuntime": "chrome", "deviceProfile": "windows", "attributes": {}},
+            timeout=10,
+        )
+        assertion = pre_assertion.json().get("assertion")
+    except Exception as exc:  # pragma: no cover - network
+        detail_parts = [dns_info, f"预检失败: {exc}"[:150]]
+        return _service_result("disney_plus", "Disney+", False, None, detail_parts)
+
+    disney_cookie = pre_cookie.replace("DISNEYASSERTION", assertion)
+    try:
+        token_resp = requests.post(
+            "https://disney.api.edge.bamgrid.com/token",
+            headers={
+                "authorization": "Bearer ZGlzbmV5JmJyb3dzZXImMS4wLjA.Cu56AgSfBTDag5NiRA81oLHkDZfu5L3CKadnefEAY84",
+                "User-Agent": STREAMING_UA,
+            },
+            data=disney_cookie,
+            timeout=10,
+        )
+    except requests.RequestException as exc:
+        detail_parts = [dns_info, f"Token 获取失败: {exc}"[:150]]
+        return _service_result("disney_plus", "Disney+", False, None, detail_parts)
+
+    if "forbidden-location" in token_resp.text or token_resp.status_code == 403:
+        detail_parts = [dns_info, "地区封禁"]
+        return _service_result("disney_plus", "Disney+", False, token_resp.status_code, detail_parts)
+
+    try:
+        refresh_token = token_resp.json().get("refresh_token")
+    except Exception:
+        refresh_token = None
+
+    disney_payload = fake_cookie.replace("ILOVEDISNEY", refresh_token or "")
+    try:
+        graph_resp = requests.post(
+            "https://disney.api.edge.bamgrid.com/graph/v1/device/graphql",
+            headers={
+                "authorization": "ZGlzbmV5JmJyb3dzZXImMS4wLjA.Cu56AgSfBTDag5NiRA81oLHkDZfu5L3CKadnefEAY84",
+                "User-Agent": STREAMING_UA,
+            },
+            data=disney_payload,
+            timeout=10,
+        )
+        graph_json = graph_resp.json()
+    except Exception as exc:  # pragma: no cover - network
+        detail_parts = [dns_info, f"GraphQL 失败: {exc}"[:150]]
+        return _service_result("disney_plus", "Disney+", False, None, detail_parts)
+
+    country_code = None
+    in_supported_location = None
+    try:
+        gql_data = graph_json.get("extensions", {}).get("sdk", {}).get("session", {}).get("location", {})
+        country_code = gql_data.get("countryCode")
+        in_supported_location = gql_data.get("inSupportedLocation")
+    except Exception:
+        pass
+
+    try:
+        preview_url = requests.get("https://www.disneyplus.com", timeout=10).url
+    except requests.RequestException:
+        preview_url = ""
+    is_unavailable = "unavailable" in preview_url
+
+    detail_parts = [dns_info]
+    if country_code:
+        detail_parts.append(f"Region: {country_code}")
+
+    if country_code == "JP":
+        unlocked = True
+        status_text = "可用 (JP)"
+    elif in_supported_location is False and not is_unavailable:
+        unlocked = False
+        status_text = f"即将上线 {country_code}" if country_code else "即将上线"
+    elif is_unavailable:
+        unlocked = False
+        status_text = "未开放"
+    elif in_supported_location:
+        unlocked = True
+        status_text = f"可用 (Region: {country_code})" if country_code else "可用"
+    else:
+        unlocked = False
+        status_text = "未知"
+
+    detail_parts.append(status_text)
+    return _service_result("disney_plus", "Disney+", unlocked, graph_resp.status_code, detail_parts)
 
 
 def _probe_netflix() -> dict[str, Any]:
-    test_title = "https://www.netflix.com/title/80018499"
-    headers = {"User-Agent": STREAMING_UA}
     dns_info = _dns_detail("www.netflix.com")
-    tier = "none"
-    try:
-        resp = requests.get(
-            test_title, headers=headers, timeout=10, allow_redirects=False
+    title_urls = [
+        "https://www.netflix.com/title/81280792",
+        "https://www.netflix.com/title/70143836",
+    ]
+
+    availability: list[bool | None] = []
+    region: str | None = None
+    status: int | None = None
+
+    def _parse_react_context(html: str) -> tuple[bool | None, str | None]:
+        match = re.search(r"netflix\\.reactContext\s*=\s*({.*?});", html, re.S)
+        if not match:
+            return None, None
+        try:
+            data = json.loads(match.group(1))
+        except json.JSONDecodeError:
+            return None, None
+
+        models = data.get("models", {}) if isinstance(data, dict) else {}
+        meta = (
+            models.get("nmTitleGQL", {})
+            .get("data", {})
+            .get("metaData", {})
+            if isinstance(models, dict)
+            else {}
         )
-        status = resp.status_code
-        text_lower = resp.text.lower()
-        blocked_text = "not available to watch" in text_lower or "proxy" in text_lower
-        redirected_to = resp.headers.get("location")
+        geo = (
+            models.get("geo", {})
+            .get("data", {})
+            .get("requestCountry", {})
+            if isinstance(models, dict)
+            else {}
+        )
+        return meta.get("isAvailable"), geo.get("id")
 
-        if status in {301, 302, 307, 308}:
-            redirected = redirected_to or ""
-            login_redirect = any(token in redirected.lower() for token in ["login", "signin", "browse", "title"])
-            geo_block = any(token in redirected.lower() for token in ["unavailable", "sorry"])
-            tier = "full" if login_redirect and not geo_block else "none"
-            unlocked = tier == "full"
-            detail_parts = [
-                dns_info,
-                f"HTTP {status}",
-                f"Redirect: {redirected_to}" if redirected_to else None,
-                "需要登录/地区确认" if login_redirect and not geo_block else None,
-                "地域限制" if geo_block else None,
-            ]
-        elif status == 200:
-            tier = "full" if not blocked_text else "none"
-            unlocked = tier == "full"
-            detail_parts = [dns_info, f"HTTP {status}", "全片库" if unlocked else "地域限制"]
-        elif status == 404:
-            unlocked = True
-            tier = "originals"
-            detail_parts = [dns_info, f"HTTP {status}", "自制片库"]
-        else:
-            unlocked = False
-            detail_parts = [dns_info, f"HTTP {status}", "未解锁"]
-    except requests.RequestException as exc:
+    for url in title_urls:
+        try:
+            resp = requests.get(
+                url,
+                headers={"User-Agent": STREAMING_UA},
+                timeout=10,
+                allow_redirects=True,
+            )
+            status = resp.status_code
+        except requests.RequestException as exc:  # pragma: no cover - network
+            status = None
+            detail_parts = [dns_info, f"请求失败: {exc}"[:150]]
+            return _service_result("netflix", "Netflix", False, status, detail_parts)
+
+        available, detected_region = _parse_react_context(resp.text)
+        if detected_region:
+            region = region or detected_region
+        availability.append(available)
+
+    tier: str | None
+    unlocked: bool
+    if any(val is True for val in availability):
+        tier = "full"
+        unlocked = True
+        detail = f"全片库 (Region: {region})" if region else "全片库"
+    elif any(val is False for val in availability):
+        tier = "originals"
         unlocked = False
-        status = None
-        detail_parts = [dns_info, f"请求失败: {exc}"[:150]]
+        detail = f"仅自制片库 (Region: {region})" if region else "仅自制片库"
+    else:
+        tier = "none"
+        unlocked = False
+        detail = "未解锁"
 
+    detail_parts = [dns_info, detail, f"Region: {region}" if region else None]
     return _service_result(
         "netflix", "Netflix", unlocked, status, detail_parts, tier=tier
     )
@@ -282,89 +453,84 @@ def _probe_netflix() -> dict[str, Any]:
 
 def _probe_youtube_premium() -> dict[str, Any]:
     url = "https://www.youtube.com/premium"
-    headers = {"User-Agent": STREAMING_UA}
+    headers = {
+        "User-Agent": STREAMING_UA,
+        "Accept-Language": "en",
+        "Cookie": YOUTUBE_PREMIUM_COOKIES,
+    }
     dns_info = _dns_detail("www.youtube.com")
     try:
-        resp = requests.get(url, headers=headers, timeout=10)
-        status = resp.status_code
-        text_lower = resp.text.lower()
-        region_match = re.search(r'"countryCode"\s*:\s*"([A-Z]{2})"', resp.text)
-        region_match = region_match or re.search(r'"contentRegion"\s*:\s*"([A-Z]{2})"', resp.text)
-        region = region_match.group(1) if region_match else None
-        unavailable = any(
-            key in text_lower
-            for key in ["not available in your country", "premium is not available"]
-        )
-        captcha_block = "unusual traffic" in text_lower or "captcha" in text_lower
-        consent_flow = "consent.youtube" in resp.url.lower() or any(
-            "consent.youtube" in h.headers.get("location", "").lower()
-            for h in resp.history or []
-        )
-        unlocked = status == 200 and not unavailable and not captcha_block
-        if consent_flow and not unavailable and not captcha_block:
-            unlocked = True
-        detail_parts = [
-            dns_info,
-            f"HTTP {status}",
-            f"Region: {region}" if region else None,
-            resp.url if resp.url and resp.url != url else None,
-            "需要验证" if captcha_block or consent_flow else None,
-        ]
+        resp = requests.get(url, headers=headers, timeout=10, allow_redirects=True)
     except requests.RequestException as exc:
-        unlocked = False
-        status = None
         detail_parts = [dns_info, f"请求失败: {exc}"[:150]]
+        return _service_result("youtube", "YouTube Premium", False, None, detail_parts)
 
+    status = resp.status_code
+    region_match = re.search(r'"countryCode"\s*:\s*"([A-Z]{2})"', resp.text)
+    region_match = region_match or re.search(r'"contentRegion"\s*:\s*"([A-Z]{2})"', resp.text)
+    region = region_match.group(1) if region_match else None
+    is_cn = "www.google.cn" in resp.text or "www.google.cn" in resp.url
+    available = any(
+        token in resp.text for token in ["purchaseButtonOverride", "Start trial"]
+    ) or bool(region)
+
+    if is_cn:
+        unlocked = False
+        detail = "CN 受限"
+    elif available:
+        unlocked = True
+        detail = f"Region: {region}" if region else "已解锁"
+    else:
+        unlocked = False
+        detail = f"Region: {region}" if region else "未解锁"
+
+    detail_parts = [dns_info, f"HTTP {status}", detail]
     return _service_result("youtube", "YouTube Premium", unlocked, status, detail_parts)
 
 
 def _probe_prime_video() -> dict[str, Any]:
-    url = "https://www.primevideo.com/"
-    headers = {"User-Agent": STREAMING_UA}
     dns_info = _dns_detail("www.primevideo.com")
     try:
-        resp = requests.get(url, headers=headers, timeout=10, allow_redirects=False)
-        status = resp.status_code
-        region_match = re.search(r'"currentTerritory"\s*:\s*"([A-Z]{2})"', resp.text)
-        region = region_match.group(1) if region_match else None
-        redirected_to = resp.headers.get("location", "")
-        blocked = "not available" in resp.text.lower() or "vpn" in resp.text.lower()
-        geo_block = any(token in redirected_to.lower() for token in ["geo", "unavailable"])
-        region_hint = region or _extract_region_from_url(redirected_to)
-        unlocked = status in {200, 301, 302, 307, 308} and not blocked and not geo_block
-        detail_parts = [
-            dns_info,
-            f"HTTP {status}",
-            f"Region: {region_hint}" if region_hint else "Region: unknown",
-            f"Redirect: {redirected_to}" if redirected_to else None,
-            "疑似地域限制" if blocked or geo_block else None,
-        ]
+        home = requests.get(
+            "https://www.primevideo.com",
+            headers={"User-Agent": STREAMING_UA},
+            timeout=10,
+            allow_redirects=True,
+        )
     except requests.RequestException as exc:
-        unlocked = False
-        status = None
         detail_parts = [dns_info, f"请求失败: {exc}"[:150]]
+        return _service_result("prime_video", "Prime Video", False, None, detail_parts)
 
+    status = home.status_code
+    region_match = re.search(r'"currentTerritory"\s*:\s*"([A-Z]{2})"', home.text)
+    region = region_match.group(1) if region_match else None
+    vpn_block = "VPN" in home.text or "proxy" in home.text
+
+    detail_parts = [dns_info, f"HTTP {status}", f"Region: {region}" if region else None]
+    if vpn_block:
+        detail_parts.append("检测到代理/VPN")
+
+    unlocked = region is not None and not vpn_block
     return _service_result("prime_video", "Prime Video", unlocked, status, detail_parts)
 
 
 def _probe_spotify() -> dict[str, Any]:
-    url = "https://www.spotify.com/api/ip-address"
-    headers = {"User-Agent": STREAMING_UA}
     dns_info = _dns_detail("www.spotify.com")
     try:
-        resp = requests.get(url, headers=headers, timeout=10)
-        status = resp.status_code
-        country = None
-        if resp.headers.get("content-type", "").startswith("application/json"):
-            payload = resp.json()
-            country = payload.get("country") or payload.get("ip_country")
-        unlocked = status == 200 and country is not None
-        detail_parts = [dns_info, f"HTTP {status}", f"Country: {country}" if country else None]
+        resp = requests.get(
+            "https://www.spotify.com/tw/signup",
+            headers={"User-Agent": STREAMING_UA},
+            timeout=10,
+        )
     except requests.RequestException as exc:
-        unlocked = False
-        status = None
         detail_parts = [dns_info, f"请求失败: {exc}"[:150]]
+        return _service_result("spotify", "Spotify", False, None, detail_parts)
 
+    status = resp.status_code
+    country_match = re.search(r'geoCountry":"([A-Z]{2})"', resp.text)
+    country = country_match.group(1) if country_match else None
+    unlocked = country is not None
+    detail_parts = [dns_info, f"HTTP {status}", f"Region: {country}" if country else None]
     return _service_result("spotify", "Spotify", unlocked, status, detail_parts)
 
 
@@ -464,26 +630,31 @@ def _probe_gemini() -> dict[str, Any]:
 
 
 def _probe_hbo() -> dict[str, Any]:
-    url = "https://www.hbomax.com"
-    headers = {"User-Agent": STREAMING_UA}
-    dns_info = _dns_detail("www.hbomax.com")
+    dns_info = _dns_detail("play.hbonow.com")
     try:
-        resp = requests.get(url, headers=headers, timeout=10, allow_redirects=True)
-        status = resp.status_code
-        blocked = "not available in your region" in resp.text.lower()
-        blocked = blocked or "service area" in resp.text.lower()
-        unlocked = status and status < 400 and not blocked
-        detail_parts = [
-            dns_info,
-            f"HTTP {status}",
-            resp.url if resp.url and resp.url != url else None,
-            resp.headers.get("CF-IPCountry"),
-        ]
+        resp = requests.get(
+            "https://play.hbonow.com/",
+            headers={"User-Agent": STREAMING_UA},
+            timeout=10,
+            allow_redirects=True,
+        )
     except requests.RequestException as exc:
-        status = None
-        unlocked = False
         detail_parts = [dns_info, f"请求失败: {exc}"[:150]]
+        return _service_result("hbo", "HBO", False, None, detail_parts)
 
+    status = resp.status_code
+    url_effective = resp.url
+    if url_effective.rstrip("/") in {"https://play.hbonow.com", "https://play.hbonow.com"}:
+        unlocked = True
+        detail = "已解锁"
+    elif url_effective.startswith("http://hbogeo.cust.footprint.net") or "geo.html" in url_effective:
+        unlocked = False
+        detail = "未解锁"
+    else:
+        unlocked = False
+        detail = "检测失败"
+
+    detail_parts = [dns_info, f"HTTP {status}", url_effective, detail]
     return _service_result("hbo", "HBO", unlocked, status, detail_parts)
 
 
