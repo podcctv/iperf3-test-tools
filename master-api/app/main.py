@@ -44,7 +44,7 @@ from .schemas import (
 )
 from .state_store import StateStore
 
-Base.metadata.create_all(bind=engine)
+logger = logging.getLogger(__name__)
 
 
 def _ensure_iperf_port_column() -> None:
@@ -85,11 +85,29 @@ def _ensure_test_result_columns() -> None:
         connection.commit()
 
 
-_ensure_iperf_port_column()
-_ensure_test_result_columns()
+def _init_database_with_retry(max_attempts: int = 5, delay_seconds: float = 2.0) -> None:
+    """Initialize database schema with simple retry to handle cold starts."""
+
+    attempt = 0
+    while True:
+        attempt += 1
+        try:
+            Base.metadata.create_all(bind=engine)
+            _ensure_iperf_port_column()
+            _ensure_test_result_columns()
+            return
+        except Exception:  # pragma: no cover - best-effort bootstrap
+            logger.exception(
+                "Database initialization failed (attempt %s/%s)", attempt, max_attempts
+            )
+            if attempt >= max_attempts:
+                raise
+            time.sleep(delay_seconds)
+
+
+_init_database_with_retry()
 
 state_store = StateStore(settings.state_file, settings.state_recent_tests)
-logger = logging.getLogger(__name__)
 _geo_cache: dict[str, tuple[str | None, float]] = {}
 GEO_CACHE_TTL_SECONDS = 60 * 60 * 6
 
