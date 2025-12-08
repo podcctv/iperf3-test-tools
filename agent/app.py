@@ -447,16 +447,20 @@ def _probe_netflix() -> dict[str, Any]:
         else:
             availability.append(available)
 
+    has_true = any(val is True for val in availability)
+    has_false = any(val is False for val in availability)
+    all_false = has_false and all(val is False for val in availability if val is not None)
+
     tier: str | None
     unlocked: bool
-    if any(val is True for val in availability):
+    if has_true:
         tier = "full"
         unlocked = True
-        detail = "全片库"
-    elif any(val is False for val in availability):
+        detail = "全解锁"
+    elif has_false and not all_false:
         tier = "originals"
         unlocked = False
-        detail = "仅自制片库"
+        detail = "仅解锁自制剧"
     else:
         tier = "none"
         unlocked = False
@@ -492,7 +496,11 @@ def _probe_youtube_premium() -> dict[str, Any]:
     region_match = re.search(r'"countryCode"\s*:\s*"([A-Z]{2})"', resp.text)
     region_match = region_match or re.search(r'"contentRegion"\s*:\s*"([A-Z]{2})"', resp.text)
     region = region_match.group(1) if region_match else None
-    is_cn = "www.google.cn" in resp.text or "www.google.cn" in resp.url
+    is_cn = (
+        "www.google.cn" in resp.text
+        or "www.google.cn" in resp.url
+        or (region and region.upper() == "CN")
+    )
     available = any(
         token in resp.text for token in ["purchaseButtonOverride", "Start trial"]
     ) or bool(region)
