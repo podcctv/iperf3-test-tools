@@ -75,6 +75,21 @@ class TestCreate(BaseModel):
     parallel: int = Field(default=1, gt=0)
     port: int = Field(default=DEFAULT_IPERF_PORT, ge=1, le=65535)
     reverse: bool = False
+    bandwidth: Optional[str] = None
+    datagram_size: Optional[int] = Field(default=None, gt=0)
+    omit: Optional[int] = Field(default=None, ge=0)
+
+
+class DualSuiteTestCreate(BaseModel):
+    src_node_id: int
+    dst_node_id: int
+    duration: int = Field(default=10, gt=0)
+    parallel: int = Field(default=1, gt=0)
+    port: int = Field(default=DEFAULT_IPERF_PORT, ge=1, le=65535)
+    tcp_bandwidth: Optional[str] = None
+    udp_bandwidth: Optional[str] = None
+    udp_datagram_size: Optional[int] = Field(default=None, gt=0)
+    omit: Optional[int] = Field(default=None, ge=0)
 
 
 class TestRead(BaseModel):
