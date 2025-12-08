@@ -1915,6 +1915,14 @@ def _login_html() -> str:
             if (lossValue !== undefined && lossValue !== null) {
               badgeRow.appendChild(createMiniStat('丢包', formatMetric(lossValue, 2), '%', 'text-rose-200', entry.metrics?.lossStats));
             }
+            const jitterValue = entry.metrics?.jitterStats?.avg ?? entry.metrics?.jitterMs;
+            if (jitterValue !== undefined && jitterValue !== null) {
+              badgeRow.appendChild(createMiniStat('抖动', formatMetric(jitterValue, 2), 'ms', 'text-amber-200'));
+            }
+            const lossValue = entry.metrics?.lossStats?.avg ?? entry.metrics?.lostPercent;
+            if (lossValue !== undefined && lossValue !== null) {
+              badgeRow.appendChild(createMiniStat('丢包', formatMetric(lossValue, 2), '%', 'text-rose-200'));
+            }
             const retransValue = entry.metrics?.retransStats?.avg;
             if (retransValue !== undefined && retransValue !== null) {
               badgeRow.appendChild(createMiniStat('重传', formatMetric(retransValue, 0), '次', 'text-indigo-200', entry.metrics?.retransStats));
