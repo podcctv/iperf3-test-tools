@@ -732,6 +732,37 @@ def _login_html() -> str:
       backdrop-filter: blur(12px);
     }
     .gradient-bar { background: linear-gradient(120deg, #22c55e 0%, #0ea5e9 35%, #a855f7 100%); height: 4px; border-radius: 999px; }
+    .neon-ring {
+      position: absolute;
+      inset: -4px;
+      border-radius: 24px;
+      padding: 2px;
+      background: linear-gradient(120deg, rgba(14, 165, 233, 0.6), rgba(16, 185, 129, 0.6), rgba(168, 85, 247, 0.6));
+      filter: blur(18px);
+      opacity: 0.45;
+      z-index: 0;
+    }
+    .login-glow {
+      background: radial-gradient(circle at 20% 30%, rgba(14, 165, 233, 0.15), transparent 35%),
+        radial-gradient(circle at 80% 20%, rgba(168, 85, 247, 0.18), transparent 40%),
+        linear-gradient(160deg, rgba(12, 16, 32, 0.95), rgba(7, 12, 24, 0.92));
+      box-shadow: 0 25px 90px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(148, 163, 184, 0.24);
+    }
+    .login-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 1.2rem;
+      position: absolute;
+      inset: 0;
+      opacity: 0.08;
+      pointer-events: none;
+    }
+    .grid-cell {
+      border: 1px solid rgba(148, 163, 184, 0.05);
+      border-radius: 18px;
+      background: linear-gradient(145deg, rgba(255, 255, 255, 0.03), rgba(14, 165, 233, 0.02));
+    }
     .hidden { display: none; }
   </style>
 </head>
@@ -746,31 +777,65 @@ def _login_html() -> str:
           <p class="mx-auto max-w-2xl text-sm leading-relaxed text-slate-400">集中管理节点、发起测试并查看最新结果，稳定的远程运维体验从这里开始。</p>
         </div>
 
-        <div class="glass-card rounded-3xl p-8 ring-1 ring-slate-800/60">
+        <div class="glass-card relative overflow-hidden rounded-3xl p-8 ring-1 ring-slate-800/60">
+          <div class="neon-ring"></div>
+          <div class="login-grid">
+            <div class="grid-cell"></div>
+            <div class="grid-cell"></div>
+            <div class="grid-cell"></div>
+            <div class="grid-cell"></div>
+            <div class="grid-cell"></div>
+            <div class="grid-cell"></div>
+            <div class="grid-cell"></div>
+            <div class="grid-cell"></div>
+            <div class="grid-cell"></div>
+            <div class="grid-cell"></div>
+            <div class="grid-cell"></div>
+            <div class="grid-cell"></div>
+            <div class="grid-cell"></div>
+            <div class="grid-cell"></div>
+            <div class="grid-cell"></div>
+          </div>
+          <div class="absolute inset-0 pointer-events-none bg-gradient-to-br from-emerald-500/5 via-sky-500/5 to-fuchsia-500/5"></div>
           <div class="gradient-bar mb-6"></div>
           <div id="login-card" class="space-y-6">
             <div class="flex flex-col items-center justify-between gap-4 text-center sm:flex-row sm:text-left">
               <div>
-                <h2 class="text-2xl font-semibold text-white">解锁控制台</h2>
-                <p class="text-sm text-slate-400">输入共享密码以进入运维面板。</p>
+                <p class="text-sm uppercase tracking-[0.3em] text-sky-300/70">Access Gateway</p>
+                <h2 class="text-3xl font-semibold text-white">解锁控制台</h2>
+                <p id="login-hint" class="text-sm text-slate-400">输入共享密码以进入运维面板。</p>
               </div>
-              <div class="inline-flex items-center gap-2 rounded-full bg-slate-800/70 px-3 py-2 text-xs font-medium text-slate-200 ring-1 ring-slate-700">
-                <span class="h-2 w-2 rounded-full bg-amber-400 animate-ping"></span>
-                会话未解锁
+              <div id="login-status" class="inline-flex items-center gap-2 rounded-full bg-slate-800/70 px-3 py-2 text-xs font-medium text-slate-200 ring-1 ring-slate-700 shadow-inner shadow-black/40">
+                <span id="login-status-dot" class="h-2 w-2 rounded-full bg-amber-400 animate-pulse"></span>
+                <span id="login-status-label">等待解锁</span>
               </div>
             </div>
             <div id="login-alert" class="hidden rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100"></div>
-            <div class="grid gap-4 md:grid-cols-[2fr_1fr] md:items-end">
-              <div class="space-y-3">
-                <label class="text-sm font-medium text-slate-200" for="password">控制台密码</label>
-                <input id="password" type="password" placeholder="请输入控制台密码"
-                  class="w-full rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
-                <p class="text-xs text-slate-500">密码仅由管理员提供，请妥善保管。</p>
+            <form id="login-form" class="relative login-glow rounded-2xl p-6 shadow-[0_25px_100px_rgba(0,0,0,0.55)] ring-1 ring-slate-800/70 overflow-hidden">
+              <div class="absolute inset-0 pointer-events-none">
+                <div class="absolute -left-6 -top-10 h-24 w-24 rounded-full bg-sky-500/25 blur-3xl"></div>
+                <div class="absolute -right-8 bottom-0 h-28 w-28 rounded-full bg-emerald-400/20 blur-3xl"></div>
               </div>
-              <div class="flex justify-center md:justify-end">
-                <button id="login-btn" class="w-full rounded-xl bg-gradient-to-r from-sky-500 to-emerald-400 px-5 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-500/20 transition hover:scale-[1.01] hover:shadow-xl">解锁</button>
+              <div class="relative grid gap-4 md:grid-cols-[2fr_1fr] md:items-end">
+                <div class="space-y-3">
+                  <div class="flex items-center justify-between text-xs text-slate-400">
+                    <label class="text-sm font-medium text-slate-200" for="password">控制台密码</label>
+                    <span class="rounded-full bg-slate-800/70 px-2 py-1 text-[11px] font-semibold text-slate-300 ring-1 ring-slate-700">快速解锁</span>
+                  </div>
+                  <input id="password" autocomplete="current-password" type="password" placeholder="请输入控制台密码"
+                    class="w-full rounded-xl border border-slate-800 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 transition focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+                  <p class="text-xs text-slate-500">支持回车快捷键，登录状态会实时提示。</p>
+                </div>
+                <div class="relative flex justify-center md:justify-end">
+                  <button id="login-btn" type="submit" class="w-full rounded-xl bg-gradient-to-r from-sky-500 via-cyan-400 to-emerald-400 px-5 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-500/20 transition hover:scale-[1.01] hover:shadow-xl">
+                    <span class="inline-flex items-center justify-center gap-2">
+                      <span class="h-2 w-2 rounded-full bg-white/80 shadow-[0_0_12px_rgba(255,255,255,0.8)]"></span>
+                      解锁
+                    </span>
+                  </button>
+                </div>
               </div>
-            </div>
+            </form>
           </div>
 
           <div id="app-card" class="hidden space-y-8">
@@ -1052,11 +1117,16 @@ def _login_html() -> str:
 
     <script>
     const apiFetch = (url, options = {}) => fetch(url, { credentials: 'include', ...options });
+    const loginForm = document.getElementById('login-form');
     const loginCard = document.getElementById('login-card');
     const appCard = document.getElementById('app-card');
     const loginAlert = document.getElementById('login-alert');
     const loginButton = document.getElementById('login-btn');
     const passwordInput = document.getElementById('password');
+    const loginStatus = document.getElementById('login-status');
+    const loginStatusDot = document.getElementById('login-status-dot');
+    const loginStatusLabel = document.getElementById('login-status-label');
+    const loginHint = document.getElementById('login-hint');
     const authHint = document.getElementById('auth-hint');
     const configAlert = document.getElementById('config-alert');
     const importConfigsBtn = document.getElementById('import-configs');
@@ -1154,6 +1224,52 @@ def _login_html() -> str:
     function hide(el) { el.classList.add('hidden'); }
     function setAlert(el, message) { el.textContent = message; show(el); }
     function clearAlert(el) { el.textContent = ''; hide(el); }
+
+    function setLoginState(state, message) {
+      if (!loginStatus) return;
+
+      const presets = {
+        idle: {
+          text: '等待解锁',
+          dot: 'bg-amber-400 animate-pulse',
+          className: 'bg-slate-800/70 text-slate-200 ring-slate-700',
+          hint: '输入共享密码以进入运维面板。',
+        },
+        unlocking: {
+          text: '正在解锁...',
+          dot: 'bg-sky-300 animate-pulse',
+          className: 'bg-sky-900/60 text-sky-100 ring-sky-500/60',
+          hint: '正在验证密码，请稍候。',
+        },
+        unlocked: {
+          text: '已解锁',
+          dot: 'bg-emerald-400',
+          className: 'bg-emerald-900/60 text-emerald-100 ring-emerald-500/50',
+          hint: '已通过认证，可管理节点与测速任务。',
+        },
+        error: {
+          text: '验证失败',
+          dot: 'bg-rose-400',
+          className: 'bg-rose-900/50 text-rose-100 ring-rose-500/50',
+          hint: '验证未通过，请重新输入。',
+        },
+      };
+
+      const next = presets[state] || presets.idle;
+      loginStatus.className = `inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-medium ring-1 shadow-inner shadow-black/40 ${next.className}`;
+      if (loginStatusDot) {
+        loginStatusDot.className = `h-2 w-2 rounded-full ${next.dot}`;
+      }
+      if (loginStatusLabel) {
+        loginStatusLabel.textContent = message || next.text;
+      }
+      if (loginHint) {
+        loginHint.textContent = message || next.hint;
+      }
+    }
+
+    passwordInput?.focus();
+    setLoginState('idle');
 
     function toggleProtocolOptions() {
       const proto = (protocolSelect?.value || 'tcp').toLowerCase();
@@ -1513,35 +1629,47 @@ def _login_html() -> str:
     }
 
     async function checkAuth() {
-      const res = await apiFetch('/auth/status');
-      const data = await res.json();
-      if (data.authenticated) {
-        loginCard.classList.add('hidden');
-        appCard.classList.remove('hidden');
-        authHint.textContent = '已通过认证，可管理节点与测速任务。';
-        await refreshNodes();
-        await refreshTests();
-        return true;
-      } else {
+      try {
+        const res = await apiFetch('/auth/status');
+        const data = await res.json();
+        if (data.authenticated) {
+          loginCard.classList.add('hidden');
+          appCard.classList.remove('hidden');
+          setLoginState('unlocked');
+          authHint.textContent = '已通过认证，可管理节点与测速任务。';
+          await refreshNodes();
+          await refreshTests();
+          return true;
+        } else {
+          appCard.classList.add('hidden');
+          loginCard.classList.remove('hidden');
+          setLoginState('idle');
+          return false;
+        }
+      } catch (err) {
+        console.error('Auth check failed:', err);
         appCard.classList.add('hidden');
         loginCard.classList.remove('hidden');
+        setLoginState('error', '无法连接认证服务，请稍后重试。');
         return false;
       }
     }
 
     async function login() {
       clearAlert(loginAlert);
+      setLoginState('unlocking');
       const password = (passwordInput?.value || '').trim();
       if (!password) {
         setAlert(loginAlert, '请输入控制台密码。');
+        setLoginState('idle');
         passwordInput?.focus();
         return;
       }
 
-      const originalText = loginButton?.textContent;
+      const originalContent = loginButton?.innerHTML;
       if (loginButton) {
         loginButton.disabled = true;
-        loginButton.textContent = '解锁中...';
+        loginButton.innerHTML = '<span class="inline-flex items-center justify-center gap-2"><span class="h-2 w-2 rounded-full bg-sky-200 animate-ping"></span>解锁中...</span>';
         loginButton.classList.add('cursor-not-allowed', 'opacity-80');
       }
       try {
@@ -1569,20 +1697,23 @@ def _login_html() -> str:
             } catch (_) {}
           }
           setAlert(loginAlert, message);
+          setLoginState('error', message);
           return;
         }
 
         const authed = await checkAuth();
         if (!authed) {
           setAlert(loginAlert, '登录状态无法建立，请检查浏览器是否允许保存 Cookie。');
+          setLoginState('error', '未能建立登录状态。');
         }
       } catch (err) {
         console.error('Login failed:', err);
         setAlert(loginAlert, '无法连接到服务，请稍后再试。');
+        setLoginState('error', '无法连接到服务。');
       } finally {
         if (loginButton) {
           loginButton.disabled = false;
-          loginButton.textContent = originalText || '解锁';
+          loginButton.innerHTML = originalContent || '<span class="inline-flex items-center justify-center gap-2"><span class="h-2 w-2 rounded-full bg-white/80 shadow-[0_0_12px_rgba(255,255,255,0.8)]"></span>解锁</span>';
           loginButton.classList.remove('cursor-not-allowed', 'opacity-80');
         }
       }
@@ -2785,7 +2916,8 @@ def _login_html() -> str:
       return block;
     }
 
-    loginButton?.addEventListener('click', login);
+    loginButton?.addEventListener('click', (event) => { event.preventDefault(); login(); });
+    loginForm?.addEventListener('submit', (event) => { event.preventDefault(); login(); });
     document.getElementById('logout-btn').addEventListener('click', logout);
     document.getElementById('run-test').addEventListener('click', runTest);
     document.getElementById('run-suite-test').addEventListener('click', runSuiteTest);
