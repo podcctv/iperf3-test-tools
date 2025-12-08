@@ -1904,6 +1904,14 @@ def _login_html() -> str:
             if (lossValue !== undefined && lossValue !== null) {
               badgeRow.appendChild(createMiniStat('丢包', formatMetric(lossValue, 2), '%', 'text-rose-200', entry.metrics?.lossStats));
             }
+            const jitterValue = entry.metrics?.jitterStats?.avg ?? entry.metrics?.jitterMs;
+            if (jitterValue !== undefined && jitterValue !== null) {
+              badgeRow.appendChild(createMiniStat('抖动', formatMetric(jitterValue, 2), 'ms', 'text-amber-200'));
+            }
+            const lossValue = entry.metrics?.lossStats?.avg ?? entry.metrics?.lostPercent;
+            if (lossValue !== undefined && lossValue !== null) {
+              badgeRow.appendChild(createMiniStat('丢包', formatMetric(lossValue, 2), '%', 'text-rose-200'));
+            }
             const retransValue = entry.metrics?.retransStats?.avg;
             if (retransValue !== undefined && retransValue !== null) {
               badgeRow.appendChild(createMiniStat('重传', formatMetric(retransValue, 0), '次', 'text-indigo-200', entry.metrics?.retransStats));
@@ -1979,18 +1987,14 @@ def _login_html() -> str:
         const quickStats = document.createElement('div');
         quickStats.className = 'flex flex-wrap items-center gap-2 text-xs';
         if (latencyValue !== undefined && latencyValue !== null) {
-          quickStats.appendChild(createMiniStat('RTT', formatMetric(latencyValue, 2), 'ms', 'text-sky-200', metrics.latencyStats));
+          quickStats.appendChild(createMiniStat('RTT', formatMetric(latencyValue, 2), 'ms'));
         }
         if (jitterValue !== undefined && jitterValue !== null) {
-          quickStats.appendChild(createMiniStat('抖动', formatMetric(jitterValue, 2), 'ms', 'text-amber-200', metrics.jitterStats));
+          quickStats.appendChild(createMiniStat('抖动', formatMetric(jitterValue, 2), 'ms', 'text-amber-200'));
         }
         const lossValue = metrics.lossStats?.avg ?? metrics.lostPercent;
         if (lossValue !== undefined && lossValue !== null) {
-          quickStats.appendChild(createMiniStat('丢包', formatMetric(lossValue, 2), '%', 'text-rose-200', metrics.lossStats));
-        }
-        const retransValue = metrics.retransStats?.avg;
-        if (retransValue !== undefined && retransValue !== null) {
-          quickStats.appendChild(createMiniStat('重传', formatMetric(retransValue, 2), '次', 'text-indigo-200', metrics.retransStats));
+          quickStats.appendChild(createMiniStat('丢包', formatMetric(lossValue, 2), '%', 'text-rose-200'));
         }
         if (quickStats.childNodes.length) {
           card.appendChild(quickStats);
