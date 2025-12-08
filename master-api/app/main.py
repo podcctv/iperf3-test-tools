@@ -1051,6 +1051,7 @@ def _login_html() -> str:
   </div>
 
     <script>
+    const apiFetch = (url, options = {}) => fetch(url, { credentials: 'include', ...options });
     const loginCard = document.getElementById('login-card');
     const appCard = document.getElementById('app-card');
     const loginAlert = document.getElementById('login-alert');
@@ -1328,7 +1329,7 @@ def _login_html() -> str:
       }
 
       try {
-        const res = await fetch(`/geo?ip=${encodeURIComponent(node.ip)}`);
+        const res = await apiFetch(`/geo?ip=${encodeURIComponent(node.ip)}`);
         if (!res.ok) {
           throw new Error('geo lookup failed');
         }
@@ -1434,7 +1435,7 @@ def _login_html() -> str:
 
     async function exportAgentConfigs() {
       clearAlert(configAlert);
-      const res = await fetch('/agent-configs/export');
+      const res = await apiFetch('/agent-configs/export');
       if (!res.ok) {
         setAlert(configAlert, '导出配置失败。');
         return;
@@ -1463,7 +1464,7 @@ def _login_html() -> str:
         return;
       }
 
-      const res = await fetch('/agent-configs/import', {
+      const res = await apiFetch('/agent-configs/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -1496,7 +1497,7 @@ def _login_html() -> str:
       const confirmDelete = confirm('确定删除该节点并清理相关测试记录吗？');
       if (!confirmDelete) return;
 
-      const res = await fetch(`/nodes/${nodeId}`, { method: 'DELETE' });
+      const res = await apiFetch(`/nodes/${nodeId}`, { method: 'DELETE' });
       if (!res.ok) {
         setAlert(addNodeAlert, '删除节点失败。');
         return;
@@ -1512,7 +1513,7 @@ def _login_html() -> str:
     }
 
     async function checkAuth() {
-      const res = await fetch('/auth/status');
+      const res = await apiFetch('/auth/status');
       const data = await res.json();
       if (data.authenticated) {
         loginCard.classList.add('hidden');
@@ -1542,7 +1543,7 @@ def _login_html() -> str:
         loginButton.classList.add('cursor-not-allowed', 'opacity-80');
       }
       try {
-        const res = await fetch('/auth/login', {
+        const res = await apiFetch('/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ password })
@@ -1570,7 +1571,7 @@ def _login_html() -> str:
     }
 
     async function logout() {
-      await fetch('/auth/logout', { method: 'POST' });
+      await apiFetch('/auth/logout', { method: 'POST' });
       await checkAuth();
     }
 
@@ -1598,7 +1599,7 @@ def _login_html() -> str:
         return;
       }
 
-      const res = await fetch('/auth/change', {
+      const res = await apiFetch('/auth/change', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -1649,7 +1650,7 @@ def _login_html() -> str:
         const previousDst = Number(dstSelect.value) || null;
         const previousSuiteSrc = Number(suiteSrcSelect?.value) || null;
         const previousSuiteDst = Number(suiteDstSelect?.value) || null;
-        const res = await fetch('/nodes/status');
+        const res = await apiFetch('/nodes/status');
         const nodes = await res.json();
         nodeCache = nodes;
         nodesList.innerHTML = '';
@@ -1807,7 +1808,7 @@ def _login_html() -> str:
         updateNodeStreamingBadges(nodeId);
         streamingProgressLabel.textContent = `${targetNode.name} 测试中`;
         try {
-          const res = await fetch(`/nodes/${nodeId}/streaming-test`, { method: 'POST' });
+          const res = await apiFetch(`/nodes/${nodeId}/streaming-test`, { method: 'POST' });
           if (!res.ok) {
             streamingStatusCache[nodeId] = streamingStatusCache[nodeId] || {};
             streamingStatusCache[nodeId].error = true;
@@ -1860,7 +1861,7 @@ def _login_html() -> str:
     }
 
     async function saveNodeInline(nodeId, payload) {
-      const res = await fetch(`/nodes/${nodeId}`, {
+      const res = await apiFetch(`/nodes/${nodeId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -1873,7 +1874,7 @@ def _login_html() -> str:
     }
 
     async function refreshTests() {
-      const res = await fetch('/tests');
+      const res = await apiFetch('/tests');
       const tests = await res.json();
       if (!tests.length) {
         testsList.textContent = '暂无测试记录。';
@@ -2140,7 +2141,7 @@ def _login_html() -> str:
 
     async function deleteTestResult(testId) {
       clearAlert(testAlert);
-      const res = await fetch(`/tests/${testId}`, { method: 'DELETE' });
+      const res = await apiFetch(`/tests/${testId}`, { method: 'DELETE' });
       if (!res.ok) {
         setAlert(testAlert, '删除记录失败。');
         return;
@@ -2150,7 +2151,7 @@ def _login_html() -> str:
 
     async function clearAllTests() {
       clearAlert(testAlert);
-      const res = await fetch('/tests', { method: 'DELETE' });
+      const res = await apiFetch('/tests', { method: 'DELETE' });
       if (!res.ok) {
         setAlert(testAlert, '清空失败。');
         return;
@@ -2171,7 +2172,7 @@ def _login_html() -> str:
       const method = editingNodeId ? 'PUT' : 'POST';
       const url = editingNodeId ? `/nodes/${editingNodeId}` : '/nodes';
 
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -2223,7 +2224,7 @@ def _login_html() -> str:
         '开始链路测试...'
       );
 
-      const res = await fetch('/tests', {
+      const res = await apiFetch('/tests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -2273,7 +2274,7 @@ def _login_html() -> str:
         '准备执行 4 轮双向测试...'
       );
 
-      const res = await fetch('/tests/suite', {
+      const res = await apiFetch('/tests/suite', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -2977,6 +2978,7 @@ def _schedule_html() -> str:
   </div>
 
     <script>
+    const apiFetch = (url, options = {}) => fetch(url, { credentials: 'include', ...options });
     const scheduleAlert = document.getElementById('schedule-alert');
     const schedulesList = document.getElementById('schedules-list');
     const scheduleSrcSelect = document.getElementById('schedule-src');
@@ -3006,12 +3008,12 @@ def _schedule_html() -> str:
     function clearAlert(el) { el.textContent = ''; el.classList.add('hidden'); }
 
     async function logout() {
-      await fetch('/auth/logout', { method: 'POST' });
+      await apiFetch('/auth/logout', { method: 'POST' });
       window.location.href = '/web';
     }
 
     async function checkAuth() {
-      const res = await fetch('/auth/status');
+      const res = await apiFetch('/auth/status');
       const data = await res.json();
       if (!data.authenticated) {
         window.location.href = '/web';
@@ -3019,7 +3021,7 @@ def _schedule_html() -> str:
     }
 
     async function refreshNodes() {
-      const res = await fetch('/nodes/status');
+      const res = await apiFetch('/nodes/status');
       const nodes = await res.json();
       nodeCache = nodes;
       scheduleSrcSelect.innerHTML = '';
@@ -3035,7 +3037,7 @@ def _schedule_html() -> str:
     }
 
     async function refreshSchedules() {
-      const res = await fetch('/schedules');
+      const res = await apiFetch('/schedules');
       const schedules = await res.json();
       if (!schedules.length) {
         schedulesList.textContent = '暂无计划。';
@@ -3075,7 +3077,7 @@ def _schedule_html() -> str:
         notes: scheduleNotes.value
       };
 
-      const res = await fetch('/schedules', {
+      const res = await apiFetch('/schedules', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -3093,7 +3095,7 @@ def _schedule_html() -> str:
     }
 
     async function deleteSchedule(scheduleId) {
-      const res = await fetch(`/schedules/${scheduleId}`, { method: 'DELETE' });
+      const res = await apiFetch(`/schedules/${scheduleId}`, { method: 'DELETE' });
       if (!res.ok) {
         setAlert(scheduleAlert, '删除计划失败。');
         return;
