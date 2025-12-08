@@ -515,10 +515,27 @@ _ensure_dashboard_password_file()
 def _log_dashboard_password() -> None:
     """Log the current dashboard password for initial setup visibility."""
 
-    logger.warning("Dashboard password initialized: %s", _current_dashboard_password())
+logger.warning("Dashboard password initialized: %s", _current_dashboard_password())
 
 
 _log_dashboard_password()
+
+
+FAVICON_SVG = """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none'>
+<rect width='64' height='64' rx='14' fill='url(#g)'/>
+<path d='M16 42c9-2 12-4 16-10 4 6 7 8 16 10-6 4-10 6-16 14-6-8-10-10-16-14Z' fill='#e2e8f0' fill-opacity='.9'/>
+<circle cx='32' cy='22' r='8' stroke='#e2e8f0' stroke-width='4' stroke-linecap='round'/>
+<defs><linearGradient id='g' x1='8' y1='8' x2='56' y2='56' gradientUnits='userSpaceOnUse'><stop stop-color='#0ea5e9'/><stop offset='1' stop-color='#22c55e'/></linearGradient></defs>
+</svg>"""
+
+
+@app.get("/favicon.ico")
+def favicon() -> Response:
+    return Response(
+        content=FAVICON_SVG,
+        media_type="image/svg+xml",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 
 def _is_authenticated(request: Request) -> bool:
