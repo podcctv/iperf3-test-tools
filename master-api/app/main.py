@@ -37,6 +37,7 @@ from .schemas import (
     TestScheduleUpdate,
     TestCreate,
     TestRead,
+    DualSuiteTestCreate,
     BackboneLatency,
     StreamingServiceStatus,
     StreamingTestResult,
@@ -829,6 +830,30 @@ def _login_html() -> str:
                     <label class="text-sm font-medium text-slate-200">端口</label>
                     <input id="test-port" type="number" value="62001" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
                   </div>
+                  <div class="space-y-2">
+                    <label class="text-sm font-medium text-slate-200">忽略前（秒）</label>
+                    <input id="omit" type="number" value="0" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+                  </div>
+                </div>
+                <div id="tcp-options" class="grid gap-3 sm:grid-cols-2">
+                  <div class="space-y-2">
+                    <label class="text-sm font-medium text-slate-200">TCP 限速带宽 (-b，可选)</label>
+                    <input id="tcp-bandwidth" type="text" placeholder="例如 0（不限）或 500M" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+                  </div>
+                </div>
+                <div id="udp-options" class="hidden grid gap-3 sm:grid-cols-3">
+                  <div class="space-y-2">
+                    <label class="text-sm font-medium text-slate-200">UDP 带宽 (-b)</label>
+                    <input id="udp-bandwidth" type="text" value="100M" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+                  </div>
+                  <div class="space-y-2">
+                    <label class="text-sm font-medium text-slate-200">UDP 包长 (-l)</label>
+                    <input id="udp-len" type="number" value="1400" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+                  </div>
+                  <div class="space-y-2">
+                    <label class="text-sm font-medium text-slate-200">UDP 备注</label>
+                    <p class="rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-2 text-xs text-slate-400">默认 100M/1400B，可根据链路容量调整。</p>
+                  </div>
                 </div>
                 <div class="flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/50 px-3 py-2">
                   <label for="reverse" class="flex items-center gap-2 text-sm font-medium text-slate-200">
@@ -847,6 +872,55 @@ def _login_html() -> str:
                     <div id="test-progress-bar" class="h-2 w-0 rounded-full bg-gradient-to-r from-sky-500 to-indigo-500 transition-all duration-300"></div>
                   </div>
                 </div>
+              </div>
+
+              <div class="panel-card rounded-2xl p-5 space-y-4">
+                <div class="flex items-center justify-between gap-2">
+                  <h3 class="text-lg font-semibold text-white">双向 TCP/UDP 套件</h3>
+                  <span class="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-100 ring-1 ring-emerald-400/40">一次跑完 4 次</span>
+                </div>
+                <p class="text-sm text-slate-400">一键完成 TCP / UDP 去回四项测试，适合基线验证与跨运营商链路对比。</p>
+                <div class="grid gap-3 sm:grid-cols-2">
+                  <div class="space-y-2">
+                    <label class="text-sm font-medium text-slate-200">源节点</label>
+                    <select id="suite-src-select" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60"></select>
+                  </div>
+                  <div class="space-y-2">
+                    <label class="text-sm font-medium text-slate-200">目标节点</label>
+                    <select id="suite-dst-select" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60"></select>
+                  </div>
+                  <div class="space-y-2">
+                    <label class="text-sm font-medium text-slate-200">时长（秒）</label>
+                    <input id="suite-duration" type="number" value="10" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+                  </div>
+                  <div class="space-y-2">
+                    <label class="text-sm font-medium text-slate-200">并行数 (P)</label>
+                    <input id="suite-parallel" type="number" value="1" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+                  </div>
+                  <div class="space-y-2">
+                    <label class="text-sm font-medium text-slate-200">端口</label>
+                    <input id="suite-port" type="number" value="62001" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+                  </div>
+                  <div class="space-y-2">
+                    <label class="text-sm font-medium text-slate-200">忽略前（秒）</label>
+                    <input id="suite-omit" type="number" value="0" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+                  </div>
+                </div>
+                <div class="grid gap-3 sm:grid-cols-3">
+                  <div class="space-y-2">
+                    <label class="text-sm font-medium text-slate-200">TCP 限速 (-b，可选)</label>
+                    <input id="suite-tcp-bandwidth" type="text" placeholder="例如 0 或 500M" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+                  </div>
+                  <div class="space-y-2">
+                    <label class="text-sm font-medium text-slate-200">UDP 带宽 (-b)</label>
+                    <input id="suite-udp-bandwidth" type="text" value="100M" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+                  </div>
+                  <div class="space-y-2">
+                    <label class="text-sm font-medium text-slate-200">UDP 包长 (-l)</label>
+                    <input id="suite-udp-len" type="number" value="1400" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+                  </div>
+                </div>
+                <button id="run-suite-test" class="w-full rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-500/20 transition hover:scale-[1.01] hover:shadow-xl">启动双向套件</button>
               </div>
 
               <div class="panel-card rounded-2xl p-5 space-y-4">
@@ -945,6 +1019,22 @@ def _login_html() -> str:
     const testProgressBar = document.getElementById('test-progress-bar');
     const testProgressLabel = document.getElementById('test-progress-label');
     const reverseToggle = document.getElementById('reverse');
+    const omitInput = document.getElementById('omit');
+    const protocolSelect = document.getElementById('protocol');
+    const tcpBandwidthInput = document.getElementById('tcp-bandwidth');
+    const udpBandwidthInput = document.getElementById('udp-bandwidth');
+    const udpLenInput = document.getElementById('udp-len');
+    const tcpOptions = document.getElementById('tcp-options');
+    const udpOptions = document.getElementById('udp-options');
+    const suiteSrcSelect = document.getElementById('suite-src-select');
+    const suiteDstSelect = document.getElementById('suite-dst-select');
+    const suiteDuration = document.getElementById('suite-duration');
+    const suiteParallel = document.getElementById('suite-parallel');
+    const suitePort = document.getElementById('suite-port');
+    const suiteOmit = document.getElementById('suite-omit');
+    const suiteTcpBandwidth = document.getElementById('suite-tcp-bandwidth');
+    const suiteUdpBandwidth = document.getElementById('suite-udp-bandwidth');
+    const suiteUdpLen = document.getElementById('suite-udp-len');
     const addNodeModal = document.getElementById('add-node-modal');
     const addNodeTitle = document.getElementById('add-node-title');
     const closeAddNodeBtn = document.getElementById('close-add-node');
@@ -989,6 +1079,17 @@ def _login_html() -> str:
     function hide(el) { el.classList.add('hidden'); }
     function setAlert(el, message) { el.textContent = message; show(el); }
     function clearAlert(el) { el.textContent = ''; hide(el); }
+
+    function toggleProtocolOptions() {
+      const proto = (protocolSelect?.value || 'tcp').toLowerCase();
+      if (proto === 'udp') {
+        udpOptions?.classList.remove('hidden');
+        tcpOptions?.classList.add('hidden');
+      } else {
+        tcpOptions?.classList.remove('hidden');
+        udpOptions?.classList.add('hidden');
+      }
+    }
 
     function toggleAddNodeModal(isOpen) {
       if (!addNodeModal) return;
@@ -1194,7 +1295,7 @@ def _login_html() -> str:
       return streamingServices
         .map((svc) => {
           const status = cache[svc.key];
-          const unlocked = status ? status.unlocked : null;
+          const unlocked = status ? (status.unlocked ?? (status.tier === 'full')) : null;
           const tier = status?.tier;
           const detail = status && status.detail ? status.detail.replace(/"/g, "'") : '';
           const region = status?.region;
@@ -1220,7 +1321,8 @@ def _login_html() -> str:
             }
           }
 
-          const regionTag = region ? `<span class=\"rounded-sm px-1 text-[10px] font-bold ${svc.color}\">[${region}]</span>` : '';
+          const regionColor = unlocked === true ? svc.color : mutedStyle;
+          const regionTag = region ? `<span class=\"rounded-sm px-1 text-[10px] font-bold ${regionColor}\">[${region}]</span>` : '';
           const tagBadges = tags
             .filter(Boolean)
             .map((tag) => `<span class=\"rounded-sm bg-slate-800/60 px-1 text-[10px]\">[${tag}]</span>`)
@@ -1405,18 +1507,30 @@ def _login_html() -> str:
       }
     }
 
+    function syncSuitePort() {
+      const dst = nodeCache.find((n) => n.id === Number(suiteDstSelect?.value));
+      if (dst && suitePort) {
+        const detected = dst.detected_iperf_port || dst.iperf_port;
+        suitePort.value = detected || DEFAULT_IPERF_PORT;
+      }
+    }
+
     async function refreshNodes() {
       if (isRefreshingNodes) return;
       isRefreshingNodes = true;
       try {
         const previousSrc = Number(srcSelect.value) || null;
         const previousDst = Number(dstSelect.value) || null;
+        const previousSuiteSrc = Number(suiteSrcSelect?.value) || null;
+        const previousSuiteDst = Number(suiteDstSelect?.value) || null;
         const res = await fetch('/nodes/status');
         const nodes = await res.json();
         nodeCache = nodes;
         nodesList.innerHTML = '';
         srcSelect.innerHTML = '';
         dstSelect.innerHTML = '';
+        if (suiteSrcSelect) suiteSrcSelect.innerHTML = '';
+        if (suiteDstSelect) suiteDstSelect.innerHTML = '';
 
         if (!nodes.length) {
           nodesList.textContent = '暂无节点。';
@@ -1504,6 +1618,13 @@ def _login_html() -> str:
 
         const optionB = optionA.cloneNode(true);
         dstSelect.appendChild(optionB);
+
+        if (suiteSrcSelect && suiteDstSelect) {
+          const suiteOptionA = optionA.cloneNode(true);
+          const suiteOptionB = optionA.cloneNode(true);
+          suiteSrcSelect.appendChild(suiteOptionA);
+          suiteDstSelect.appendChild(suiteOptionB);
+        }
       });
 
       const firstNodeId = nodes[0]?.id;
@@ -1519,7 +1640,24 @@ def _login_html() -> str:
         dstSelect.value = String(firstNodeId);
       }
 
+      if (suiteSrcSelect) {
+        if (previousSuiteSrc && nodes.some((n) => n.id === previousSuiteSrc)) {
+          suiteSrcSelect.value = String(previousSuiteSrc);
+        } else if (firstNodeId) {
+          suiteSrcSelect.value = String(firstNodeId);
+        }
+      }
+
+      if (suiteDstSelect) {
+        if (previousSuiteDst && nodes.some((n) => n.id === previousSuiteDst)) {
+          suiteDstSelect.value = String(previousSuiteDst);
+        } else if (firstNodeId) {
+          suiteDstSelect.value = String(firstNodeId);
+        }
+      }
+
       syncTestPort();
+      syncSuitePort();
       } finally {
         isRefreshingNodes = false;
       }
@@ -1620,6 +1758,10 @@ def _login_html() -> str:
       const detailBlocks = new Map();
       const enrichedTests = tests.slice().reverse().map((test) => {
         const metrics = summarizeTestMetrics(test.raw_result || {});
+        if (metrics?.isSuite) {
+          const suiteEntries = normalizeSuiteEntries(test);
+          return { test, metrics, suiteEntries };
+        }
         const rateSummary = summarizeRateTable(test.raw_result || {});
         const latencyValue = metrics.latencyMs !== undefined && metrics.latencyMs !== null ? metrics.latencyMs : null;
         const jitterValue = metrics.jitterMs !== undefined && metrics.jitterMs !== null ? metrics.jitterMs : null;
@@ -1628,7 +1770,9 @@ def _login_html() -> str:
 
       const maxRate = Math.max(
         1,
-        ...enrichedTests.map(({ rateSummary }) => Math.max(rateSummary.receiverRateValue || 0, rateSummary.senderRateValue || 0))
+        ...enrichedTests
+          .filter((item) => !item.metrics?.isSuite)
+          .map(({ rateSummary }) => Math.max(rateSummary.receiverRateValue || 0, rateSummary.senderRateValue || 0))
       );
 
       const makeChip = (label) => {
@@ -1674,8 +1818,87 @@ def _login_html() -> str:
         }
       };
 
-      enrichedTests.forEach(({ test, metrics, rateSummary, latencyValue, jitterValue }) => {
+      enrichedTests.forEach(({ test, metrics, rateSummary, latencyValue, jitterValue, suiteEntries }) => {
         const pathLabel = `${formatNodeLabel(test.src_node_id)} → ${formatNodeLabel(test.dst_node_id)}`;
+
+        if (metrics?.isSuite) {
+          const card = document.createElement('div');
+          card.className = 'space-y-3 rounded-2xl border border-slate-800/70 bg-slate-900/60 p-4 shadow-sm shadow-black/30';
+
+          const header = document.createElement('div');
+          header.className = 'flex flex-wrap items-center justify-between gap-2';
+          const title = document.createElement('div');
+          title.innerHTML = `<p class="text-xs uppercase tracking-[0.2em] text-emerald-300/70">#${test.id} · TCP/UDP 双向套件</p>` +
+            `<p class="text-lg font-semibold text-white">${pathLabel}</p>`;
+          header.appendChild(title);
+
+          const hasError = suiteEntries.some((entry) => entry.rateSummary?.status && entry.rateSummary.status !== 'ok');
+          const statusPill = document.createElement('span');
+          statusPill.className = 'inline-flex items-center gap-2 rounded-full bg-slate-800/70 px-3 py-1 text-xs font-semibold text-slate-200 ring-1 ring-slate-700';
+          statusPill.textContent = hasError ? '部分异常' : '完成';
+          header.appendChild(statusPill);
+          card.appendChild(header);
+
+          const suiteGrid = document.createElement('div');
+          suiteGrid.className = 'grid gap-3 md:grid-cols-2';
+          suiteEntries.forEach((entry) => {
+            const tile = document.createElement('div');
+            tile.className = 'space-y-2 rounded-xl border border-slate-800/60 bg-slate-950/40 p-3';
+            const heading = document.createElement('div');
+            heading.className = 'flex items-center justify-between text-sm text-slate-200';
+            heading.innerHTML = `<span class="font-semibold">${entry.label}</span><span class="text-[11px] uppercase text-slate-400">${entry.protocol.toUpperCase()}${entry.reverse ? ' (-R)' : ''}</span>`;
+            tile.appendChild(heading);
+
+            const rates = document.createElement('div');
+            rates.className = 'grid grid-cols-2 gap-2 text-xs text-slate-400';
+            rates.innerHTML = `
+              <div class="rounded-lg border border-slate-800/60 bg-slate-900/60 p-2">
+                <div class="flex items-center justify-between"><span>接收</span><span class="font-semibold text-emerald-200">${entry.rateSummary.receiverRateMbps}</span></div>
+              </div>
+              <div class="rounded-lg border border-slate-800/60 bg-slate-900/60 p-2">
+                <div class="flex items-center justify-between"><span>发送</span><span class="font-semibold text-amber-200">${entry.rateSummary.senderRateMbps}</span></div>
+              </div>`;
+            tile.appendChild(rates);
+
+            const chips = document.createElement('div');
+            chips.className = 'flex flex-wrap items-center gap-2 text-[11px] text-slate-300';
+            const latencyLabel = entry.metrics.latencyMs !== undefined && entry.metrics.latencyMs !== null ? `${formatMetric(entry.metrics.latencyMs)} ms` : 'N/A';
+            const jitterLabel = entry.metrics.jitterMs !== undefined && entry.metrics.jitterMs !== null ? `${formatMetric(entry.metrics.jitterMs)} ms` : 'N/A';
+            const lossLabel = entry.metrics.lostPercent !== undefined && entry.metrics.lostPercent !== null ? `${formatMetric(entry.metrics.lostPercent)}%` : 'N/A';
+            chips.innerHTML = `
+              <span class="rounded-full bg-slate-800/70 px-2 py-1">延迟 ${latencyLabel}</span>
+              <span class="rounded-full bg-slate-800/70 px-2 py-1">抖动 ${jitterLabel}</span>
+              <span class="rounded-full bg-slate-800/70 px-2 py-1">丢包 ${lossLabel}</span>
+            `;
+            tile.appendChild(chips);
+            suiteGrid.appendChild(tile);
+          });
+          card.appendChild(suiteGrid);
+
+          const actions = document.createElement('div');
+          actions.className = 'flex flex-wrap items-center justify-between gap-3';
+          const buttons = document.createElement('div');
+          buttons.className = 'flex flex-wrap gap-2';
+          const detailsBtn = document.createElement('button');
+          detailsBtn.textContent = '详情';
+          detailsBtn.className = styles.pillInfo;
+          detailsBtn.onclick = () => toggleDetail(test.id, detailsBtn);
+          const deleteBtn = document.createElement('button');
+          deleteBtn.textContent = '删除';
+          deleteBtn.className = styles.pillDanger;
+          deleteBtn.onclick = () => deleteTestResult(test.id);
+          buttons.appendChild(detailsBtn);
+          buttons.appendChild(deleteBtn);
+          actions.appendChild(buttons);
+          card.appendChild(actions);
+
+          const block = buildSuiteDetailsBlock(test, suiteEntries, pathLabel);
+          detailBlocks.set(test.id, block);
+          testsList.appendChild(card);
+          testsList.appendChild(block);
+          return;
+        }
+
         const typeLabel = `${test.protocol.toUpperCase()}${test.params?.reverse ? ' (-R)' : ''}`;
 
         const card = document.createElement('div');
@@ -1800,12 +2023,25 @@ def _login_html() -> str:
       const payload = {
         src_node_id: Number(srcSelect.value),
         dst_node_id: Number(dstSelect.value),
-        protocol: document.getElementById('protocol').value,
+        protocol: protocolSelect.value,
         duration: Number(document.getElementById('duration').value),
         parallel: Number(document.getElementById('parallel').value),
         port: Number(testPortInput.value || (selectedDst ? (selectedDst.detected_iperf_port || selectedDst.iperf_port) : DEFAULT_IPERF_PORT)),
         reverse: reverseToggle?.checked || false,
       };
+
+      const omitValue = Number(omitInput.value || 0);
+      if (omitValue > 0) payload.omit = omitValue;
+
+      if (payload.protocol === 'tcp') {
+        const tcpBw = tcpBandwidthInput.value.trim();
+        if (tcpBw) payload.bandwidth = tcpBw;
+      } else {
+        const udpBw = udpBandwidthInput.value.trim();
+        if (udpBw) payload.bandwidth = udpBw;
+        const udpLen = Number(udpLenInput.value || 0);
+        if (udpLen > 0) payload.datagram_size = udpLen;
+      }
 
       const finishProgress = startProgressBar(
         testProgress,
@@ -1834,7 +2070,57 @@ def _login_html() -> str:
       clearAlert(testAlert);
     }
 
-    function summarizeTestMetrics(raw) {
+    async function runSuiteTest() {
+      clearAlert(testAlert);
+      const selectedDst = nodeCache.find((n) => n.id === Number(suiteDstSelect.value));
+
+      const payload = {
+        src_node_id: Number(suiteSrcSelect.value),
+        dst_node_id: Number(suiteDstSelect.value),
+        duration: Number(suiteDuration.value || 10),
+        parallel: Number(suiteParallel.value || 1),
+        port: Number(suitePort.value || (selectedDst ? (selectedDst.detected_iperf_port || selectedDst.iperf_port) : DEFAULT_IPERF_PORT)),
+      };
+
+      const omitValue = Number(suiteOmit.value || 0);
+      if (omitValue > 0) payload.omit = omitValue;
+
+      const tcpBw = suiteTcpBandwidth.value.trim();
+      if (tcpBw) payload.tcp_bandwidth = tcpBw;
+      const udpBw = suiteUdpBandwidth.value.trim();
+      if (udpBw) payload.udp_bandwidth = udpBw;
+      const udpLen = Number(suiteUdpLen.value || 0);
+      if (udpLen > 0) payload.udp_datagram_size = udpLen;
+
+      const expectedMs = payload.duration * 4000 + 3000;
+      const finishProgress = startProgressBar(
+        testProgress,
+        testProgressBar,
+        testProgressLabel,
+        expectedMs,
+        '准备执行 4 轮双向测试...'
+      );
+
+      const res = await fetch('/tests/suite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const details = await res.text();
+        const message = details ? `启动双向套件失败：${details}` : '启动双向套件失败，请确认节点存在且参数有效。';
+        setAlert(testAlert, message);
+        finishProgress('测试失败');
+        return;
+      }
+
+      await refreshTests();
+      finishProgress('套件完成');
+      clearAlert(testAlert);
+    }
+
+    function summarizeSingleMetrics(raw) {
       const body = (raw && raw.iperf_result) || raw || {};
       const end = (body && body.end) || {};
       const sumReceived = end.sum_received || end.sum;
@@ -1883,7 +2169,25 @@ def _login_html() -> str:
       return { bitsPerSecond, jitterMs, lostPercent, latencyMs };
     }
 
-    function summarizeRateTable(raw) {
+    function summarizeTestMetrics(raw) {
+      if (raw?.mode === 'suite' && Array.isArray(raw.tests)) {
+        const entries = raw.tests.map((entry) => ({
+          label: entry.label || '子测试',
+          protocol: entry.protocol || 'tcp',
+          reverse: !!entry.reverse,
+          metrics: summarizeSingleMetrics(entry.summary || entry.raw || entry),
+          raw: entry.raw || entry,
+        }));
+        const valid = entries.map((e) => e.metrics).filter(Boolean);
+        const avgBits = valid.length
+          ? valid.reduce((sum, item) => sum + (item.bitsPerSecond || 0), 0) / valid.length
+          : null;
+        return { isSuite: true, entries, bitsPerSecond: avgBits };
+      }
+      return summarizeSingleMetrics(raw);
+    }
+
+    function summarizeSingleRateTable(raw) {
       const result = raw && raw.iperf_result ? raw.iperf_result : raw;
       const end = (result && result.end) || {};
       const sumSent = end.sum_sent || end.sum || {};
@@ -1898,6 +2202,43 @@ def _login_html() -> str:
         receiverCongestion: end.receiver_tcp_congestion || 'N/A',
         status: raw && raw.status ? raw.status : 'unknown',
       };
+    }
+
+    function summarizeRateTable(raw) {
+      if (raw?.mode === 'suite' && Array.isArray(raw.tests)) {
+        return {
+          mode: 'suite',
+          tests: raw.tests.map((entry) => ({
+            label: entry.label || '子测试',
+            protocol: entry.protocol || 'tcp',
+            reverse: !!entry.reverse,
+            summary: summarizeSingleRateTable(entry.raw || entry),
+          })),
+        };
+      }
+      return summarizeSingleRateTable(raw);
+    }
+
+    function normalizeSuiteEntries(test) {
+      const raw = test.raw_result || {};
+      const metrics = summarizeTestMetrics(raw);
+      const rateInfo = summarizeRateTable(raw);
+      const rateMap = new Map();
+      (rateInfo.tests || []).forEach((entry) => {
+        rateMap.set(entry.label, entry.summary);
+      });
+
+      return (metrics.entries || []).map((entry, idx) => {
+        const key = entry.label || `子测试 ${idx + 1}`;
+        return {
+          label: key,
+          protocol: entry.protocol,
+          reverse: entry.reverse,
+          metrics: entry.metrics,
+          rateSummary: rateMap.get(key) || summarizeSingleRateTable(entry.raw || entry),
+          raw: entry.raw,
+        };
+      });
     }
 
     function formatMetric(value, decimals = 2) {
@@ -2017,6 +2358,35 @@ def _login_html() -> str:
       return wrap;
     }
 
+    function buildSuiteDetailsBlock(test, suiteEntries, pathLabel) {
+      const block = document.createElement('div');
+      block.className = 'hidden rounded-xl border border-slate-800/60 bg-slate-900/60 p-3 shadow-inner shadow-black/20';
+      block.dataset.testId = test.id;
+
+      const header = document.createElement('div');
+      header.className = 'flex flex-col gap-2 md:flex-row md:items-center md:justify-between';
+      const summary = document.createElement('div');
+      summary.innerHTML = `<strong>#${test.id} ${pathLabel}</strong> · 双向套件 · 端口 ${test.params.port} · 时长 ${test.params.duration}s`; 
+      header.appendChild(summary);
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.textContent = '删除记录';
+      deleteBtn.className = styles.pillDanger;
+      deleteBtn.onclick = () => deleteTestResult(test.id);
+      header.appendChild(deleteBtn);
+      block.appendChild(header);
+
+      suiteEntries.forEach((entry) => {
+        const section = document.createElement('div');
+        section.className = 'mt-3 space-y-2 rounded-xl border border-slate-800/60 bg-slate-950/50 p-3';
+        section.innerHTML = `<div class="flex items-center justify-between text-sm text-slate-200"><span class="font-semibold">${entry.label}</span><span class="text-xs uppercase text-slate-400">${entry.protocol.toUpperCase()}${entry.reverse ? ' (-R)' : ''}</span></div>`;
+        section.appendChild(renderRawResult(entry.raw || {}));
+        block.appendChild(section);
+      });
+
+      return block;
+    }
+
     function buildTestDetailsBlock(test, metrics, latencyValue, pathLabel) {
       const block = document.createElement('div');
       block.className = 'hidden rounded-xl border border-slate-800/60 bg-slate-900/60 p-3 shadow-inner shadow-black/20';
@@ -2053,6 +2423,10 @@ def _login_html() -> str:
     document.getElementById('login-btn').addEventListener('click', login);
     document.getElementById('logout-btn').addEventListener('click', logout);
     document.getElementById('run-test').addEventListener('click', runTest);
+    document.getElementById('run-suite-test').addEventListener('click', runSuiteTest);
+    protocolSelect?.addEventListener('change', toggleProtocolOptions);
+    suiteDstSelect?.addEventListener('change', syncSuitePort);
+    suiteSrcSelect?.addEventListener('change', syncSuitePort);
     changePasswordBtn?.addEventListener('click', changePassword);
     saveNodeBtn.addEventListener('click', saveNode);
 
@@ -2108,6 +2482,8 @@ def _login_html() -> str:
       nodeRefreshInterval = setInterval(() => refreshNodes(), 10000);
     }
 
+    toggleProtocolOptions();
+    syncSuitePort();
     checkAuth();
     ensureAutoRefresh();
   </script>
@@ -2637,6 +3013,52 @@ async def streaming_test(node_id: int, db: Session = Depends(get_db)):
     return await _probe_streaming_unlock(node)
 
 
+async def _ensure_iperf_server_running(dst: Node, requested_port: int) -> bool:
+    dst_status = await health_monitor.check_node(dst)
+    current_port = dst_status.detected_iperf_port or dst_status.iperf_port
+    if not dst_status.server_running:
+        await _start_iperf_server(dst, requested_port)
+        return True
+    if current_port != requested_port:
+        await _stop_iperf_server(dst)
+        await _start_iperf_server(dst, requested_port)
+        return True
+    return False
+
+
+async def _call_agent_test(src: Node, payload: dict, duration: int) -> dict:
+    agent_url = f"http://{src.ip}:{src.agent_port}/run_test"
+    try:
+        async with httpx.AsyncClient(timeout=duration + settings.request_timeout) as client:
+            response = await client.post(agent_url, json=payload)
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=502, detail=f"failed to reach source agent: {exc}")
+
+    if response.status_code != 200:
+        detail = response.text
+        try:
+            parsed = response.json()
+            if isinstance(parsed, dict) and parsed.get("error"):
+                detail = parsed.get("error")
+        except Exception:
+            pass
+        raise HTTPException(status_code=502, detail=f"agent returned {response.status_code}: {detail}")
+
+    try:
+        raw_data = response.json()
+    except ValueError:
+        raise HTTPException(status_code=502, detail="agent response is not valid JSON")
+
+    if not isinstance(raw_data, dict):
+        detail = response.text[:200]
+        raise HTTPException(
+            status_code=502,
+            detail=f"agent response JSON has unexpected format: {detail}",
+        )
+
+    return raw_data
+
+
 @app.post("/tests", response_model=TestRead)
 async def create_test(test: TestCreate, db: Session = Depends(get_db)):
     src = db.get(Node, test.src_node_id)
@@ -2654,16 +3076,8 @@ async def create_test(test: TestCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=503, detail="destination node is offline or unreachable")
 
     server_started = False
-    current_port = dst_status.detected_iperf_port or dst_status.iperf_port
-    if not dst_status.server_running:
-        await _start_iperf_server(dst, requested_port)
-        server_started = True
-    elif current_port != requested_port:
-        await _stop_iperf_server(dst)
-        await _start_iperf_server(dst, requested_port)
-        server_started = True
+    server_started = await _ensure_iperf_server_running(dst, requested_port)
 
-    agent_url = f"http://{src.ip}:{src.agent_port}/run_test"
     payload = {
         "target": dst.ip,
         "port": requested_port,
@@ -2672,41 +3086,19 @@ async def create_test(test: TestCreate, db: Session = Depends(get_db)):
         "parallel": test.parallel,
         "reverse": test.reverse,
     }
+    if test.bandwidth:
+        payload["bandwidth"] = test.bandwidth
+    if test.datagram_size:
+        payload["datagram_size"] = test.datagram_size
+    if test.omit is not None:
+        payload["omit"] = test.omit
 
     try:
-        try:
-            async with httpx.AsyncClient(timeout=test.duration + settings.request_timeout) as client:
-                response = await client.post(agent_url, json=payload)
-        except httpx.RequestError as exc:
-            raise HTTPException(status_code=502, detail=f"failed to reach source agent: {exc}")
-
-        if response.status_code != 200:
-            detail = response.text
-            try:
-                parsed = response.json()
-                if isinstance(parsed, dict) and parsed.get("error"):
-                    detail = parsed.get("error")
-            except Exception:
-                pass
-            raise HTTPException(status_code=502, detail=f"agent returned {response.status_code}: {detail}")
+        raw_data = await _call_agent_test(src, payload, test.duration)
     finally:
         if server_started:
             await _stop_iperf_server(dst)
         health_monitor.invalidate(dst.id)
-
-    try:
-        raw_data = response.json()
-    except ValueError:
-        raise HTTPException(
-            status_code=502, detail="agent response is not valid JSON"
-        )
-
-    if not isinstance(raw_data, dict):
-        detail = response.text[:200]
-        raise HTTPException(
-            status_code=502,
-            detail=f"agent response JSON has unexpected format: {detail}",
-        )
 
     try:
         summary = _summarize_metrics(raw_data)
@@ -2723,6 +3115,94 @@ async def create_test(test: TestCreate, db: Session = Depends(get_db)):
         protocol=test.protocol,
         params=payload,
         raw_result=raw_data,
+        summary=summary,
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(obj)
+    db.commit()
+    db.refresh(obj)
+    _persist_state(db)
+    return obj
+
+
+@app.post("/tests/suite", response_model=TestRead)
+async def create_dual_suite(test: DualSuiteTestCreate, db: Session = Depends(get_db)):
+    src = db.get(Node, test.src_node_id)
+    dst = db.get(Node, test.dst_node_id)
+    if not src or not dst:
+        raise HTTPException(status_code=404, detail="node not found")
+
+    requested_port = test.port
+    src_status = await health_monitor.check_node(src)
+    if src_status.status != "online":
+        raise HTTPException(status_code=503, detail="source node is offline or unreachable")
+
+    dst_status = await health_monitor.check_node(dst)
+    if dst_status.status != "online":
+        raise HTTPException(status_code=503, detail="destination node is offline or unreachable")
+
+    server_started = False
+    try:
+        server_started = await _ensure_iperf_server_running(dst, requested_port)
+        plan = [
+            ("TCP 上行", "tcp", False, test.tcp_bandwidth),
+            ("TCP 下行", "tcp", True, test.tcp_bandwidth),
+            ("UDP 上行", "udp", False, test.udp_bandwidth),
+            ("UDP 下行", "udp", True, test.udp_bandwidth),
+        ]
+
+        results: list[dict] = []
+        for label, protocol, reverse, bandwidth in plan:
+            payload = {
+                "target": dst.ip,
+                "port": requested_port,
+                "duration": test.duration,
+                "protocol": protocol,
+                "parallel": test.parallel,
+                "reverse": reverse,
+            }
+            if bandwidth:
+                payload["bandwidth"] = bandwidth
+            if protocol == "udp" and test.udp_datagram_size:
+                payload["datagram_size"] = test.udp_datagram_size
+            if test.omit is not None:
+                payload["omit"] = test.omit
+
+            raw_data = await _call_agent_test(src, payload, test.duration)
+            results.append(
+                {
+                    "label": label,
+                    "protocol": protocol,
+                    "reverse": reverse,
+                    "raw": raw_data,
+                    "summary": _summarize_metrics(raw_data),
+                }
+            )
+
+    finally:
+        if server_started:
+            await _stop_iperf_server(dst)
+        health_monitor.invalidate(dst.id)
+
+    summary = {
+        "mode": "suite",
+        "tests": [
+            {
+                "label": item["label"],
+                "protocol": item["protocol"],
+                "reverse": item["reverse"],
+                "metrics": item["summary"],
+            }
+            for item in results
+        ],
+    }
+
+    obj = TestResult(
+        src_node_id=src.id,
+        dst_node_id=dst.id,
+        protocol="suite",
+        params={"mode": "tcp_udp_bidir", **test.model_dump()},
+        raw_result={"mode": "suite", "tests": results},
         summary=summary,
         created_at=datetime.now(timezone.utc),
     )

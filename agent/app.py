@@ -1034,12 +1034,42 @@ def run_test() -> Any:
         protocol = data.get("protocol", "tcp")
         parallel = int(data.get("parallel", 1))
         reverse_mode = str(data.get("reverse", "false")).lower() in ["1", "true", "yes"]
+        bandwidth = data.get("bandwidth")
+        datagram_size = data.get("datagram_size")
+        omit = data.get("omit")
     except ValueError:
         return jsonify({"status": "error", "error": "invalid_parameter"}), 400
 
     proto_flag = "-u" if protocol.lower() == "udp" else ""
     reverse_flag = "-R" if reverse_mode else ""
-    cmd = f"iperf3 -c {target} -p {port} -t {duration} -P {parallel} {proto_flag} {reverse_flag} -J"
+    extra_flags: list[str] = []
+    if bandwidth:
+        extra_flags.extend(["-b", str(bandwidth)])
+    if datagram_size and protocol.lower() == "udp":
+        extra_flags.extend(["-l", str(datagram_size)])
+    if omit:
+        extra_flags.extend(["-O", str(omit)])
+
+    cmd_parts = [
+        "iperf3",
+        "-c",
+        str(target),
+        "-p",
+        str(port),
+        "-t",
+        str(duration),
+        "-P",
+        str(parallel),
+    ]
+
+    if proto_flag:
+        cmd_parts.append(proto_flag)
+    if reverse_flag:
+        cmd_parts.append(reverse_flag)
+    cmd_parts.extend(extra_flags)
+    cmd_parts.append("-J")
+
+    cmd = " ".join(cmd_parts)
 
     try:
         result = subprocess.run(
