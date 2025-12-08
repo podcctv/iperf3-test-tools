@@ -1,11 +1,11 @@
 import asyncio
 import hashlib
-import asyncio
 import hmac
 import json
 import logging
 import socket
 import time
+import os
 import ipaddress
 from pathlib import Path
 from datetime import datetime, timezone
@@ -155,6 +155,16 @@ app = FastAPI(title="iperf3 master api")
 agent_store = AgentConfigStore(settings.agent_config_file)
 
 
+def _agent_config_from_node(node: Node) -> AgentConfigCreate:
+    return AgentConfigCreate(
+        name=node.name,
+        host=node.ip,
+        agent_port=node.agent_port,
+        iperf_port=node.iperf_port,
+        description=node.description,
+    )
+
+
 class BackboneLatencyMonitor:
     def __init__(self, targets: List[dict], interval_seconds: int = 60) -> None:
         self.targets = targets
@@ -253,16 +263,6 @@ def _persist_state(db: Session) -> None:
         state_store.persist(db)
     except Exception:
         logger.exception("Failed to persist state to %s", settings.state_file)
-
-
-def _agent_config_from_node(node: Node) -> AgentConfigCreate:
-    return AgentConfigCreate(
-        name=node.name,
-        host=node.ip,
-        agent_port=node.agent_port,
-        iperf_port=node.iperf_port,
-        description=node.description,
-    )
 
 
 def _sync_agent_config(node: Node, previous_name: str | None = None) -> None:
@@ -436,12 +436,16 @@ def _dashboard_token(password: str) -> str:
 
 
 def _load_dashboard_password() -> str:
+    env_password = os.getenv("DASHBOARD_PASSWORD")
+    if env_password is not None:
+        return _normalize_password(env_password)
+
     path = settings.dashboard_password_file
     if path.exists():
         try:
             content = path.read_text(encoding="utf-8").strip()
             if content:
-                return content
+                return _normalize_password(content)
         except OSError:
             logger.exception("Failed to read stored dashboard password from %s", path)
     return _normalize_password(settings.dashboard_password)
@@ -467,6 +471,22 @@ def _normalize_password(password: str | None) -> str:
 
 
 _dashboard_password = _normalize_password(_load_dashboard_password())
+
+
+def _ensure_dashboard_password_file() -> None:
+    path = settings.dashboard_password_file
+    if path.exists():
+        try:
+            if path.read_text(encoding="utf-8").strip():
+                return
+        except OSError:
+            logger.exception("Failed to read stored dashboard password from %s", path)
+            return
+
+    _save_dashboard_password(_dashboard_password)
+
+
+_ensure_dashboard_password_file()
 
 
 def _current_dashboard_password() -> str:
