@@ -444,23 +444,33 @@ def _load_dashboard_password() -> str:
                 return content
         except OSError:
             logger.exception("Failed to read stored dashboard password from %s", path)
-    return settings.dashboard_password
+    return _normalize_password(settings.dashboard_password)
 
 
 def _save_dashboard_password(password: str) -> None:
     path = settings.dashboard_password_file
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        path.write_text(password, encoding="utf-8")
+        path.write_text(_normalize_password(password), encoding="utf-8")
     except OSError:
         logger.exception("Failed to persist dashboard password to %s", path)
 
 
-_dashboard_password = _load_dashboard_password()
+DEFAULT_DASHBOARD_PASSWORD = "iperf-pass"
+
+
+def _normalize_password(password: str | None) -> str:
+    if password is None:
+        return DEFAULT_DASHBOARD_PASSWORD
+    stripped = password.strip()
+    return stripped or DEFAULT_DASHBOARD_PASSWORD
+
+
+_dashboard_password = _normalize_password(_load_dashboard_password())
 
 
 def _current_dashboard_password() -> str:
-    return _dashboard_password
+    return _dashboard_password or DEFAULT_DASHBOARD_PASSWORD
 
 
 def _is_authenticated(request: Request) -> bool:
@@ -469,9 +479,10 @@ def _is_authenticated(request: Request) -> bool:
 
 
 def _set_auth_cookie(response: Response, password: str) -> None:
+    normalized = _normalize_password(password)
     response.set_cookie(
         settings.dashboard_cookie_name,
-        _dashboard_token(password),
+        _dashboard_token(normalized),
         httponly=True,
         samesite="lax",
         max_age=60 * 60 * 24,
@@ -1894,7 +1905,15 @@ def _login_html() -> str:
             badgeRow.className = 'flex items-center gap-1';
             const latencyValue = entry.metrics?.latencyStats?.avg ?? entry.metrics?.latencyMs;
             if (latencyValue !== undefined && latencyValue !== null) {
-              badgeRow.appendChild(createMiniStat('RTT', formatMetric(latencyValue, 2), 'ms'));
+              badgeRow.appendChild(createMiniStat('RTT', formatMetric(latencyValue, 2), 'ms', 'text-sky-200', entry.metrics?.latencyStats));
+            }
+            const jitterValue = entry.metrics?.jitterStats?.avg ?? entry.metrics?.jitterMs;
+            if (jitterValue !== undefined && jitterValue !== null) {
+              badgeRow.appendChild(createMiniStat('抖动', formatMetric(jitterValue, 2), 'ms', 'text-amber-200', entry.metrics?.jitterStats));
+            }
+            const lossValue = entry.metrics?.lossStats?.avg ?? entry.metrics?.lostPercent;
+            if (lossValue !== undefined && lossValue !== null) {
+              badgeRow.appendChild(createMiniStat('丢包', formatMetric(lossValue, 2), '%', 'text-rose-200', entry.metrics?.lossStats));
             }
             const jitterValue = entry.metrics?.jitterStats?.avg ?? entry.metrics?.jitterMs;
             if (jitterValue !== undefined && jitterValue !== null) {
@@ -1906,7 +1925,7 @@ def _login_html() -> str:
             }
             const retransValue = entry.metrics?.retransStats?.avg;
             if (retransValue !== undefined && retransValue !== null) {
-              badgeRow.appendChild(createMiniStat('重传', formatMetric(retransValue, 0)));
+              badgeRow.appendChild(createMiniStat('重传', formatMetric(retransValue, 0), '次', 'text-indigo-200', entry.metrics?.retransStats));
             }
             if (badgeRow.childNodes.length) {
               labelGroup.appendChild(badgeRow);
@@ -1919,9 +1938,6 @@ def _login_html() -> str:
             heading.appendChild(labelGroup);
             heading.appendChild(protoLabel);
             tile.appendChild(heading);
-
-            const metricGrid = buildMetricGrid(entry.metrics);
-            if (metricGrid) tile.appendChild(metricGrid);
 
             const rates = document.createElement('div');
             rates.className = 'grid grid-cols-2 gap-2 text-xs text-slate-400';
@@ -1982,14 +1998,18 @@ def _login_html() -> str:
         const quickStats = document.createElement('div');
         quickStats.className = 'flex flex-wrap items-center gap-2 text-xs';
         if (latencyValue !== undefined && latencyValue !== null) {
-          quickStats.appendChild(createMiniStat('RTT', formatMetric(latencyValue, 2), 'ms'));
+          quickStats.appendChild(createMiniStat('RTT', formatMetric(latencyValue, 2), 'ms', 'text-sky-200', metrics.latencyStats));
         }
         if (jitterValue !== undefined && jitterValue !== null) {
-          quickStats.appendChild(createMiniStat('抖动', formatMetric(jitterValue, 2), 'ms', 'text-amber-200'));
+          quickStats.appendChild(createMiniStat('抖动', formatMetric(jitterValue, 2), 'ms', 'text-amber-200', metrics.jitterStats));
         }
         const lossValue = metrics.lossStats?.avg ?? metrics.lostPercent;
         if (lossValue !== undefined && lossValue !== null) {
-          quickStats.appendChild(createMiniStat('丢包', formatMetric(lossValue, 2), '%', 'text-rose-200'));
+          quickStats.appendChild(createMiniStat('丢包', formatMetric(lossValue, 2), '%', 'text-rose-200', metrics.lossStats));
+        }
+        const retransValue = metrics.retransStats?.avg;
+        if (retransValue !== undefined && retransValue !== null) {
+          quickStats.appendChild(createMiniStat('重传', formatMetric(retransValue, 2), '次', 'text-indigo-200', metrics.retransStats));
         }
         if (quickStats.childNodes.length) {
           card.appendChild(quickStats);
@@ -2006,9 +2026,6 @@ def _login_html() -> str:
         metaChips.appendChild(makeChip(test.protocol.toLowerCase() === 'udp' ? 'UDP 测试' : 'TCP 测试'));
         if (test.params?.reverse) metaChips.appendChild(makeChip('反向 (-R)'));
         card.appendChild(metaChips);
-
-        const metricGrid = buildMetricGrid(metrics);
-        if (metricGrid) card.appendChild(metricGrid);
 
         const actions = document.createElement('div');
         actions.className = 'flex flex-wrap items-center justify-between gap-3';
@@ -2211,12 +2228,39 @@ def _login_html() -> str:
       return { min, max, avg };
     }
 
-    function createMiniStat(label, value, unit = '', accent = 'text-sky-200') {
+    function createMiniStat(label, value, unit = '', accent = 'text-sky-200', stats = null) {
+      const wrap = document.createElement('div');
+      wrap.className = 'relative inline-block';
+
       const badge = document.createElement('div');
       badge.className = 'inline-flex items-center gap-1 rounded-lg border border-slate-800/80 bg-slate-900/70 px-2 py-1 text-[11px] font-semibold text-slate-200';
       const unitSpan = unit ? `<span class="text-slate-500">${unit}</span>` : '';
       badge.innerHTML = `<span class="text-slate-400">${label}</span><span class="${accent}">${value}</span>${unitSpan}`;
-      return badge;
+      wrap.appendChild(badge);
+
+      if (stats) {
+        const detail = document.createElement('div');
+        detail.className = 'pointer-events-none absolute left-1/2 top-full z-20 mt-2 w-max min-w-[180px] -translate-x-1/2 scale-95 rounded-lg border border-slate-800/80 bg-slate-900/95 px-3 py-2 text-[11px] text-slate-200 opacity-0 shadow-2xl shadow-black/30 transition duration-150';
+        const primary = stats.avg ?? stats.mean ?? stats.max ?? stats.min;
+        const unitLabel = unit ? ` ${unit}` : '';
+        detail.innerHTML = `
+          <div class="text-[11px] font-semibold text-slate-300">${label} 均值${unit ? ` (${unit})` : ''}</div>
+          <div class="mt-1 text-sm font-bold text-white">${formatMetric(primary)}${unitLabel}</div>
+          <div class="mt-1 text-[10px] text-slate-500">max ${formatMetric(stats.max)}${unitLabel} · min ${formatMetric(stats.min)}${unitLabel}</div>
+        `;
+        wrap.appendChild(detail);
+
+        wrap.onmouseenter = () => {
+          detail.classList.remove('opacity-0', 'scale-95');
+          detail.classList.add('opacity-100', 'scale-100');
+        };
+        wrap.onmouseleave = () => {
+          detail.classList.add('opacity-0', 'scale-95');
+          detail.classList.remove('opacity-100', 'scale-100');
+        };
+      }
+
+      return wrap;
     }
 
     function collectMetricStats(raw) {
@@ -3014,7 +3058,7 @@ def auth_status(request: Request) -> dict:
 
 @app.post("/auth/login")
 def login(response: Response, payload: dict = Body(...)) -> dict:
-    password = str(payload.get("password", ""))
+    password = _normalize_password(str(payload.get("password", "")))
     if password != _current_dashboard_password():
         raise HTTPException(status_code=401, detail="invalid_password")
 
@@ -3032,9 +3076,9 @@ def logout(response: Response) -> dict:
 def change_password(request: Request, response: Response, payload: dict = Body(...)) -> dict:
     global _dashboard_password
 
-    current_password = str(payload.get("current_password", ""))
-    new_password = str(payload.get("new_password", ""))
-    confirm_password = str(payload.get("confirm_password", new_password))
+    current_password = _normalize_password(str(payload.get("current_password", "")))
+    new_password = _normalize_password(str(payload.get("new_password", "")))
+    confirm_password = _normalize_password(str(payload.get("confirm_password", new_password)))
 
     if not new_password:
         raise HTTPException(status_code=400, detail="empty_password")
