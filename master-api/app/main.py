@@ -1399,6 +1399,8 @@ def _login_html() -> str:
       if (isRefreshingNodes) return;
       isRefreshingNodes = true;
       try {
+        const previousSrc = Number(srcSelect.value) || null;
+        const previousDst = Number(dstSelect.value) || null;
         const res = await fetch('/nodes/status');
         const nodes = await res.json();
         nodeCache = nodes;
@@ -1453,7 +1455,7 @@ def _login_html() -> str:
                 <span data-node-iperf-display="${node.id}">· iperf ${iperfPortDisplay}${node.description ? ' · ' + node.description : ''}</span>
               </p>
             </div>
-            <div class="flex flex-wrap items-center justify-start gap-2 lg:flex-col lg:items-end lg:justify-center lg:min-w-[170px]">
+            <div class="flex flex-wrap items-center justify-start gap-2 lg:flex-col lg:items-end lg:justify-center lg:min-w-[170px] opacity-100 md:opacity-0 md:pointer-events-none md:transition md:duration-200 md:group-hover:opacity-100 md:group-hover:pointer-events-auto md:focus-within:opacity-100 md:focus-within:pointer-events-auto">
               <button class="${styles.pillInfo}" onclick="runStreamingCheck(${node.id})">流媒体解锁测试</button>
               <button class="${styles.pillInfo}" onclick="editNode(${node.id})">编辑</button>
               <button class="${styles.pillDanger}" onclick="removeNode(${node.id})">删除</button>
@@ -1493,6 +1495,19 @@ def _login_html() -> str:
         const optionB = optionA.cloneNode(true);
         dstSelect.appendChild(optionB);
       });
+
+      const firstNodeId = nodes[0]?.id;
+      if (previousSrc && nodes.some((n) => n.id === previousSrc)) {
+        srcSelect.value = String(previousSrc);
+      } else if (firstNodeId) {
+        srcSelect.value = String(firstNodeId);
+      }
+
+      if (previousDst && nodes.some((n) => n.id === previousDst)) {
+        dstSelect.value = String(previousDst);
+      } else if (firstNodeId) {
+        dstSelect.value = String(firstNodeId);
+      }
 
       syncTestPort();
       } finally {
@@ -1605,29 +1620,29 @@ def _login_html() -> str:
         ...enrichedTests.map(({ rateSummary }) => Math.max(rateSummary.receiverRateValue || 0, rateSummary.senderRateValue || 0))
       );
 
-      const makePill = (label) => {
+      const makeChip = (label) => {
         const span = document.createElement('span');
-        span.className = 'inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/70 px-3 py-1 text-xs font-semibold text-slate-200';
+        span.className = 'inline-flex items-center gap-1 rounded-full border border-slate-800 bg-slate-900/70 px-2.5 py-1 text-[11px] font-semibold text-slate-200';
         span.textContent = label;
         return span;
       };
 
       const buildRateRow = (label, value, displayValue, gradient) => {
         const wrap = document.createElement('div');
-        wrap.className = 'space-y-1';
+        wrap.className = 'space-y-1 rounded-xl border border-slate-800/60 bg-slate-950/40 p-3';
         const header = document.createElement('div');
         header.className = 'flex items-center justify-between text-xs text-slate-400';
         header.innerHTML = `<span>${label}</span><span class="font-semibold text-slate-100">${displayValue}</span>`;
 
         const barWrap = document.createElement('div');
-        barWrap.className = 'h-2 w-full rounded-full bg-slate-800/80';
+        barWrap.className = 'h-2 w-full overflow-hidden rounded-full bg-slate-800/80';
         const bar = document.createElement('div');
         if (value) {
           bar.className = `h-2 rounded-full bg-gradient-to-r ${gradient}`;
           bar.style.width = `${Math.min(100, (value / maxRate) * 100)}%`;
         } else {
           bar.className = 'h-2 rounded-full bg-slate-700';
-          bar.style.width = '12%';
+          bar.style.width = '14%';
         }
         barWrap.appendChild(bar);
         wrap.appendChild(header);
@@ -1656,7 +1671,7 @@ def _login_html() -> str:
         card.className = 'space-y-3 rounded-2xl border border-slate-800/70 bg-slate-900/60 p-4 shadow-sm shadow-black/30';
 
         const header = document.createElement('div');
-        header.className = 'flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between';
+        header.className = 'flex flex-wrap items-center justify-between gap-2';
         const title = document.createElement('div');
         title.innerHTML = `<p class="text-xs uppercase tracking-[0.2em] text-sky-300/70">#${test.id} · ${typeLabel}</p>` +
           `<p class="text-lg font-semibold text-white">${pathLabel}</p>`;
@@ -1668,40 +1683,22 @@ def _login_html() -> str:
         header.appendChild(statusPill);
         card.appendChild(header);
 
-        const pills = document.createElement('div');
-        pills.className = 'flex flex-wrap gap-2';
-        pills.appendChild(makePill(typeLabel));
-        pills.appendChild(makePill(`时长 ${test.params.duration || 'N/A'}s`));
-        pills.appendChild(makePill(`并行 ${test.params.parallel ?? 'N/A'}`));
-        pills.appendChild(makePill(`端口 ${test.params.port || 'N/A'}`));
-        pills.appendChild(makePill(test.protocol.toUpperCase()));
-        card.appendChild(pills);
-
-        const metricsGrid = document.createElement('div');
-        metricsGrid.className = 'grid gap-3 sm:grid-cols-3';
-        const metricEntries = [
-          { label: '延迟 (ms)', value: latencyValue !== null ? `${formatMetric(latencyValue)}` : 'N/A' },
-          { label: '抖动 (ms)', value: jitterValue !== null ? `${formatMetric(jitterValue)}` : 'N/A' },
-          { label: '丢包率 (%)', value: metrics.lostPercent !== undefined && metrics.lostPercent !== null ? `${formatMetric(metrics.lostPercent)}%` : 'N/A' },
-        ];
-        metricEntries.forEach((entry) => {
-          const metric = document.createElement('div');
-          metric.className = 'rounded-lg border border-slate-800/70 bg-slate-900/70 p-3';
-          metric.innerHTML = `<p class="text-xs text-slate-400">${entry.label}</p><p class="text-lg font-semibold text-white">${entry.value}</p>`;
-          metricsGrid.appendChild(metric);
-        });
-        card.appendChild(metricsGrid);
-
         const ratesGrid = document.createElement('div');
         ratesGrid.className = 'grid gap-3 sm:grid-cols-2';
         ratesGrid.appendChild(buildRateRow('接收速率 (Mbps)', rateSummary.receiverRateValue, rateSummary.receiverRateMbps, 'from-emerald-400 to-sky-500'));
         ratesGrid.appendChild(buildRateRow('发送速率 (Mbps)', rateSummary.senderRateValue, rateSummary.senderRateMbps, 'from-amber-400 to-rose-500'));
         card.appendChild(ratesGrid);
 
-        const congestion = document.createElement('p');
-        congestion.className = 'text-xs text-slate-500';
-        congestion.textContent = `拥塞控制：发送 ${rateSummary.senderCongestion} · 接收 ${rateSummary.receiverCongestion}`;
-        card.appendChild(congestion);
+        const metaChips = document.createElement('div');
+        metaChips.className = 'flex flex-wrap items-center gap-2 text-xs text-slate-400';
+        metaChips.appendChild(makeChip(test.protocol.toLowerCase() === 'udp' ? 'UDP 测试' : 'TCP 测试'));
+        if (test.params?.reverse) metaChips.appendChild(makeChip('反向 (-R)'));
+        metaChips.appendChild(makeChip(latencyValue !== null ? `延迟 ${formatMetric(latencyValue)} ms` : '延迟 N/A'));
+        metaChips.appendChild(makeChip(jitterValue !== null ? `抖动 ${formatMetric(jitterValue)} ms` : '抖动 N/A'));
+        if (metrics.lostPercent !== undefined && metrics.lostPercent !== null) {
+          metaChips.appendChild(makeChip(`丢包 ${formatMetric(metrics.lostPercent)}%`));
+        }
+        card.appendChild(metaChips);
 
         const actions = document.createElement('div');
         actions.className = 'flex flex-wrap items-center justify-between gap-3';
@@ -1719,12 +1716,12 @@ def _login_html() -> str:
         buttons.appendChild(detailsBtn);
         buttons.appendChild(deleteBtn);
 
-        const udpLabel = document.createElement('span');
-        udpLabel.className = 'rounded-full bg-slate-800/80 px-3 py-1 text-xs font-semibold text-slate-300 ring-1 ring-slate-700';
-        udpLabel.textContent = test.protocol.toLowerCase() === 'udp' ? 'UDP 测试' : 'TCP 测试';
+        const congestion = document.createElement('span');
+        congestion.className = 'rounded-full bg-slate-800/80 px-3 py-1 text-xs font-semibold text-slate-300 ring-1 ring-slate-700';
+        congestion.textContent = `拥塞：${rateSummary.senderCongestion} / ${rateSummary.receiverCongestion}`;
 
         actions.appendChild(buttons);
-        actions.appendChild(udpLabel);
+        actions.appendChild(congestion);
         card.appendChild(actions);
 
         const block = buildTestDetailsBlock(test, metrics, latencyValue, pathLabel);
