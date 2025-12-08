@@ -45,6 +45,11 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
+def _log_dashboard_password() -> None:
+    manager = auth_manager()
+    logger.warning("Dashboard password initialized: %s", manager.current_password())
+
+
 def _ensure_iperf_port_column() -> None:
     if engine.dialect.name != "sqlite":
         return
