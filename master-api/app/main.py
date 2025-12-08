@@ -1628,9 +1628,26 @@ def _login_html() -> str:
       await refreshTests();
     }
 
-    async function checkAuth() {
+    async function checkAuth(showFeedback = false) {
       try {
         const res = await apiFetch('/auth/status');
+        if (!res.ok) {
+          let message = '无法验证登录状态。';
+          try {
+            const data = await res.json();
+            if (data?.detail) message = `认证失败：${data.detail}`;
+          } catch (_) {
+            try {
+              const rawText = await res.text();
+              if (rawText) message = `认证失败：${rawText}`;
+            } catch (_) {}
+          }
+
+          setLoginState('error', message);
+          if (showFeedback) setAlert(loginAlert, message);
+          return false;
+        }
+
         const data = await res.json();
         if (data.authenticated) {
           loginCard.classList.add('hidden');
@@ -1644,13 +1661,16 @@ def _login_html() -> str:
           appCard.classList.add('hidden');
           loginCard.classList.remove('hidden');
           setLoginState('idle');
+          if (showFeedback) setAlert(loginAlert, '登录状态未建立，请重新登录。');
           return false;
         }
       } catch (err) {
         console.error('Auth check failed:', err);
         appCard.classList.add('hidden');
         loginCard.classList.remove('hidden');
-        setLoginState('error', '无法连接认证服务，请稍后重试。');
+        const errorMessage = '无法连接认证服务，请稍后重试。';
+        setLoginState('error', errorMessage);
+        if (showFeedback) setAlert(loginAlert, errorMessage);
         return false;
       }
     }
@@ -1701,7 +1721,7 @@ def _login_html() -> str:
           return;
         }
 
-        const authed = await checkAuth();
+        const authed = await checkAuth(true);
         if (!authed) {
           setAlert(loginAlert, '登录状态无法建立，请检查浏览器是否允许保存 Cookie。');
           setLoginState('error', '未能建立登录状态。');
@@ -3289,7 +3309,11 @@ def auth_status(request: Request) -> dict:
 
 @app.post("/auth/login")
 def login(response: Response, payload: dict = Body(...)) -> dict:
-    password = _normalize_password(str(payload.get("password", "")))
+    raw_password = payload.get("password")
+    if raw_password is None or not str(raw_password).strip():
+        raise HTTPException(status_code=400, detail="empty_password")
+
+    password = _normalize_password(str(raw_password))
     if password != _current_dashboard_password():
         raise HTTPException(status_code=401, detail="invalid_password")
 
