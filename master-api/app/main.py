@@ -1550,15 +1550,28 @@ def _login_html() -> str:
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ password })
         });
+
         if (!res.ok) {
           let message = '密码错误或未配置。';
           try {
             const data = await res.json();
-            if (data?.detail === 'empty_password') message = '请输入控制台密码。';
-          } catch (_) {}
+            if (data?.detail === 'empty_password') {
+              message = '请输入控制台密码。';
+            } else if (data?.detail === 'invalid_password') {
+              message = '密码错误，请确认与后台环境变量或数据目录中的密码一致。';
+            } else if (data?.detail) {
+              message = `登录失败：${data.detail}`;
+            }
+          } catch (_) {
+            try {
+              const rawText = await res.text();
+              if (rawText) message = `登录失败：${rawText}`;
+            } catch (_) {}
+          }
           setAlert(loginAlert, message);
           return;
         }
+
         const authed = await checkAuth();
         if (!authed) {
           setAlert(loginAlert, '登录状态无法建立，请检查浏览器是否允许保存 Cookie。');
