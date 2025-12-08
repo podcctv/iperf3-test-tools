@@ -1521,9 +1521,11 @@ def _login_html() -> str:
         authHint.textContent = '已通过认证，可管理节点与测速任务。';
         await refreshNodes();
         await refreshTests();
+        return true;
       } else {
         appCard.classList.add('hidden');
         loginCard.classList.remove('hidden');
+        return false;
       }
     }
 
@@ -1557,7 +1559,10 @@ def _login_html() -> str:
           setAlert(loginAlert, message);
           return;
         }
-        await checkAuth();
+        const authed = await checkAuth();
+        if (!authed) {
+          setAlert(loginAlert, '登录状态无法建立，请检查浏览器是否允许保存 Cookie。');
+        }
       } catch (err) {
         console.error('Login failed:', err);
         setAlert(loginAlert, '无法连接到服务，请稍后再试。');
