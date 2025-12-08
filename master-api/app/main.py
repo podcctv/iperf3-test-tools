@@ -507,6 +507,15 @@ def _ensure_dashboard_password_file() -> None:
 _ensure_dashboard_password_file()
 
 
+def _log_dashboard_password() -> None:
+    """Log the current dashboard password for initial setup visibility."""
+
+    logger.info("Dashboard password initialized: %s", _current_dashboard_password())
+
+
+_log_dashboard_password()
+
+
 def _current_dashboard_password() -> str:
     return _dashboard_password or DEFAULT_DASHBOARD_PASSWORD
 
@@ -1516,16 +1525,21 @@ def _login_html() -> str:
     async function login() {
       clearAlert(loginAlert);
       const password = document.getElementById('password').value;
-      const res = await fetch('/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password })
-      });
-      if (!res.ok) {
-        setAlert(loginAlert, '密码错误或未配置。');
-        return;
+      try {
+        const res = await fetch('/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password })
+        });
+        if (!res.ok) {
+          setAlert(loginAlert, '密码错误或未配置。');
+          return;
+        }
+        await checkAuth();
+      } catch (err) {
+        console.error('Login failed:', err);
+        setAlert(loginAlert, '无法连接到服务，请稍后再试。');
       }
-      await checkAuth();
     }
 
     async function logout() {
