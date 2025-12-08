@@ -45,6 +45,7 @@ from .schemas import (
 from .state_store import StateStore
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 def _ensure_iperf_port_column() -> None:
@@ -514,7 +515,7 @@ _ensure_dashboard_password_file()
 def _log_dashboard_password() -> None:
     """Log the current dashboard password for initial setup visibility."""
 
-    logger.info("Dashboard password initialized: %s", _current_dashboard_password())
+    logger.warning("Dashboard password initialized: %s", _current_dashboard_password())
 
 
 _log_dashboard_password()
@@ -619,6 +620,7 @@ backbone_monitor = BackboneLatencyMonitor(ZHEJIANG_TARGETS, interval_seconds=60)
 async def _on_startup() -> None:
     await health_monitor.start()
     await backbone_monitor.start()
+    _log_dashboard_password()
 
 
 @app.on_event("shutdown")
@@ -1052,6 +1054,8 @@ def _login_html() -> str:
     const loginCard = document.getElementById('login-card');
     const appCard = document.getElementById('app-card');
     const loginAlert = document.getElementById('login-alert');
+    const loginButton = document.getElementById('login-btn');
+    const passwordInput = document.getElementById('password');
     const authHint = document.getElementById('auth-hint');
     const configAlert = document.getElementById('config-alert');
     const importConfigsBtn = document.getElementById('import-configs');
@@ -1524,7 +1528,19 @@ def _login_html() -> str:
 
     async function login() {
       clearAlert(loginAlert);
-      const password = document.getElementById('password').value;
+      const password = (passwordInput?.value || '').trim();
+      if (!password) {
+        setAlert(loginAlert, '请输入控制台密码。');
+        passwordInput?.focus();
+        return;
+      }
+
+      const originalText = loginButton?.textContent;
+      if (loginButton) {
+        loginButton.disabled = true;
+        loginButton.textContent = '解锁中...';
+        loginButton.classList.add('cursor-not-allowed', 'opacity-80');
+      }
       try {
         const res = await fetch('/auth/login', {
           method: 'POST',
@@ -1532,13 +1548,24 @@ def _login_html() -> str:
           body: JSON.stringify({ password })
         });
         if (!res.ok) {
-          setAlert(loginAlert, '密码错误或未配置。');
+          let message = '密码错误或未配置。';
+          try {
+            const data = await res.json();
+            if (data?.detail === 'empty_password') message = '请输入控制台密码。';
+          } catch (_) {}
+          setAlert(loginAlert, message);
           return;
         }
         await checkAuth();
       } catch (err) {
         console.error('Login failed:', err);
         setAlert(loginAlert, '无法连接到服务，请稍后再试。');
+      } finally {
+        if (loginButton) {
+          loginButton.disabled = false;
+          loginButton.textContent = originalText || '解锁';
+          loginButton.classList.remove('cursor-not-allowed', 'opacity-80');
+        }
       }
     }
 
@@ -2739,7 +2766,7 @@ def _login_html() -> str:
       return block;
     }
 
-    document.getElementById('login-btn').addEventListener('click', login);
+    loginButton?.addEventListener('click', login);
     document.getElementById('logout-btn').addEventListener('click', logout);
     document.getElementById('run-test').addEventListener('click', runTest);
     document.getElementById('run-suite-test').addEventListener('click', runSuiteTest);
@@ -2789,7 +2816,7 @@ def _login_html() -> str:
 
     document.querySelectorAll('[data-refresh-nodes]').forEach((btn) => btn.addEventListener('click', refreshNodes));
     dstSelect.addEventListener('change', syncTestPort);
-    document.getElementById('password').addEventListener('keyup', (e) => { if (e.key === 'Enter') login(); });
+    passwordInput?.addEventListener('keyup', (e) => { if (e.key === 'Enter') login(); });
 
     function updateNodeStreamingBadges(nodeId) {
       const container = document.querySelector(`[data-streaming-badges="${nodeId}"]`);
