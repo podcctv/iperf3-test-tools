@@ -491,6 +491,10 @@ def _normalize_password(password: str | None) -> str:
 _dashboard_password = _normalize_password(_load_dashboard_password())
 
 
+def _current_dashboard_password() -> str:
+    return _dashboard_password or DEFAULT_DASHBOARD_PASSWORD
+
+
 def _ensure_dashboard_password_file() -> None:
     path = settings.dashboard_password_file
     if path.exists():
@@ -514,10 +518,6 @@ def _log_dashboard_password() -> None:
 
 
 _log_dashboard_password()
-
-
-def _current_dashboard_password() -> str:
-    return _dashboard_password or DEFAULT_DASHBOARD_PASSWORD
 
 
 def _is_authenticated(request: Request) -> bool:
