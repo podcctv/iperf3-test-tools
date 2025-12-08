@@ -800,70 +800,126 @@ def _login_html() -> str:
               </div>
 
               <div class="panel-card rounded-2xl p-5 space-y-4">
-                <div class="flex items-center justify-between gap-2">
-                  <h3 class="text-lg font-semibold text-white">发起测试</h3>
-                  <span class="rounded-full bg-slate-800/70 px-3 py-1 text-xs font-semibold text-slate-300 ring-1 ring-slate-700">快速启动</span>
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p class="text-xs uppercase tracking-[0.2em] text-sky-300/70">链路调度</p>
+                    <h3 class="text-lg font-semibold text-white">测试控制台</h3>
+                  </div>
+                  <div class="inline-flex items-center gap-2 rounded-full border border-slate-700/70 bg-slate-900/70 p-1 shadow-inner shadow-black/20">
+                    <button id="single-test-tab" class="rounded-full bg-gradient-to-r from-sky-500/80 to-indigo-500/80 px-4 py-1.5 text-xs font-semibold text-slate-50 shadow-lg shadow-sky-500/15 ring-1 ring-sky-400/40 transition hover:brightness-110">发起测试</button>
+                    <button id="suite-test-tab" class="rounded-full px-4 py-1.5 text-xs font-semibold text-slate-300 transition hover:text-white">双向 TCP/UDP 测试</button>
+                  </div>
                 </div>
+                <p id="test-panel-intro" class="text-sm text-slate-400">快速发起单条 TCP/UDP 链路测试，支持限速、并行与反向 (-R)。</p>
                 <div id="test-alert" class="hidden rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100"></div>
-                <div class="grid gap-3 sm:grid-cols-2">
-                  <div class="space-y-2">
-                    <label class="text-sm font-medium text-slate-200">源节点</label>
-                    <select id="src-select" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60"></select>
+
+                <div id="single-test-panel" class="space-y-4">
+                  <div class="grid gap-3 sm:grid-cols-2">
+                    <div class="space-y-2">
+                      <label class="text-sm font-medium text-slate-200">源节点</label>
+                      <select id="src-select" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60"></select>
+                    </div>
+                    <div class="space-y-2">
+                      <label class="text-sm font-medium text-slate-200">目标节点</label>
+                      <select id="dst-select" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60"></select>
+                    </div>
+                    <div class="space-y-2">
+                      <label class="text-sm font-medium text-slate-200">协议</label>
+                      <select id="protocol" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60"><option value="tcp">TCP</option><option value="udp">UDP</option></select>
+                    </div>
+                    <div class="space-y-2">
+                      <label class="text-sm font-medium text-slate-200">时长（秒）</label>
+                      <input id="duration" type="number" value="10" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+                    </div>
+                    <div class="space-y-2">
+                      <label class="text-sm font-medium text-slate-200">并行数</label>
+                      <input id="parallel" type="number" value="1" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+                    </div>
+                    <div class="space-y-2">
+                      <label class="text-sm font-medium text-slate-200">端口</label>
+                      <input id="test-port" type="number" value="62001" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+                    </div>
+                    <div class="space-y-2">
+                      <label class="text-sm font-medium text-slate-200">忽略前（秒）</label>
+                      <input id="omit" type="number" value="0" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+                    </div>
                   </div>
-                  <div class="space-y-2">
-                    <label class="text-sm font-medium text-slate-200">目标节点</label>
-                    <select id="dst-select" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60"></select>
+                  <div id="tcp-options" class="grid gap-3 sm:grid-cols-2">
+                    <div class="space-y-2">
+                      <label class="text-sm font-medium text-slate-200">TCP 限速带宽 (-b，可选)</label>
+                      <input id="tcp-bandwidth" type="text" placeholder="例如 0（不限）或 500M" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+                    </div>
                   </div>
-                  <div class="space-y-2">
-                    <label class="text-sm font-medium text-slate-200">协议</label>
-                    <select id="protocol" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60"><option value="tcp">TCP</option><option value="udp">UDP</option></select>
+                  <div id="udp-options" class="hidden grid gap-3 sm:grid-cols-3">
+                    <div class="space-y-2">
+                      <label class="text-sm font-medium text-slate-200">UDP 带宽 (-b)</label>
+                      <input id="udp-bandwidth" type="text" value="100M" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+                    </div>
+                    <div class="space-y-2">
+                      <label class="text-sm font-medium text-slate-200">UDP 包长 (-l)</label>
+                      <input id="udp-len" type="number" value="1400" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+                    </div>
+                    <div class="space-y-2">
+                      <label class="text-sm font-medium text-slate-200">UDP 备注</label>
+                      <p class="rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-2 text-xs text-slate-400">默认 100M/1400B，可根据链路容量调整。</p>
+                    </div>
                   </div>
-                  <div class="space-y-2">
-                    <label class="text-sm font-medium text-slate-200">时长（秒）</label>
-                    <input id="duration" type="number" value="10" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+                  <div class="flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/50 px-3 py-2">
+                    <label for="reverse" class="flex items-center gap-2 text-sm font-medium text-slate-200">
+                      <input id="reverse" type="checkbox" class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-sky-500 focus:ring-sky-500" />
+                      反向测试 (-R)
+                    </label>
+                    <p class="text-xs text-slate-500">在源节点上发起反向流量测试。</p>
                   </div>
-                  <div class="space-y-2">
-                    <label class="text-sm font-medium text-slate-200">并行数</label>
-                    <input id="parallel" type="number" value="1" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
-                  </div>
-                  <div class="space-y-2">
-                    <label class="text-sm font-medium text-slate-200">端口</label>
-                    <input id="test-port" type="number" value="62001" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
-                  </div>
-                  <div class="space-y-2">
-                    <label class="text-sm font-medium text-slate-200">忽略前（秒）</label>
-                    <input id="omit" type="number" value="0" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
-                  </div>
+                  <button id="run-test" class="w-full rounded-xl bg-gradient-to-r from-sky-500 to-indigo-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-sky-500/20 transition hover:scale-[1.01] hover:shadow-xl">开始测试</button>
                 </div>
-                <div id="tcp-options" class="grid gap-3 sm:grid-cols-2">
-                  <div class="space-y-2">
-                    <label class="text-sm font-medium text-slate-200">TCP 限速带宽 (-b，可选)</label>
-                    <input id="tcp-bandwidth" type="text" placeholder="例如 0（不限）或 500M" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+
+                <div id="suite-test-panel" class="hidden space-y-4">
+                  <p class="text-sm text-slate-400">一键完成 TCP/UDP 去回四项测试，适合基线验证与跨运营商链路对比。</p>
+                  <div class="grid gap-3 sm:grid-cols-2">
+                    <div class="space-y-2">
+                      <label class="text-sm font-medium text-slate-200">源节点</label>
+                      <select id="suite-src-select" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60"></select>
+                    </div>
+                    <div class="space-y-2">
+                      <label class="text-sm font-medium text-slate-200">目标节点</label>
+                      <select id="suite-dst-select" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60"></select>
+                    </div>
+                    <div class="space-y-2">
+                      <label class="text-sm font-medium text-slate-200">时长（秒）</label>
+                      <input id="suite-duration" type="number" value="10" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+                    </div>
+                    <div class="space-y-2">
+                      <label class="text-sm font-medium text-slate-200">并行数 (P)</label>
+                      <input id="suite-parallel" type="number" value="1" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+                    </div>
+                    <div class="space-y-2">
+                      <label class="text-sm font-medium text-slate-200">端口</label>
+                      <input id="suite-port" type="number" value="62001" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+                    </div>
+                    <div class="space-y-2">
+                      <label class="text-sm font-medium text-slate-200">忽略前（秒）</label>
+                      <input id="suite-omit" type="number" value="0" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+                    </div>
                   </div>
+                  <div class="grid gap-3 sm:grid-cols-3">
+                    <div class="space-y-2">
+                      <label class="text-sm font-medium text-slate-200">TCP 限速 (-b，可选)</label>
+                      <input id="suite-tcp-bandwidth" type="text" placeholder="例如 0 或 500M" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+                    </div>
+                    <div class="space-y-2">
+                      <label class="text-sm font-medium text-slate-200">UDP 带宽 (-b)</label>
+                      <input id="suite-udp-bandwidth" type="text" value="100M" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+                    </div>
+                    <div class="space-y-2">
+                      <label class="text-sm font-medium text-slate-200">UDP 包长 (-l)</label>
+                      <input id="suite-udp-len" type="number" value="1400" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+                    </div>
+                  </div>
+                  <button id="run-suite-test" class="w-full rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-500/20 transition hover:scale-[1.01] hover:shadow-xl">启动双向测试</button>
                 </div>
-                <div id="udp-options" class="hidden grid gap-3 sm:grid-cols-3">
-                  <div class="space-y-2">
-                    <label class="text-sm font-medium text-slate-200">UDP 带宽 (-b)</label>
-                    <input id="udp-bandwidth" type="text" value="100M" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
-                  </div>
-                  <div class="space-y-2">
-                    <label class="text-sm font-medium text-slate-200">UDP 包长 (-l)</label>
-                    <input id="udp-len" type="number" value="1400" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
-                  </div>
-                  <div class="space-y-2">
-                    <label class="text-sm font-medium text-slate-200">UDP 备注</label>
-                    <p class="rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-2 text-xs text-slate-400">默认 100M/1400B，可根据链路容量调整。</p>
-                  </div>
-                </div>
-                <div class="flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/50 px-3 py-2">
-                  <label for="reverse" class="flex items-center gap-2 text-sm font-medium text-slate-200">
-                    <input id="reverse" type="checkbox" class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-sky-500 focus:ring-sky-500" />
-                    反向测试 (-R)
-                  </label>
-                  <p class="text-xs text-slate-500">在源节点上发起反向流量测试。</p>
-                </div>
-                <button id="run-test" class="w-full rounded-xl bg-gradient-to-r from-sky-500 to-indigo-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-sky-500/20 transition hover:scale-[1.01] hover:shadow-xl">开始测试</button>
-                <div id="test-progress" class="hidden mt-2 space-y-2">
+
+                <div id="test-progress" class="hidden space-y-2">
                   <div class="flex items-center justify-between text-xs text-slate-400">
                     <span>链路测试进度</span>
                     <span id="test-progress-label" class="font-medium text-slate-200"></span>
@@ -872,55 +928,6 @@ def _login_html() -> str:
                     <div id="test-progress-bar" class="h-2 w-0 rounded-full bg-gradient-to-r from-sky-500 to-indigo-500 transition-all duration-300"></div>
                   </div>
                 </div>
-              </div>
-
-              <div class="panel-card rounded-2xl p-5 space-y-4">
-                <div class="flex items-center justify-between gap-2">
-                  <h3 class="text-lg font-semibold text-white">双向 TCP/UDP 套件</h3>
-                  <span class="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-100 ring-1 ring-emerald-400/40">一次跑完 4 次</span>
-                </div>
-                <p class="text-sm text-slate-400">一键完成 TCP / UDP 去回四项测试，适合基线验证与跨运营商链路对比。</p>
-                <div class="grid gap-3 sm:grid-cols-2">
-                  <div class="space-y-2">
-                    <label class="text-sm font-medium text-slate-200">源节点</label>
-                    <select id="suite-src-select" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60"></select>
-                  </div>
-                  <div class="space-y-2">
-                    <label class="text-sm font-medium text-slate-200">目标节点</label>
-                    <select id="suite-dst-select" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60"></select>
-                  </div>
-                  <div class="space-y-2">
-                    <label class="text-sm font-medium text-slate-200">时长（秒）</label>
-                    <input id="suite-duration" type="number" value="10" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
-                  </div>
-                  <div class="space-y-2">
-                    <label class="text-sm font-medium text-slate-200">并行数 (P)</label>
-                    <input id="suite-parallel" type="number" value="1" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
-                  </div>
-                  <div class="space-y-2">
-                    <label class="text-sm font-medium text-slate-200">端口</label>
-                    <input id="suite-port" type="number" value="62001" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
-                  </div>
-                  <div class="space-y-2">
-                    <label class="text-sm font-medium text-slate-200">忽略前（秒）</label>
-                    <input id="suite-omit" type="number" value="0" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
-                  </div>
-                </div>
-                <div class="grid gap-3 sm:grid-cols-3">
-                  <div class="space-y-2">
-                    <label class="text-sm font-medium text-slate-200">TCP 限速 (-b，可选)</label>
-                    <input id="suite-tcp-bandwidth" type="text" placeholder="例如 0 或 500M" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
-                  </div>
-                  <div class="space-y-2">
-                    <label class="text-sm font-medium text-slate-200">UDP 带宽 (-b)</label>
-                    <input id="suite-udp-bandwidth" type="text" value="100M" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
-                  </div>
-                  <div class="space-y-2">
-                    <label class="text-sm font-medium text-slate-200">UDP 包长 (-l)</label>
-                    <input id="suite-udp-len" type="number" value="1400" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
-                  </div>
-                </div>
-                <button id="run-suite-test" class="w-full rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-500/20 transition hover:scale-[1.01] hover:shadow-xl">启动双向套件</button>
               </div>
 
               <div class="panel-card rounded-2xl p-5 space-y-4">
@@ -1026,6 +1033,11 @@ def _login_html() -> str:
     const udpLenInput = document.getElementById('udp-len');
     const tcpOptions = document.getElementById('tcp-options');
     const udpOptions = document.getElementById('udp-options');
+    const singleTestPanel = document.getElementById('single-test-panel');
+    const suiteTestPanel = document.getElementById('suite-test-panel');
+    const singleTestTab = document.getElementById('single-test-tab');
+    const suiteTestTab = document.getElementById('suite-test-tab');
+    const testPanelIntro = document.getElementById('test-panel-intro');
     const suiteSrcSelect = document.getElementById('suite-src-select');
     const suiteDstSelect = document.getElementById('suite-dst-select');
     const suiteDuration = document.getElementById('suite-duration');
@@ -1088,6 +1100,30 @@ def _login_html() -> str:
       } else {
         tcpOptions?.classList.remove('hidden');
         udpOptions?.classList.add('hidden');
+      }
+    }
+
+    function setActiveTestTab(mode) {
+      const isSuite = mode === 'suite';
+      if (singleTestPanel) singleTestPanel.classList.toggle('hidden', isSuite);
+      if (suiteTestPanel) suiteTestPanel.classList.toggle('hidden', !isSuite);
+      if (testProgress) testProgress.classList.add('hidden');
+
+      if (singleTestTab) {
+        singleTestTab.className = isSuite
+          ? 'rounded-full px-4 py-1.5 text-xs font-semibold text-slate-300 transition hover:text-white'
+          : 'rounded-full bg-gradient-to-r from-sky-500/80 to-indigo-500/80 px-4 py-1.5 text-xs font-semibold text-slate-50 shadow-lg shadow-sky-500/15 ring-1 ring-sky-400/40 transition hover:brightness-110';
+      }
+      if (suiteTestTab) {
+        suiteTestTab.className = isSuite
+          ? 'rounded-full bg-gradient-to-r from-emerald-500/80 to-cyan-500/80 px-4 py-1.5 text-xs font-semibold text-slate-50 shadow-lg shadow-emerald-500/15 ring-1 ring-emerald-400/40 transition hover:brightness-110'
+          : 'rounded-full px-4 py-1.5 text-xs font-semibold text-slate-300 transition hover:text-white';
+      }
+
+      if (testPanelIntro) {
+        testPanelIntro.textContent = isSuite
+          ? '双向 TCP/UDP 测试一次完成四轮去回，方便基线和互联质量核验。'
+          : '快速发起单条 TCP/UDP 链路测试，支持限速、并行与反向 (-R)。';
       }
     }
 
@@ -1763,8 +1799,8 @@ def _login_html() -> str:
           return { test, metrics, suiteEntries };
         }
         const rateSummary = summarizeRateTable(test.raw_result || {});
-        const latencyValue = metrics.latencyMs !== undefined && metrics.latencyMs !== null ? metrics.latencyMs : null;
-        const jitterValue = metrics.jitterMs !== undefined && metrics.jitterMs !== null ? metrics.jitterMs : null;
+        const latencyValue = metrics.latencyStats?.avg ?? (metrics.latencyMs ?? null);
+        const jitterValue = metrics.jitterStats?.avg ?? (metrics.jitterMs ?? null);
         return { test, metrics, rateSummary, latencyValue, jitterValue };
       });
 
@@ -1823,12 +1859,12 @@ def _login_html() -> str:
 
         if (metrics?.isSuite) {
           const card = document.createElement('div');
-          card.className = 'space-y-3 rounded-2xl border border-slate-800/70 bg-slate-900/60 p-4 shadow-sm shadow-black/30';
+          card.className = 'group space-y-3 rounded-2xl border border-slate-800/70 bg-slate-900/60 p-4 shadow-sm shadow-black/30 transition hover:border-emerald-400/40 hover:shadow-emerald-500/10';
 
           const header = document.createElement('div');
           header.className = 'flex flex-wrap items-center justify-between gap-2';
           const title = document.createElement('div');
-          title.innerHTML = `<p class="text-xs uppercase tracking-[0.2em] text-emerald-300/70">#${test.id} · TCP/UDP 双向套件</p>` +
+          title.innerHTML = `<p class="text-xs uppercase tracking-[0.2em] text-emerald-300/70">#${test.id} · TCP/UDP 双向测试</p>` +
             `<p class="text-lg font-semibold text-white">${pathLabel}</p>`;
           header.appendChild(title);
 
@@ -1860,17 +1896,17 @@ def _login_html() -> str:
               </div>`;
             tile.appendChild(rates);
 
-            const chips = document.createElement('div');
-            chips.className = 'flex flex-wrap items-center gap-2 text-[11px] text-slate-300';
-            const latencyLabel = entry.metrics.latencyMs !== undefined && entry.metrics.latencyMs !== null ? `${formatMetric(entry.metrics.latencyMs)} ms` : 'N/A';
-            const jitterLabel = entry.metrics.jitterMs !== undefined && entry.metrics.jitterMs !== null ? `${formatMetric(entry.metrics.jitterMs)} ms` : 'N/A';
-            const lossLabel = entry.metrics.lostPercent !== undefined && entry.metrics.lostPercent !== null ? `${formatMetric(entry.metrics.lostPercent)}%` : 'N/A';
-            chips.innerHTML = `
-              <span class="rounded-full bg-slate-800/70 px-2 py-1">延迟 ${latencyLabel}</span>
-              <span class="rounded-full bg-slate-800/70 px-2 py-1">抖动 ${jitterLabel}</span>
-              <span class="rounded-full bg-slate-800/70 px-2 py-1">丢包 ${lossLabel}</span>
-            `;
-            tile.appendChild(chips);
+            const metricGrid = document.createElement('div');
+            metricGrid.className = 'grid gap-2 sm:grid-cols-2 xl:grid-cols-4';
+            [
+              renderMetricStat('延迟', entry.metrics.latencyStats, 'ms', 'from-sky-500/30 via-slate-900/80 to-indigo-500/30'),
+              renderMetricStat('抖动', entry.metrics.jitterStats, 'ms', 'from-cyan-500/30 via-slate-900/80 to-emerald-500/30'),
+              renderMetricStat('丢包', entry.metrics.lossStats, '%', 'from-amber-500/30 via-slate-900/80 to-red-500/30'),
+              renderMetricStat('重传', entry.metrics.retransStats, '次', 'from-purple-500/30 via-slate-900/80 to-blue-500/30'),
+            ]
+              .filter(Boolean)
+              .forEach((node) => metricGrid.appendChild(node));
+            if (metricGrid.childNodes.length) tile.appendChild(metricGrid);
             suiteGrid.appendChild(tile);
           });
           card.appendChild(suiteGrid);
@@ -1878,7 +1914,7 @@ def _login_html() -> str:
           const actions = document.createElement('div');
           actions.className = 'flex flex-wrap items-center justify-between gap-3';
           const buttons = document.createElement('div');
-          buttons.className = 'flex flex-wrap gap-2';
+          buttons.className = 'flex flex-wrap gap-2 translate-y-1 opacity-0 transition duration-200 pointer-events-none group-hover:translate-y-0 group-hover:opacity-100 group-hover:pointer-events-auto';
           const detailsBtn = document.createElement('button');
           detailsBtn.textContent = '详情';
           detailsBtn.className = styles.pillInfo;
@@ -1902,7 +1938,7 @@ def _login_html() -> str:
         const typeLabel = `${test.protocol.toUpperCase()}${test.params?.reverse ? ' (-R)' : ''}`;
 
         const card = document.createElement('div');
-        card.className = 'space-y-3 rounded-2xl border border-slate-800/70 bg-slate-900/60 p-4 shadow-sm shadow-black/30';
+        card.className = 'group space-y-3 rounded-2xl border border-slate-800/70 bg-slate-900/60 p-4 shadow-sm shadow-black/30 transition hover:border-sky-400/40 hover:shadow-sky-500/10';
 
         const header = document.createElement('div');
         header.className = 'flex flex-wrap items-center justify-between gap-2';
@@ -1927,18 +1963,25 @@ def _login_html() -> str:
         metaChips.className = 'flex flex-wrap items-center gap-2 text-xs text-slate-400';
         metaChips.appendChild(makeChip(test.protocol.toLowerCase() === 'udp' ? 'UDP 测试' : 'TCP 测试'));
         if (test.params?.reverse) metaChips.appendChild(makeChip('反向 (-R)'));
-        metaChips.appendChild(makeChip(latencyValue !== null ? `延迟 ${formatMetric(latencyValue)} ms` : '延迟 N/A'));
-        metaChips.appendChild(makeChip(jitterValue !== null ? `抖动 ${formatMetric(jitterValue)} ms` : '抖动 N/A'));
-        if (metrics.lostPercent !== undefined && metrics.lostPercent !== null) {
-          metaChips.appendChild(makeChip(`丢包 ${formatMetric(metrics.lostPercent)}%`));
-        }
         card.appendChild(metaChips);
+
+        const metricGrid = document.createElement('div');
+        metricGrid.className = 'grid gap-2 sm:grid-cols-2 lg:grid-cols-4';
+        [
+          renderMetricStat('延迟', metrics.latencyStats, 'ms', 'from-sky-500/30 via-slate-900/80 to-indigo-500/30'),
+          renderMetricStat('抖动', metrics.jitterStats, 'ms', 'from-cyan-500/30 via-slate-900/80 to-emerald-500/30'),
+          renderMetricStat('丢包', metrics.lossStats, '%', 'from-amber-500/30 via-slate-900/80 to-red-500/30'),
+          renderMetricStat('重传', metrics.retransStats, '次', 'from-purple-500/30 via-slate-900/80 to-blue-500/30'),
+        ]
+          .filter(Boolean)
+          .forEach((node) => metricGrid.appendChild(node));
+        if (metricGrid.childNodes.length) card.appendChild(metricGrid);
 
         const actions = document.createElement('div');
         actions.className = 'flex flex-wrap items-center justify-between gap-3';
 
         const buttons = document.createElement('div');
-        buttons.className = 'flex flex-wrap gap-2';
+        buttons.className = 'flex flex-wrap gap-2 translate-y-1 opacity-0 transition duration-200 pointer-events-none group-hover:translate-y-0 group-hover:opacity-100 group-hover:pointer-events-auto';
         const detailsBtn = document.createElement('button');
         detailsBtn.textContent = '详情';
         detailsBtn.className = styles.pillInfo;
@@ -2109,15 +2152,95 @@ def _login_html() -> str:
 
       if (!res.ok) {
         const details = await res.text();
-        const message = details ? `启动双向套件失败：${details}` : '启动双向套件失败，请确认节点存在且参数有效。';
+        const message = details ? `启动双向测试失败：${details}` : '启动双向测试失败，请确认节点存在且参数有效。';
         setAlert(testAlert, message);
         finishProgress('测试失败');
         return;
       }
 
       await refreshTests();
-      finishProgress('套件完成');
+      finishProgress('双向测试完成');
       clearAlert(testAlert);
+    }
+
+    function normalizeLatency(value) {
+      const num = Number(value);
+      if (!Number.isFinite(num)) return null;
+      return num > 1000 ? num / 1000 : num;
+    }
+
+    function computeStats(values) {
+      const filtered = values.filter((v) => Number.isFinite(v));
+      if (!filtered.length) return null;
+      const max = Math.max(...filtered);
+      const min = Math.min(...filtered);
+      const avg = filtered.reduce((sum, val) => sum + val, 0) / filtered.length;
+      return { min, max, avg };
+    }
+
+    function collectMetricStats(raw) {
+      const result = (raw && raw.iperf_result) || raw || {};
+      const intervals = Array.isArray(result.intervals) ? result.intervals : [];
+      const end = result.end || {};
+      const streams = Array.isArray(end.streams) ? end.streams : [];
+      const sumReceived = end.sum_received || end.sum || {};
+      const sumSent = end.sum_sent || end.sum || {};
+
+      const jitterValues = [];
+      const lossValues = [];
+      const latencyValues = [];
+      const retransValues = [];
+
+      const pushNumber = (arr, value, normalizer = (v) => v) => {
+        const normalized = normalizer(value);
+        if (Number.isFinite(normalized)) arr.push(normalized);
+      };
+
+      const appendStreamMetrics = (stream) => {
+        if (!stream) return;
+        const sender = stream.sender || stream.sum_sent || stream;
+        const receiver = stream.receiver || stream.sum_received || stream;
+        [sender, receiver].forEach((endpoint) => {
+          if (!endpoint) return;
+          pushNumber(latencyValues, endpoint.rtt, normalizeLatency);
+          pushNumber(latencyValues, endpoint.mean_rtt, normalizeLatency);
+          pushNumber(latencyValues, endpoint.max_rtt, normalizeLatency);
+          pushNumber(latencyValues, endpoint.min_rtt, normalizeLatency);
+          pushNumber(jitterValues, endpoint.jitter_ms, Number);
+          pushNumber(retransValues, endpoint.retransmits, Number);
+          if (endpoint.lost_percent !== undefined) pushNumber(lossValues, endpoint.lost_percent, Number);
+          if (endpoint.lost_packets !== undefined && endpoint.packets) {
+            pushNumber(lossValues, (endpoint.lost_packets / endpoint.packets) * 100, Number);
+          }
+        });
+      };
+
+      intervals.forEach((interval) => {
+        const sum = interval?.sum || {};
+        pushNumber(jitterValues, sum.jitter_ms, Number);
+        if (sum.lost_percent !== undefined) pushNumber(lossValues, sum.lost_percent, Number);
+        if (sum.lost_packets !== undefined && sum.packets) {
+          pushNumber(lossValues, (sum.lost_packets / sum.packets) * 100, Number);
+        }
+        const streamsInInterval = Array.isArray(interval?.streams) ? interval.streams : [];
+        streamsInInterval.forEach(appendStreamMetrics);
+      });
+
+      appendStreamMetrics(streams[0]);
+      pushNumber(jitterValues, sumReceived.jitter_ms, Number);
+      pushNumber(jitterValues, sumSent.jitter_ms, Number);
+      if (sumReceived.lost_percent !== undefined) pushNumber(lossValues, sumReceived.lost_percent, Number);
+      if (sumSent.lost_percent !== undefined) pushNumber(lossValues, sumSent.lost_percent, Number);
+      if (sumReceived.lost_packets !== undefined && sumReceived.packets) {
+        pushNumber(lossValues, (sumReceived.lost_packets / sumReceived.packets) * 100, Number);
+      }
+
+      return {
+        latency: computeStats(latencyValues),
+        jitter: computeStats(jitterValues),
+        loss: computeStats(lossValues),
+        retrans: computeStats(retransValues),
+      };
     }
 
     function summarizeSingleMetrics(raw) {
@@ -2134,6 +2257,8 @@ def _login_html() -> str:
         ? (sumReceived.lost_packets / sumReceived.packets) * 100
         : undefined;
 
+      const stats = collectMetricStats(raw);
+
       const bitsPerSecond = pickFirst(
         sumReceived?.bits_per_second,
         receiverStream?.bits_per_second,
@@ -2141,14 +2266,14 @@ def _login_html() -> str:
         senderStream?.bits_per_second,
       );
 
-      const jitterMs = pickFirst(
+      const jitterMs = stats?.jitter?.avg ?? pickFirst(
         sumReceived?.jitter_ms,
         sumSent?.jitter_ms,
         receiverStream?.jitter_ms,
         senderStream?.jitter_ms,
       );
 
-      const lostPercent = pickFirst(
+      const lostPercent = stats?.loss?.avg ?? pickFirst(
         sumReceived?.lost_percent,
         lossFromPackets,
         sumSent?.lost_percent,
@@ -2156,7 +2281,7 @@ def _login_html() -> str:
         senderStream?.lost_percent,
       );
 
-      let latencyMs = pickFirst(
+      let latencyMs = stats?.latency?.avg ?? pickFirst(
         senderStream?.mean_rtt,
         senderStream?.rtt,
         receiverStream?.mean_rtt,
@@ -2166,7 +2291,16 @@ def _login_html() -> str:
         latencyMs = latencyMs / 1000;
       }
 
-      return { bitsPerSecond, jitterMs, lostPercent, latencyMs };
+      return {
+        bitsPerSecond,
+        jitterMs,
+        lostPercent,
+        latencyMs,
+        jitterStats: stats?.jitter || null,
+        lossStats: stats?.loss || null,
+        latencyStats: stats?.latency || null,
+        retransStats: stats?.retrans || null,
+      };
     }
 
     function summarizeTestMetrics(raw) {
@@ -2244,6 +2378,21 @@ def _login_html() -> str:
     function formatMetric(value, decimals = 2) {
       if (value === undefined || value === null || Number.isNaN(value)) return 'N/A';
       return Number(value).toFixed(decimals);
+    }
+
+    function renderMetricStat(label, stats, unit = '', gradient = 'from-slate-700 to-slate-800') {
+      if (!stats) return null;
+      const unitLabel = unit ? ` ${unit}` : '';
+      const wrap = document.createElement('div');
+      wrap.className = `rounded-xl border border-slate-800/60 bg-slate-950/60 p-3 shadow-inner shadow-black/20 bg-gradient-to-br ${gradient}`;
+      wrap.innerHTML = `
+        <div class="flex items-center justify-between text-xs text-slate-400">
+          <span>${label}</span>
+          <span class="text-sm font-semibold text-slate-50">${formatMetric(stats.max)}${unitLabel}</span>
+        </div>
+        <div class="mt-1 text-[11px] text-slate-500">均值 ${formatMetric(stats.avg)}${unitLabel} · 最小 ${formatMetric(stats.min)}${unitLabel}</div>
+      `;
+      return wrap;
     }
 
     function renderBackboneBadges(entries) {
@@ -2366,7 +2515,7 @@ def _login_html() -> str:
       const header = document.createElement('div');
       header.className = 'flex flex-col gap-2 md:flex-row md:items-center md:justify-between';
       const summary = document.createElement('div');
-      summary.innerHTML = `<strong>#${test.id} ${pathLabel}</strong> · 双向套件 · 端口 ${test.params.port} · 时长 ${test.params.duration}s`; 
+      summary.innerHTML = `<strong>#${test.id} ${pathLabel}</strong> · 双向测试 · 端口 ${test.params.port} · 时长 ${test.params.duration}s`;
       header.appendChild(summary);
 
       const deleteBtn = document.createElement('button');
@@ -2425,6 +2574,8 @@ def _login_html() -> str:
     document.getElementById('run-test').addEventListener('click', runTest);
     document.getElementById('run-suite-test').addEventListener('click', runSuiteTest);
     protocolSelect?.addEventListener('change', toggleProtocolOptions);
+    singleTestTab?.addEventListener('click', () => setActiveTestTab('single'));
+    suiteTestTab?.addEventListener('click', () => setActiveTestTab('suite'));
     suiteDstSelect?.addEventListener('change', syncSuitePort);
     suiteSrcSelect?.addEventListener('change', syncSuitePort);
     changePasswordBtn?.addEventListener('click', changePassword);
@@ -2483,6 +2634,7 @@ def _login_html() -> str:
     }
 
     toggleProtocolOptions();
+    setActiveTestTab('single');
     syncSuitePort();
     checkAuth();
     ensureAutoRefresh();
@@ -3145,10 +3297,10 @@ async def create_dual_suite(test: DualSuiteTestCreate, db: Session = Depends(get
     try:
         server_started = await _ensure_iperf_server_running(dst, requested_port)
         plan = [
-            ("TCP 上行", "tcp", False, test.tcp_bandwidth),
-            ("TCP 下行", "tcp", True, test.tcp_bandwidth),
-            ("UDP 上行", "udp", False, test.udp_bandwidth),
-            ("UDP 下行", "udp", True, test.udp_bandwidth),
+            ("TCP 去程", "tcp", False, test.tcp_bandwidth),
+            ("TCP 回程", "tcp", True, test.tcp_bandwidth),
+            ("UDP 去程", "udp", False, test.udp_bandwidth),
+            ("UDP 回程", "udp", True, test.udp_bandwidth),
         ]
 
         results: list[dict] = []
