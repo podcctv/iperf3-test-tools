@@ -1,13 +1,9 @@
 import asyncio
-import hashlib
-import hmac
 import json
 import logging
 import socket
 import time
-import os
 import ipaddress
-from pathlib import Path
 from datetime import datetime, timezone
 from typing import Dict, List
 
@@ -17,6 +13,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from sqlalchemy import or_, select, text
 from sqlalchemy.orm import Session
 
+from .auth import auth_manager
 from .config import settings
 from .constants import DEFAULT_IPERF_PORT
 from .database import SessionLocal, engine, get_db
@@ -447,78 +444,7 @@ async def _probe_streaming_unlock(node: Node) -> StreamingTestResult:
         services=services,
         elapsed_ms=payload.get("elapsed_ms"),
     )
-
-
-def _dashboard_token(password: str) -> str:
-    secret = settings.dashboard_secret.encode()
-    return hmac.new(secret, password.encode(), hashlib.sha256).hexdigest()
-
-
-def _load_dashboard_password() -> str:
-    env_password = os.getenv("DASHBOARD_PASSWORD")
-    if env_password is not None:
-        return _normalize_password(env_password)
-
-    path = settings.dashboard_password_file
-    if path.exists():
-        try:
-            content = path.read_text(encoding="utf-8").strip()
-            if content:
-                return _normalize_password(content)
-        except OSError:
-            logger.exception("Failed to read stored dashboard password from %s", path)
-    return _normalize_password(settings.dashboard_password)
-
-
-def _save_dashboard_password(password: str) -> None:
-    path = settings.dashboard_password_file
-    path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        path.write_text(_normalize_password(password), encoding="utf-8")
-    except OSError:
-        logger.exception("Failed to persist dashboard password to %s", path)
-
-
-DEFAULT_DASHBOARD_PASSWORD = "iperf-pass"
-
-
-def _normalize_password(password: str | None) -> str:
-    if password is None:
-        return DEFAULT_DASHBOARD_PASSWORD
-    stripped = password.strip()
-    return stripped or DEFAULT_DASHBOARD_PASSWORD
-
-
-_dashboard_password = _normalize_password(_load_dashboard_password())
-
-
-def _current_dashboard_password() -> str:
-    return _dashboard_password or DEFAULT_DASHBOARD_PASSWORD
-
-
-def _ensure_dashboard_password_file() -> None:
-    path = settings.dashboard_password_file
-    if path.exists():
-        try:
-            if path.read_text(encoding="utf-8").strip():
-                return
-        except OSError:
-            logger.exception("Failed to read stored dashboard password from %s", path)
-            return
-
-    _save_dashboard_password(_dashboard_password)
-
-
-_ensure_dashboard_password_file()
-
-
-def _log_dashboard_password() -> None:
-    """Log the current dashboard password for initial setup visibility."""
-
-logger.warning("Dashboard password initialized: %s", _current_dashboard_password())
-
-
-_log_dashboard_password()
+dashboard_auth = auth_manager()
 
 
 FAVICON_SVG = """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none'>
@@ -539,19 +465,11 @@ def favicon() -> Response:
 
 
 def _is_authenticated(request: Request) -> bool:
-    stored = request.cookies.get(settings.dashboard_cookie_name)
-    return stored == _dashboard_token(_current_dashboard_password())
+    return dashboard_auth.is_authenticated(request)
 
 
 def _set_auth_cookie(response: Response, password: str) -> None:
-    normalized = _normalize_password(password)
-    response.set_cookie(
-        settings.dashboard_cookie_name,
-        _dashboard_token(normalized),
-        httponly=True,
-        samesite="lax",
-        max_age=60 * 60 * 24,
-    )
+    dashboard_auth.set_auth_cookie(response, password)
 
 
 class NodeHealthMonitor:
@@ -3330,11 +3248,10 @@ def login(response: Response, payload: dict = Body(...)) -> dict:
     if raw_password is None or not str(raw_password).strip():
         raise HTTPException(status_code=400, detail="empty_password")
 
-    password = _normalize_password(str(raw_password))
-    if password != _current_dashboard_password():
+    if not dashboard_auth.verify_password(raw_password):
         raise HTTPException(status_code=401, detail="invalid_password")
 
-    _set_auth_cookie(response, password)
+    _set_auth_cookie(response, str(raw_password))
     return {"status": "ok"}
 
 
@@ -3346,14 +3263,15 @@ def logout(response: Response) -> dict:
 
 @app.post("/auth/change")
 def change_password(request: Request, response: Response, payload: dict = Body(...)) -> dict:
-    global _dashboard_password
+    current_password_raw = payload.get("current_password")
+    new_password_raw = payload.get("new_password")
+    confirm_password_raw = payload.get("confirm_password", new_password_raw)
 
-    current_password = _normalize_password(str(payload.get("current_password", "")))
-    new_password = _normalize_password(str(payload.get("new_password", "")))
-    confirm_password = _normalize_password(str(payload.get("confirm_password", new_password)))
-
-    if not new_password:
+    if new_password_raw is None or not str(new_password_raw).strip():
         raise HTTPException(status_code=400, detail="empty_password")
+
+    new_password = dashboard_auth.normalize_password(str(new_password_raw))
+    confirm_password = dashboard_auth.normalize_password(str(confirm_password_raw))
 
     if len(new_password) < 6:
         raise HTTPException(status_code=400, detail="password_too_short")
@@ -3361,11 +3279,21 @@ def change_password(request: Request, response: Response, payload: dict = Body(.
     if new_password != confirm_password:
         raise HTTPException(status_code=400, detail="password_mismatch")
 
-    if not _is_authenticated(request) and current_password != _current_dashboard_password():
+    authenticated = _is_authenticated(request)
+    if not authenticated and current_password_raw is None:
         raise HTTPException(status_code=401, detail="invalid_password")
 
-    _dashboard_password = new_password
-    _save_dashboard_password(new_password)
+    try:
+        dashboard_auth.update_password(
+            new_password,
+            current_password=str(current_password_raw) if current_password_raw is not None else None,
+            force=authenticated,
+        )
+    except ValueError as exc:
+        if str(exc) == "invalid_password":
+            raise HTTPException(status_code=401, detail="invalid_password")
+        raise HTTPException(status_code=400, detail=str(exc))
+
     _set_auth_cookie(response, new_password)
 
     return {"status": "updated"}

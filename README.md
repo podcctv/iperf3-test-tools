@@ -62,6 +62,20 @@ MASTER_API_PORT=9000 MASTER_WEB_PORT=9100 docker-compose up -d
 * API: `http://localhost:9000`
 * Dashboard: `http://localhost:9100/web` (password set by `DASHBOARD_PASSWORD`, default `iperf-pass`).
 
+## Dashboard login & password recovery / 登录与密码找回
+
+1. 打开运维面板 `http://<host>:9100/web`，输入默认密码 **iperf-pass** 完成解锁（可通过环境变量 `DASHBOARD_PASSWORD` 覆盖）。
+2. 登录后可在页面内直接修改密码（需要二次确认，长度至少 6 位）。
+3. 如果忘记密码或 Cookie 失效，可在容器内用 CLI 强制重置：
+   ```bash
+   # 在部署目录运行，重置 master-api 容器的面板密码
+   docker compose exec master-api python -m app.auth --set-password 'YourNewPass' --force
+
+   # 若只想查看密码文件位置（会跟随 data 挂载持久化）
+   docker compose exec master-api python -m app.auth --show-location
+   ```
+   CLI 会直接写入 `/app/data/dashboard_password.txt` 并输出成功提示，适合无法登录时的紧急恢复。
+
 ## API & dashboard workflow / 使用流程
 
 1. **Register nodes / 注册节点**
