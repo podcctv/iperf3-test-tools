@@ -1049,6 +1049,8 @@ def run_test() -> Any:
         extra_flags.extend(["-l", str(datagram_size)])
     if omit:
         extra_flags.extend(["-O", str(omit)])
+    if reverse_mode:
+        extra_flags.append("--get-server-output")
 
     cmd_parts = [
         "iperf3",

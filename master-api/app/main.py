@@ -1882,7 +1882,34 @@ def _login_html() -> str:
             tile.className = 'space-y-2 rounded-xl border border-slate-800/60 bg-slate-950/40 p-3';
             const heading = document.createElement('div');
             heading.className = 'flex items-center justify-between text-sm text-slate-200';
-            heading.innerHTML = `<span class="font-semibold">${entry.label}</span><span class="text-[11px] uppercase text-slate-400">${entry.protocol.toUpperCase()}${entry.reverse ? ' (-R)' : ''}</span>`;
+
+            const labelGroup = document.createElement('div');
+            labelGroup.className = 'flex items-center gap-2';
+            const labelText = document.createElement('span');
+            labelText.className = 'font-semibold';
+            labelText.textContent = entry.label;
+            labelGroup.appendChild(labelText);
+
+            const badgeRow = document.createElement('div');
+            badgeRow.className = 'flex items-center gap-1';
+            const latencyValue = entry.metrics?.latencyStats?.avg ?? entry.metrics?.latencyMs;
+            if (latencyValue !== undefined && latencyValue !== null) {
+              badgeRow.appendChild(createMiniStat('RTT', formatMetric(latencyValue, 2), 'ms'));
+            }
+            const retransValue = entry.metrics?.retransStats?.avg;
+            if (retransValue !== undefined && retransValue !== null) {
+              badgeRow.appendChild(createMiniStat('重传', formatMetric(retransValue, 0)));
+            }
+            if (badgeRow.childNodes.length) {
+              labelGroup.appendChild(badgeRow);
+            }
+
+            const protoLabel = document.createElement('span');
+            protoLabel.className = 'text-[11px] uppercase text-slate-400';
+            protoLabel.textContent = `${entry.protocol.toUpperCase()}${entry.reverse ? ' (-R)' : ''}`;
+
+            heading.appendChild(labelGroup);
+            heading.appendChild(protoLabel);
             tile.appendChild(heading);
 
             const metricGrid = buildMetricGrid(entry.metrics);
@@ -2160,14 +2187,15 @@ def _login_html() -> str:
       return { min, max, avg };
     }
 
-    function collectMetricStats(raw) {
-      const result = (raw && raw.iperf_result) || raw || {};
-      const intervals = Array.isArray(result.intervals) ? result.intervals : [];
-      const end = result.end || {};
-      const streams = Array.isArray(end.streams) ? end.streams : [];
-      const sumReceived = end.sum_received || end.sum || {};
-      const sumSent = end.sum_sent || end.sum || {};
+    function createMiniStat(label, value, unit = '', accent = 'text-sky-200') {
+      const badge = document.createElement('div');
+      badge.className = 'inline-flex items-center gap-1 rounded-lg border border-slate-800/80 bg-slate-900/70 px-2 py-1 text-[11px] font-semibold text-slate-200';
+      const unitSpan = unit ? `<span class="text-slate-500">${unit}</span>` : '';
+      badge.innerHTML = `<span class="text-slate-400">${label}</span><span class="${accent}">${value}</span>${unitSpan}`;
+      return badge;
+    }
 
+    function collectMetricStats(raw) {
       const jitterValues = [];
       const lossValues = [];
       const latencyValues = [];
@@ -2178,44 +2206,57 @@ def _login_html() -> str:
         if (Number.isFinite(normalized)) arr.push(normalized);
       };
 
-      const appendStreamMetrics = (stream) => {
-        if (!stream) return;
-        const sender = stream.sender || stream.sum_sent || stream;
-        const receiver = stream.receiver || stream.sum_received || stream;
-        [sender, receiver].forEach((endpoint) => {
-          if (!endpoint) return;
-          pushNumber(latencyValues, endpoint.rtt, normalizeLatency);
-          pushNumber(latencyValues, endpoint.mean_rtt, normalizeLatency);
-          pushNumber(latencyValues, endpoint.max_rtt, normalizeLatency);
-          pushNumber(latencyValues, endpoint.min_rtt, normalizeLatency);
-          pushNumber(jitterValues, endpoint.jitter_ms, Number);
-          pushNumber(retransValues, endpoint.retransmits, Number);
-          if (endpoint.lost_percent !== undefined) pushNumber(lossValues, endpoint.lost_percent, Number);
-          if (endpoint.lost_packets !== undefined && endpoint.packets) {
-            pushNumber(lossValues, (endpoint.lost_packets / endpoint.packets) * 100, Number);
+      const consumeResult = (result) => {
+        if (!result) return;
+        const intervals = Array.isArray(result.intervals) ? result.intervals : [];
+        const end = result.end || {};
+        const streams = Array.isArray(end.streams) ? end.streams : [];
+        const sumReceived = end.sum_received || end.sum || {};
+        const sumSent = end.sum_sent || end.sum || {};
+
+        const appendStreamMetrics = (stream) => {
+          if (!stream) return;
+          const sender = stream.sender || stream.sum_sent || stream;
+          const receiver = stream.receiver || stream.sum_received || stream;
+          [sender, receiver].forEach((endpoint) => {
+            if (!endpoint) return;
+            pushNumber(latencyValues, endpoint.rtt, normalizeLatency);
+            pushNumber(latencyValues, endpoint.mean_rtt, normalizeLatency);
+            pushNumber(latencyValues, endpoint.max_rtt, normalizeLatency);
+            pushNumber(latencyValues, endpoint.min_rtt, normalizeLatency);
+            pushNumber(jitterValues, endpoint.jitter_ms, Number);
+            pushNumber(retransValues, endpoint.retransmits, Number);
+            if (endpoint.lost_percent !== undefined) pushNumber(lossValues, endpoint.lost_percent, Number);
+            if (endpoint.lost_packets !== undefined && endpoint.packets) {
+              pushNumber(lossValues, (endpoint.lost_packets / endpoint.packets) * 100, Number);
+            }
+          });
+        };
+
+        intervals.forEach((interval) => {
+          const sum = interval?.sum || {};
+          pushNumber(jitterValues, sum.jitter_ms, Number);
+          if (sum.lost_percent !== undefined) pushNumber(lossValues, sum.lost_percent, Number);
+          if (sum.lost_packets !== undefined && sum.packets) {
+            pushNumber(lossValues, (sum.lost_packets / sum.packets) * 100, Number);
           }
+          const streamsInInterval = Array.isArray(interval?.streams) ? interval.streams : [];
+          streamsInInterval.forEach(appendStreamMetrics);
         });
+
+        appendStreamMetrics(streams[0]);
+        pushNumber(jitterValues, sumReceived.jitter_ms, Number);
+        pushNumber(jitterValues, sumSent.jitter_ms, Number);
+        if (sumReceived.lost_percent !== undefined) pushNumber(lossValues, sumReceived.lost_percent, Number);
+        if (sumSent.lost_percent !== undefined) pushNumber(lossValues, sumSent.lost_percent, Number);
+        if (sumReceived.lost_packets !== undefined && sumReceived.packets) {
+          pushNumber(lossValues, (sumReceived.lost_packets / sumReceived.packets) * 100, Number);
+        }
       };
 
-      intervals.forEach((interval) => {
-        const sum = interval?.sum || {};
-        pushNumber(jitterValues, sum.jitter_ms, Number);
-        if (sum.lost_percent !== undefined) pushNumber(lossValues, sum.lost_percent, Number);
-        if (sum.lost_packets !== undefined && sum.packets) {
-          pushNumber(lossValues, (sum.lost_packets / sum.packets) * 100, Number);
-        }
-        const streamsInInterval = Array.isArray(interval?.streams) ? interval.streams : [];
-        streamsInInterval.forEach(appendStreamMetrics);
-      });
-
-      appendStreamMetrics(streams[0]);
-      pushNumber(jitterValues, sumReceived.jitter_ms, Number);
-      pushNumber(jitterValues, sumSent.jitter_ms, Number);
-      if (sumReceived.lost_percent !== undefined) pushNumber(lossValues, sumReceived.lost_percent, Number);
-      if (sumSent.lost_percent !== undefined) pushNumber(lossValues, sumSent.lost_percent, Number);
-      if (sumReceived.lost_packets !== undefined && sumReceived.packets) {
-        pushNumber(lossValues, (sumReceived.lost_packets / sumReceived.packets) * 100, Number);
-      }
+      const baseResult = (raw && raw.iperf_result) || raw || {};
+      const extraServerResult = baseResult?.server_output_json;
+      [baseResult, extraServerResult].forEach(consumeResult);
 
       return {
         latency: computeStats(latencyValues),
