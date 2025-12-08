@@ -207,6 +207,7 @@ def _service_result(
     detail_parts: list[str | None],
     *,
     tier: str | None = None,
+    region: str | None = None,
 ) -> dict[str, Any]:
     detail = " | ".join([part for part in detail_parts if part]) or None
     result = {
@@ -218,6 +219,8 @@ def _service_result(
     }
     if tier:
         result["tier"] = tier
+    if region:
+        result["region"] = region
     return result
 
 
@@ -371,7 +374,14 @@ def _probe_disney_plus() -> dict[str, Any]:
         status_text = "未知"
 
     detail_parts.append(status_text)
-    return _service_result("disney_plus", "Disney+", unlocked, graph_resp.status_code, detail_parts)
+    return _service_result(
+        "disney_plus",
+        "Disney+",
+        unlocked,
+        graph_resp.status_code,
+        detail_parts,
+        region=country_code,
+    )
 
 
 def _probe_netflix() -> dict[str, Any]:
@@ -409,7 +419,11 @@ def _probe_netflix() -> dict[str, Any]:
             if isinstance(models, dict)
             else {}
         )
-        return meta.get("isAvailable"), geo.get("id")
+        request_country = geo.get("id") or geo.get("requestCountry")
+        if not request_country:
+            region_match = re.search(r'"requestCountry"\s*:\s*"([A-Z]{2})"', html)
+            request_country = region_match.group(1) if region_match else None
+        return meta.get("isAvailable"), request_country
 
     for url in title_urls:
         try:
@@ -428,18 +442,21 @@ def _probe_netflix() -> dict[str, Any]:
         available, detected_region = _parse_react_context(resp.text)
         if detected_region:
             region = region or detected_region
-        availability.append(available)
+        if available is None and resp.status_code in {401, 403, 404}:
+            availability.append(False)
+        else:
+            availability.append(available)
 
     tier: str | None
     unlocked: bool
     if any(val is True for val in availability):
         tier = "full"
         unlocked = True
-        detail = f"全片库 (Region: {region})" if region else "全片库"
+        detail = "全片库"
     elif any(val is False for val in availability):
         tier = "originals"
         unlocked = False
-        detail = f"仅自制片库 (Region: {region})" if region else "仅自制片库"
+        detail = "仅自制片库"
     else:
         tier = "none"
         unlocked = False
@@ -447,7 +464,13 @@ def _probe_netflix() -> dict[str, Any]:
 
     detail_parts = [dns_info, detail, f"Region: {region}" if region else None]
     return _service_result(
-        "netflix", "Netflix", unlocked, status, detail_parts, tier=tier
+        "netflix",
+        "Netflix",
+        unlocked,
+        status,
+        detail_parts,
+        tier=tier,
+        region=region,
     )
 
 
@@ -485,7 +508,14 @@ def _probe_youtube_premium() -> dict[str, Any]:
         detail = f"Region: {region}" if region else "未解锁"
 
     detail_parts = [dns_info, f"HTTP {status}", detail]
-    return _service_result("youtube", "YouTube Premium", unlocked, status, detail_parts)
+    return _service_result(
+        "youtube",
+        "YouTube Premium",
+        unlocked,
+        status,
+        detail_parts,
+        region=region,
+    )
 
 
 def _probe_prime_video() -> dict[str, Any]:
@@ -511,7 +541,14 @@ def _probe_prime_video() -> dict[str, Any]:
         detail_parts.append("检测到代理/VPN")
 
     unlocked = region is not None and not vpn_block
-    return _service_result("prime_video", "Prime Video", unlocked, status, detail_parts)
+    return _service_result(
+        "prime_video",
+        "Prime Video",
+        unlocked,
+        status,
+        detail_parts,
+        region=region,
+    )
 
 
 def _probe_spotify() -> dict[str, Any]:
@@ -531,7 +568,9 @@ def _probe_spotify() -> dict[str, Any]:
     country = country_match.group(1) if country_match else None
     unlocked = country is not None
     detail_parts = [dns_info, f"HTTP {status}", f"Region: {country}" if country else None]
-    return _service_result("spotify", "Spotify", unlocked, status, detail_parts)
+    return _service_result(
+        "spotify", "Spotify", unlocked, status, detail_parts, region=country
+    )
 
 
 def _probe_openai() -> dict[str, Any]:
@@ -571,7 +610,14 @@ def _probe_openai() -> dict[str, Any]:
         f"Unsupported: {unsupported_country}" if unsupported_country else None,
         f"loc={trace_loc}" if trace_loc else None,
     ]
-    return _service_result("openai", "OpenAI/ChatGPT", unlocked, api_status, detail_parts)
+    return _service_result(
+        "openai",
+        "OpenAI/ChatGPT",
+        unlocked,
+        api_status,
+        detail_parts,
+        region=trace_loc,
+    )
 
 
 def _probe_gemini() -> dict[str, Any]:
@@ -581,6 +627,7 @@ def _probe_gemini() -> dict[str, Any]:
     api_probe_status: int | None = None
     api_probe_error: str | None = None
     api_geo_hint: str | None = None
+    trace_loc: str | None = None
 
     try:
         resp = requests.get(url, headers=headers, timeout=10, allow_redirects=True)
@@ -626,36 +673,67 @@ def _probe_gemini() -> dict[str, Any]:
         if part
     )
 
-    return _service_result("gemini", "Google Gemini", unlocked, status or api_probe_status, detail_parts)
+    return _service_result(
+        "gemini", "Google Gemini", unlocked, status or api_probe_status, detail_parts, region=trace_loc
+    )
 
 
 def _probe_hbo() -> dict[str, Any]:
-    dns_info = _dns_detail("play.hbonow.com")
-    try:
-        resp = requests.get(
-            "https://play.hbonow.com/",
-            headers={"User-Agent": STREAMING_UA},
-            timeout=10,
-            allow_redirects=True,
+    endpoints = [
+        "https://www.max.com/geo-availability",
+        "https://www.max.com/",
+        "https://play.max.com/",
+    ]
+    dns_info = _dns_detail("www.max.com")
+    error_detail: str | None = None
+
+    for url in endpoints:
+        try:
+            resp = requests.get(
+                url,
+                headers={"User-Agent": STREAMING_UA},
+                timeout=10,
+                allow_redirects=True,
+            )
+        except requests.RequestException as exc:
+            error_detail = f"请求失败: {exc}"[:150]
+            continue
+
+        status = resp.status_code
+        region_match = None
+        detail: str | None = None
+
+        if resp.headers.get("content-type", "").startswith("application/json"):
+            try:
+                payload = resp.json()
+                region_match = payload.get("countryCode") or payload.get("country")
+                detail = payload.get("inAvailableTerritory")
+                if isinstance(detail, bool):
+                    detail = "已解锁" if detail else "未解锁"
+            except (ValueError, TypeError):
+                pass
+
+        url_effective = resp.url
+        if not detail:
+            if status == 200 and "max.com" in url_effective:
+                detail = "已解锁"
+            elif url_effective.startswith("http://hbogeo.cust.footprint.net") or "geo.html" in url_effective:
+                detail = "未解锁"
+            else:
+                detail = "检测失败"
+
+        detail_parts = [dns_info, f"HTTP {status}", url_effective, detail]
+        return _service_result(
+            "hbo",
+            "HBO",
+            detail == "已解锁",
+            status,
+            detail_parts,
+            region=region_match,
         )
-    except requests.RequestException as exc:
-        detail_parts = [dns_info, f"请求失败: {exc}"[:150]]
-        return _service_result("hbo", "HBO", False, None, detail_parts)
 
-    status = resp.status_code
-    url_effective = resp.url
-    if url_effective.rstrip("/") in {"https://play.hbonow.com", "https://play.hbonow.com"}:
-        unlocked = True
-        detail = "已解锁"
-    elif url_effective.startswith("http://hbogeo.cust.footprint.net") or "geo.html" in url_effective:
-        unlocked = False
-        detail = "未解锁"
-    else:
-        unlocked = False
-        detail = "检测失败"
-
-    detail_parts = [dns_info, f"HTTP {status}", url_effective, detail]
-    return _service_result("hbo", "HBO", unlocked, status, detail_parts)
+    detail_parts = [dns_info, error_detail or "请求失败"]
+    return _service_result("hbo", "HBO", False, None, detail_parts)
 
 
 def _run_streaming_suite() -> tuple[list[dict[str, Any]], int]:

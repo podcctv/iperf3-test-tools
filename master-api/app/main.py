@@ -409,6 +409,8 @@ async def _probe_streaming_unlock(node: Node) -> StreamingTestResult:
                 unlocked=bool(item.get("unlocked")),
                 status_code=item.get("status_code"),
                 detail=item.get("detail"),
+                region=item.get("region"),
+                tier=item.get("tier"),
             )
         )
 
@@ -955,13 +957,13 @@ def _login_html() -> str:
     let nodeRefreshInterval = null;
     let isRefreshingNodes = false;
     const streamingServices = [
-      { key: 'youtube', label: 'YouTube Premium', icon: '▶', color: 'text-rose-300', bg: 'border-rose-500/30 bg-rose-500/10' },
-      { key: 'prime_video', label: 'Prime Video', icon: '🎬', color: 'text-amber-300', bg: 'border-amber-400/40 bg-amber-500/10' },
-      { key: 'netflix', label: 'Netflix', icon: 'N', color: 'text-red-400', bg: 'border-red-500/40 bg-red-500/10' },
-      { key: 'disney_plus', label: 'Disney+', icon: '★', color: 'text-sky-300', bg: 'border-sky-500/40 bg-sky-500/10' },
-      { key: 'hbo', label: 'HBO', icon: 'H', color: 'text-purple-300', bg: 'border-purple-500/40 bg-purple-500/10' },
-      { key: 'openai', label: 'OpenAI', icon: '∞', color: 'text-emerald-300', bg: 'border-emerald-500/40 bg-emerald-500/10' },
-      { key: 'gemini', label: 'Gemini', icon: 'G', color: 'text-sky-200', bg: 'border-sky-400/40 bg-sky-400/10' },
+      { key: 'youtube', label: 'YouTube Premium', color: 'text-rose-300', bg: 'border-rose-500/30 bg-rose-500/10', indicator: 'bg-rose-400' },
+      { key: 'prime_video', label: 'Prime Video', color: 'text-amber-300', bg: 'border-amber-400/40 bg-amber-500/10', indicator: 'bg-amber-400' },
+      { key: 'netflix', label: 'Netflix', color: 'text-red-400', bg: 'border-red-500/40 bg-red-500/10', indicator: 'bg-red-400' },
+      { key: 'disney_plus', label: 'Disney+', color: 'text-sky-300', bg: 'border-sky-500/40 bg-sky-500/10', indicator: 'bg-sky-400' },
+      { key: 'hbo', label: 'HBO', color: 'text-purple-300', bg: 'border-purple-500/40 bg-purple-500/10', indicator: 'bg-purple-400' },
+      { key: 'openai', label: 'OpenAI', color: 'text-emerald-300', bg: 'border-emerald-500/40 bg-emerald-500/10', indicator: 'bg-emerald-400' },
+      { key: 'gemini', label: 'Gemini', color: 'text-sky-200', bg: 'border-sky-400/40 bg-sky-400/10', indicator: 'bg-sky-300' },
     ];
     let streamingStatusCache = {};
     let isStreamingTestRunning = false;
@@ -1048,6 +1050,7 @@ def _login_html() -> str:
           detail: svc.detail,
           tier: svc.tier,
           service: svc.service,
+          region: svc.region,
         };
       });
       streamingStatusCache[node.id] = byService;
@@ -1194,6 +1197,8 @@ def _login_html() -> str:
           const unlocked = status ? status.unlocked : null;
           const tier = status?.tier;
           const detail = status && status.detail ? status.detail.replace(/"/g, "'") : '';
+          const region = status?.region;
+          const tags = [];
 
           let badgeColor = unlocked === true ? `${svc.color} ${svc.bg}` : mutedStyle;
           let statusLabel = unlocked === true ? '可解锁' : unlocked === false ? '未解锁' : '未检测';
@@ -1202,22 +1207,30 @@ def _login_html() -> str:
           if (svc.key === 'netflix' && status) {
             const netflixTier = tier || (unlocked ? 'full' : 'none');
             if (netflixTier === 'full') {
-              badgeLabel = 'Netflix（全解锁）';
               statusLabel = '全片库';
               badgeColor = `${svc.color} ${svc.bg}`;
+              tags.push('全解锁');
             } else if (netflixTier === 'originals') {
-              badgeLabel = 'Netflix（仅自制）';
               statusLabel = '自制片库';
-              badgeColor = 'text-amber-200 border-amber-400/40 bg-amber-400/10';
+              badgeColor = mutedStyle;
+              tags.push('自制剧');
             } else {
-              badgeLabel = 'Netflix';
               statusLabel = '未解锁';
               badgeColor = mutedStyle;
             }
           }
 
+          if (region) {
+            tags.push(region);
+          }
+
+          if (tags.length) {
+            badgeLabel = `${badgeLabel}[${tags.join('][')}]`;
+          }
+
           const title = `${badgeLabel}：${statusLabel}${detail ? ' · ' + detail : ''}`;
-          return `<span class=\"inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold ${badgeColor}\" title=\"${title}\">${svc.icon}<span>${badgeLabel}</span></span>`;
+          const indicator = `<span class=\"inline-block h-2 w-2 rounded-sm ${svc.indicator || 'bg-slate-500'}\"></span>`;
+          return `<span class=\"inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold ${badgeColor}\" title=\"${title}\">${indicator}<span>${badgeLabel}</span></span>`;
         })
         .join('');
     }
@@ -1549,6 +1562,7 @@ def _login_html() -> str:
                 detail: svc.detail,
                 service: svc.service,
                 tier: svc.tier,
+                region: svc.region,
               };
             });
             streamingServices.forEach((svc) => {
