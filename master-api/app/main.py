@@ -3806,7 +3806,184 @@ def _schedules_html() -> str:
     }}
 
     // 渲染定时任务列表
+    // Optimized renderSchedules to prevent chart flickering
     function renderSchedules() {{
+      const container = document.getElementById('schedules-container');
+      
+      if (schedules.length === 0) {{
+        container.innerHTML = '<div class="text-center text-slate-400 py-12">暂无定时任务,点击"新建任务"开始</div>';
+        return;
+      }}
+      
+      // Incremental Update Strategy
+      // 1. Remove Deleted Cards
+      const currentIds = schedules.map(s => s.id);
+      Array.from(container.children).forEach(child => {{
+          const id = parseInt(child.id.replace('schedule-card-', ''));
+          if (!isNaN(id) && !currentIds.includes(id)) {{
+              child.remove();
+          }}
+      }});
+      
+      // 2. Update or Create Cards
+      schedules.forEach(schedule => {{
+        let card = document.getElementById(`schedule-card-${{schedule.id}}`);
+        const srcNode = nodes.find(n => n.id === schedule.src_node_id);
+        const dstNode = nodes.find(n => n.id === schedule.dst_node_id);
+        
+        // Status Badge Logic
+        const statusBadge = schedule.enabled 
+          ? '<span class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-semibold"><span class="h-2 w-2 rounded-full bg-emerald-400"></span>运行中</span>'
+          : '<span class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-slate-700 text-slate-400 text-xs font-semibold"><span class="h-2 w-2 rounded-full bg-slate-500"></span>已暂停</span>';
+
+        const runBtnText = schedule.enabled ? '暂停' : '启用';
+        
+        // Direction Arrow
+        const arrow = schedule.direction === 'download' ? '←' : 
+                      schedule.direction === 'bidirectional' ? '↔' : '→';
+
+        const htmlContent = `
+            <!-- Schedule Header -->
+            <div class="flex items-start justify-between">
+              <div class="flex-1">
+                <h3 class="text-lg font-bold text-white">${{schedule.name}}</h3>
+                <div class="mt-2 flex items-center gap-4 text-sm text-slate-300">
+                  <span id="sched-route-${{schedule.id}}">${{srcNode?.name || 'Unknown'}} ${{arrow}} ${{dstNode?.name || 'Unknown'}}</span>
+                  <span class="text-slate-500">|</span>
+                  <span>${{schedule.protocol.toUpperCase()}}</span>
+                  <span class="text-slate-500">|</span>
+                  <span>${{schedule.duration}}秒</span>
+                  <span class="text-slate-500">|</span>
+                  <span>每${{Math.floor(schedule.interval_seconds / 60)}}分钟</span>
+                  <!-- Traffic Badge -->
+                  <span class="px-2 py-0.5 rounded-md bg-gradient-to-r from-blue-500/20 to-cyan-500/20 border border-blue-500/30 text-xs font-semibold text-blue-200" id="traffic-badge-${{schedule.id}}">
+                    --
+                  </span>
+                </div>
+              </div>
+              
+              <div class="flex flex-col items-end gap-2">
+                <div class="flex items-center gap-3">
+                  <div class="text-right">
+                    <div class="text-xs text-slate-400">Next Run</div>
+                    <div class="text-sm font-mono text-emerald-400" data-countdown="${{schedule.next_run_at || ''}}" data-schedule-id="${{schedule.id}}">Calculating...</div>
+                  </div>
+                  <div id="status-badge-${{schedule.id}}">${{statusBadge}}</div>
+                </div>
+                
+                <div class="flex gap-2 mt-2">
+                  <button onclick="toggleSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:border-sky-500 transition" id="btn-toggle-${{schedule.id}}">
+                    ${{runBtnText}}
+                  </button>
+                  <button onclick="runSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:emerald-500 transition">立即运行</button>
+                  <button onclick="editSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:border-sky-500 transition">编辑</button>
+                  <button onclick="deleteSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-rose-700 bg-rose-900/20 text-xs font-semibold text-rose-300 hover:bg-rose-900/40 transition">删除</button>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Nodes Info with ISP & Masking -->
+            <div class="grid grid-cols-2 gap-4 text-xs mt-4">
+                <div class="glass-card p-2 rounded-lg bg-slate-900/30 flex flex-col gap-1">
+                    <div class="text-slate-400">Source</div>
+                    <div class="font-mono text-sky-300">
+                        ${{srcNode ? maskAddress(srcNode.ip, true) : 'Unknown'}}
+                        <span id="sched-src-isp-${{schedule.id}}" class="ml-1 text-[10px] text-slate-500 border-l border-slate-700 pl-1"></span>
+                    </div>
+                </div>
+                 <div class="glass-card p-2 rounded-lg bg-slate-900/30 flex flex-col gap-1">
+                    <div class="text-slate-400">Destination</div>
+                    <div class="font-mono text-emerald-300">
+                        ${{dstNode ? maskAddress(dstNode.ip, true) : 'Unknown'}}
+                        <span id="sched-dst-isp-${{schedule.id}}" class="ml-1 text-[10px] text-slate-500 border-l border-slate-700 pl-1"></span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Chart Container -->
+            <div class="glass-card rounded-xl p-4 mt-4">
+              <div class="flex items-center justify-between mb-4">
+                <h4 class="text-sm font-bold text-slate-200">24小时带宽监控</h4>
+                <div class="flex items-center gap-2">
+                   <button onclick="toggleHistory(${{schedule.id}})" class="flex items-center gap-1 px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-xs">
+                     <span class="text-lg leading-none">📊</span> 历史记录
+                   </button>
+                   <div class="flex items-center bg-slate-800 rounded-lg p-0.5 border border-slate-700">
+                      <button onclick="changeDate(${{schedule.id}}, -1)" class="w-6 h-6 flex items-center justify-center hover:bg-slate-700 rounded text-slate-400 hover:text-white transition">◀</button>
+                      <span id="date-${{schedule.id}}" class="text-xs font-mono px-2 min-w-[80px] text-center text-slate-300">今天</span>
+                      <button onclick="changeDate(${{schedule.id}}, 1)" class="w-6 h-6 flex items-center justify-center hover:bg-slate-700 rounded text-slate-400 hover:text-white transition">▶</button>
+                   </div>
+                </div>
+              </div>
+              <div class="h-64 w-full">
+                <canvas id="chart-${{schedule.id}}"></canvas>
+              </div>
+              <div id="stats-${{schedule.id}}"></div>
+              
+              <!-- History Panel -->
+              <div id="history-panel-${{schedule.id}}" class="hidden mt-4 pt-4 border-t border-slate-700/50">
+                  <div class="bg-slate-900/50 rounded-lg p-3 max-h-40 overflow-y-auto custom-scrollbar" id="history-list-${{schedule.id}}">
+                      <div class="text-center text-xs text-slate-500 py-2">加载历史记录...</div>
+                  </div>
+              </div>
+            </div>`;
+
+        if (!card) {{
+            // New Card
+            const div = document.createElement('div');
+            div.id = `schedule-card-${{schedule.id}}`;
+            div.className = "glass-card rounded-2xl p-6 space-y-4 mb-6";
+            div.innerHTML = htmlContent;
+            container.appendChild(div);
+            
+            // Initial Chart Load
+            loadChartData(schedule.id);
+            loadHistory(schedule.id);
+            updateCountdowns(); // Ensure countdown starts
+            
+            // Mask/ISP update for new card
+             // Fetch ISPs
+             const fetchIsp = (ip, elemId) => {{
+                 if (!ip) return;
+                 fetch(`/geo?ip=${{ip}}`)
+                   .then(r => r.json())
+                   .then(d => {{
+                       const el = document.getElementById(elemId);
+                       if (el && d.isp) el.textContent = d.isp;
+                   }}).catch(()=>void 0);
+             }};
+             
+             if (srcNode) fetchIsp(srcNode.ip, `sched-src-isp-${{schedule.id}}`);
+             if (dstNode) fetchIsp(dstNode.ip, `sched-dst-isp-${{schedule.id}}`);
+            
+        }} else {{
+            // Existing Card - Diff Updates
+            // Update Status Badge
+            const statusEl = document.getElementById(`status-badge-${{schedule.id}}`);
+            if (statusEl && statusEl.innerHTML !== statusBadge) statusEl.innerHTML = statusBadge;
+            
+            // Update Countdown Attribute
+            const countdownEl = card.querySelector(`[data-countdown]`);
+            if (countdownEl && schedule.next_run_at) {{
+                 if (countdownEl.dataset.countdown !== schedule.next_run_at) {{
+                     countdownEl.dataset.countdown = schedule.next_run_at;
+                     updateCountdowns(); // Refresh text immediately
+                 }}
+            }}
+            
+            // Update Toggle Button Text
+            const btnToggle = document.getElementById(`btn-toggle-${{schedule.id}}`);
+            if (btnToggle && btnToggle.innerText.trim() !== runBtnText) btnToggle.innerText = runBtnText;
+        }}
+      }});
+      
+      // Global Countdown Timer (Ensure only one)
+      if (!window.countdownInterval) {{
+          window.countdownInterval = setInterval(updateCountdowns, 1000);
+      }}
+    }}
+
+    function renderSchedulesLegacy() {{
       const container = document.getElementById('schedules-container');
       
       if (schedules.length === 0) {{
