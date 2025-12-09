@@ -2128,9 +2128,21 @@ def _login_html() -> str:
       }}
     }}
 
-    function syncSuitePort() {{
+    function syncSuitePort() {
       const dst = nodeCache.find((n) => n.id === Number(suiteDstSelect?.value));
       if (dst && suitePort) {
+        const detected = dst.detected_iperf_port || dst.iperf_port;
+        suitePort.value = detected || DEFAULT_IPERF_PORT;
+      }
+    }
+
+
+    async function refreshNodes() {
+      if (isRefreshingNodes) return;
+      isRefreshingNodes = true;
+      try {
+        const previousSrc = Number(srcSelect.value) || null;
+        const previousDst = Number(dstSelect.value) || null;
         const previousSuiteSrc = Number(suiteSrcSelect?.value) || null;
         const previousSuiteDst = Number(suiteDstSelect?.value) || null;
         const res = await apiFetch('/nodes/status');
