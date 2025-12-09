@@ -4232,10 +4232,17 @@ async def _ensure_iperf_server_running(dst: Node, requested_port: int) -> bool:
     return False
 
 
-async def _sync_whitelist_to_agents(db: Session) -> dict:
+async def _sync_whitelist_to_agents(db: Session, max_retries: int = 2) -> dict:
     """
-    Synchronize IP whitelist to all agents.
+    Synchronize IP whitelist to all agents with retry mechanism.
     Whitelist includes all node IPs + Master's own IP.
+    
+    Args:
+        db: Database session
+        max_retries: Maximum number of retry attempts for failed agents
+    
+    Returns:
+        Dictionary with sync results including success/failure counts
     """
     # Get all node IPs
     nodes = db.scalars(select(Node)).all()
@@ -4252,31 +4259,296 @@ async def _sync_whitelist_to_agents(db: Session) -> dict:
         "total_agents": len(nodes),
         "success": 0,
         "failed": 0,
-        "errors": []
+        "errors": [],
+        "retried": 0
     }
     
-    # Send whitelist to each agent
+    failed_nodes = []
+    
+    # First attempt - send whitelist to each agent
     async with httpx.AsyncClient(timeout=10) as client:
         for node in nodes:
-            try:
-                url = f"http://{node.ip}:{node.agent_port}/update_whitelist"
-                response = await client.post(url, json={"allowed_ips": whitelist})
-                
-                if response.status_code == 200:
-                    results["success"] += 1
-                    logger.info(f"Whitelist synced to {node.name} ({node.ip})")
-                else:
-                    results["failed"] += 1
-                    error_msg = f"{node.name}: HTTP {response.status_code}"
-                    results["errors"].append(error_msg)
-                    logger.warning(f"Failed to sync whitelist to {node.name}: {error_msg}")
-            except Exception as e:
-                results["failed"] += 1
-                error_msg = f"{node.name}: {str(e)}"
-                results["errors"].append(error_msg)
-                logger.error(f"Failed to sync whitelist to {node.name}: {e}")
+            success = await _sync_to_single_agent(client, node, whitelist, results)
+            if not success:
+                failed_nodes.append(node)
+    
+    # Retry failed nodes
+    if failed_nodes and max_retries > 0:
+        logger.info(f"Retrying whitelist sync for {len(failed_nodes)} failed agents")
+        
+        for retry_attempt in range(max_retries):
+            if not failed_nodes:
+                break
+            
+            await asyncio.sleep(1)  # Brief delay before retry
+            
+            still_failed = []
+            async with httpx.AsyncClient(timeout=10) as client:
+                for node in failed_nodes:
+                    success = await _sync_to_single_agent(client, node, whitelist, results, is_retry=True)
+                    if success:
+                        results["retried"] += 1
+                    else:
+                        still_failed.append(node)
+            
+            failed_nodes = still_failed
     
     return results
+
+
+async def _sync_to_single_agent(
+    client: httpx.AsyncClient,
+    node: Node,
+    whitelist: list[str],
+    results: dict,
+    is_retry: bool = False
+) -> bool:
+    """
+    Sync whitelist to a single agent.
+    
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        url = f"http://{node.ip}:{node.agent_port}/update_whitelist"
+        response = await client.post(url, json={"allowed_ips": whitelist})
+        
+        if response.status_code == 200:
+            if not is_retry:
+                results["success"] += 1
+            else:
+                # Move from failed to success on retry
+                results["failed"] -= 1
+                results["success"] += 1
+                # Remove error from list
+                results["errors"] = [e for e in results["errors"] if not e.startswith(f"{node.name}:")]
+            
+            logger.info(f"Whitelist synced to {node.name} ({node.ip})" + (" [retry]" if is_retry else ""))
+            return True
+        else:
+            if not is_retry:
+                results["failed"] += 1
+                error_msg = f"{node.name}: HTTP {response.status_code}"
+                results["errors"].append(error_msg)
+                logger.warning(f"Failed to sync whitelist to {node.name}: {error_msg}")
+            return False
+    except Exception as e:
+        if not is_retry:
+            results["failed"] += 1
+            error_msg = f"{node.name}: {str(e)}"
+            results["errors"].append(error_msg)
+            logger.error(f"Failed to sync whitelist to {node.name}: {e}")
+        return False
+
+
+
+@app.post("/admin/sync_whitelist")
+async def sync_whitelist_endpoint(db: Session = Depends(get_db)):
+    """
+    Manually trigger whitelist synchronization to all agents.
+    Returns detailed sync results including success/failure counts.
+    """
+    results = await _sync_whitelist_to_agents(db)
+    
+    return {
+        "status": "ok",
+        "message": f"Whitelist synced to {results['success']}/{results['total_agents']} agents",
+        "results": results
+    }
+
+
+@app.get("/admin/whitelist")
+async def get_whitelist(db: Session = Depends(get_db)):
+    """
+    Get current IP whitelist.
+    Returns all node IPs that are allowed to access agents.
+    """
+    nodes = db.scalars(select(Node)).all()
+    whitelist = [node.ip for node in nodes]
+    
+    # Add Master's own IP if configured
+    master_ip = os.getenv("MASTER_IP", "")
+    if master_ip and master_ip not in whitelist:
+        whitelist.append(master_ip)
+    
+    return {
+        "status": "ok",
+        "whitelist": sorted(whitelist),
+        "count": len(whitelist),
+        "nodes": [
+            {
+                "id": node.id,
+                "name": node.name,
+                "ip": node.ip,
+                "description": node.description
+            }
+            for node in nodes
+        ]
+    }
+
+
+@app.post("/admin/whitelist/add")
+async def add_to_whitelist(
+    ip: str = Body(..., embed=True),
+    description: str = Body(None, embed=True),
+    db: Session = Depends(get_db)
+):
+    """
+    Add an IP address to the whitelist by creating a virtual node entry.
+    This allows adding IPs that don't correspond to actual agent nodes.
+    """
+    import ipaddress
+    
+    # Validate IP address format
+    try:
+        ipaddress.ip_address(ip)
+    except ValueError:
+        # Check if it's CIDR notation
+        try:
+            ipaddress.ip_network(ip, strict=False)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid IP address format: {ip}"
+            )
+    
+    # Check if IP already exists
+    existing = db.scalars(select(Node).where(Node.ip == ip)).first()
+    if existing:
+        return {
+            "status": "ok",
+            "message": f"IP {ip} already in whitelist (node: {existing.name})",
+            "node_id": existing.id
+        }
+    
+    # Create a virtual node entry for this IP
+    node_name = f"whitelist-{ip.replace('.', '-').replace(':', '-').replace('/', '-')}"
+    new_node = Node(
+        name=node_name,
+        ip=ip,
+        agent_port=8000,  # Default, won't be used
+        iperf_port=DEFAULT_IPERF_PORT,
+        description=description or f"Whitelisted IP added manually"
+    )
+    
+    db.add(new_node)
+    db.commit()
+    db.refresh(new_node)
+    
+    # Sync whitelist to all agents
+    try:
+        asyncio.create_task(_sync_whitelist_to_agents(db))
+    except Exception as e:
+        logger.error(f"Failed to trigger whitelist sync: {e}")
+    
+    return {
+        "status": "ok",
+        "message": f"IP {ip} added to whitelist",
+        "node_id": new_node.id,
+        "node_name": new_node.name
+    }
+
+
+@app.delete("/admin/whitelist/remove")
+async def remove_from_whitelist(
+    ip: str = Body(..., embed=True),
+    db: Session = Depends(get_db)
+):
+    """
+    Remove an IP address from the whitelist.
+    This will delete the corresponding node entry.
+    """
+    node = db.scalars(select(Node).where(Node.ip == ip)).first()
+    
+    if not node:
+        raise HTTPException(
+            status_code=404,
+            detail=f"IP {ip} not found in whitelist"
+        )
+    
+    node_name = node.name
+    db.delete(node)
+    db.commit()
+    
+    # Sync whitelist to all agents
+    try:
+        asyncio.create_task(_sync_whitelist_to_agents(db))
+    except Exception as e:
+        logger.error(f"Failed to trigger whitelist sync: {e}")
+    
+    return {
+        "status": "ok",
+        "message": f"IP {ip} removed from whitelist (node: {node_name})"
+    }
+
+
+@app.get("/admin/whitelist/status")
+async def get_whitelist_status(db: Session = Depends(get_db)):
+    """
+    Get whitelist synchronization status across all agents.
+    Queries each agent to verify their current whitelist.
+    """
+    nodes = db.scalars(select(Node)).all()
+    master_whitelist = [node.ip for node in nodes]
+    
+    master_ip = os.getenv("MASTER_IP", "")
+    if master_ip and master_ip not in master_whitelist:
+        master_whitelist.append(master_ip)
+    
+    agent_statuses = []
+    
+    async with httpx.AsyncClient(timeout=5) as client:
+        for node in nodes:
+            try:
+                url = f"http://{node.ip}:{node.agent_port}/whitelist"
+                response = await client.get(url)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    agent_whitelist = data.get("allowed_ips", [])
+                    
+                    # Check if whitelists match
+                    in_sync = set(master_whitelist) == set(agent_whitelist)
+                    
+                    agent_statuses.append({
+                        "node_id": node.id,
+                        "node_name": node.name,
+                        "ip": node.ip,
+                        "status": "in_sync" if in_sync else "out_of_sync",
+                        "whitelist_count": len(agent_whitelist),
+                        "in_sync": in_sync
+                    })
+                else:
+                    agent_statuses.append({
+                        "node_id": node.id,
+                        "node_name": node.name,
+                        "ip": node.ip,
+                        "status": "error",
+                        "error": f"HTTP {response.status_code}",
+                        "in_sync": False
+                    })
+            except Exception as e:
+                agent_statuses.append({
+                    "node_id": node.id,
+                    "node_name": node.name,
+                    "ip": node.ip,
+                    "status": "unreachable",
+                    "error": str(e),
+                    "in_sync": False
+                })
+    
+    in_sync_count = sum(1 for s in agent_statuses if s.get("in_sync", False))
+    
+    return {
+        "status": "ok",
+        "master_whitelist": sorted(master_whitelist),
+        "master_whitelist_count": len(master_whitelist),
+        "agents": agent_statuses,
+        "total_agents": len(agent_statuses),
+        "in_sync_count": in_sync_count,
+        "out_of_sync_count": len(agent_statuses) - in_sync_count
+    }
+
 
 
 async def _call_agent_test(src: Node, payload: dict, duration: int) -> dict:

@@ -1497,5 +1497,15 @@ def get_whitelist() -> Any:
     })
 
 
+@app.route("/whitelist/stats", methods=["GET"])
+def get_whitelist_stats() -> Any:
+    """Get whitelist statistics"""
+    stats = whitelist.get_statistics()
+    return jsonify({
+        "status": "ok",
+        "statistics": stats
+    })
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=AGENT_API_PORT)

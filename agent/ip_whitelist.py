@@ -146,6 +146,46 @@ class IPWhitelist:
         with self._lock:
             self._allowed_ips.discard(ip.strip())
             logger.info(f"Removed IP from whitelist: {ip}")
+    
+    def get_statistics(self) -> dict:
+        """Get whitelist statistics"""
+        with self._lock:
+            total_ips = len(self._allowed_ips)
+            
+            # Count IPv4 vs IPv6
+            ipv4_count = 0
+            ipv6_count = 0
+            cidr_count = 0
+            
+            import ipaddress
+            for ip_str in self._allowed_ips:
+                try:
+                    # Check if it's a network (CIDR)
+                    network = ipaddress.ip_network(ip_str, strict=False)
+                    if '/' in ip_str:
+                        cidr_count += 1
+                        if network.version == 4:
+                            ipv4_count += 1
+                        else:
+                            ipv6_count += 1
+                    else:
+                        # Single IP
+                        ip_obj = ipaddress.ip_address(ip_str)
+                        if ip_obj.version == 4:
+                            ipv4_count += 1
+                        else:
+                            ipv6_count += 1
+                except ValueError:
+                    pass
+            
+            return {
+                "total": total_ips,
+                "ipv4": ipv4_count,
+                "ipv6": ipv6_count,
+                "cidr_ranges": cidr_count,
+                "file_path": str(self.whitelist_file),
+                "file_exists": self.whitelist_file.exists()
+            }
 
 
 # Global whitelist instance
