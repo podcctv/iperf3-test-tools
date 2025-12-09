@@ -76,21 +76,34 @@ def _ensure_iperf_port_column() -> None:
 
 
 def _ensure_whitelist_sync_columns() -> None:
-    if engine.dialect.name != "sqlite":
-        return
-
+    dialect = engine.dialect.name
     with engine.connect() as connection:
-        columns = connection.exec_driver_sql("PRAGMA table_info(nodes)").fetchall()
-        column_names = {col[1] for col in columns}
+        if dialect == "sqlite":
+            columns = connection.exec_driver_sql("PRAGMA table_info(nodes)").fetchall()
+            column_names = {col[1] for col in columns}
+            
+            if "whitelist_sync_status" not in column_names:
+                connection.exec_driver_sql(
+                    "ALTER TABLE nodes ADD COLUMN whitelist_sync_status VARCHAR DEFAULT 'unknown'"
+                )
+            if "whitelist_sync_at" not in column_names:
+                connection.exec_driver_sql(
+                    "ALTER TABLE nodes ADD COLUMN whitelist_sync_at DATETIME"
+                )
+        elif dialect == "postgresql":
+            result = connection.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='nodes'"
+                )
+            )
+            column_names = {row[0] for row in result}
+            
+            if "whitelist_sync_status" not in column_names:
+                connection.execute(text("ALTER TABLE nodes ADD COLUMN whitelist_sync_status VARCHAR DEFAULT 'unknown'"))
+            if "whitelist_sync_at" not in column_names:
+                connection.execute(text("ALTER TABLE nodes ADD COLUMN whitelist_sync_at TIMESTAMPTZ"))
         
-        if "whitelist_sync_status" not in column_names:
-            connection.exec_driver_sql(
-                "ALTER TABLE nodes ADD COLUMN whitelist_sync_status VARCHAR DEFAULT 'unknown'"
-            )
-        if "whitelist_sync_at" not in column_names:
-            connection.exec_driver_sql(
-                "ALTER TABLE nodes ADD COLUMN whitelist_sync_at DATETIME"
-            )
         connection.commit()
 
 
