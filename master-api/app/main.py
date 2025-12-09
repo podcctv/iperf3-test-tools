@@ -1456,9 +1456,7 @@ def _login_html() -> str:
         }
     }
 
-    document.getElementById('close-whitelist-display')?.addEventListener('click', () => {
-        document.getElementById('whitelist-display').classList.add('hidden');
-    });
+
 
     // Event listeners binding specific for whitelist buttons
     // We bind these here because these elements might be inside the modal which is statically defined in HTML
@@ -1478,6 +1476,14 @@ def _login_html() -> str:
         loginHint = document.getElementById('login-hint');
         authHint = document.getElementById('auth-hint');
         originalLoginLabel = loginButton?.textContent || 'Login';
+
+        // Close whitelist display listener (safe binding)
+        const closeWhitelist = document.getElementById('close-whitelist-display');
+        if (closeWhitelist) {
+            closeWhitelist.addEventListener('click', () => {
+                document.getElementById('whitelist-display').classList.add('hidden');
+            });
+        }
         
         // Config elements
         configAlert = document.getElementById('config-alert');
@@ -4154,6 +4160,7 @@ def _schedules_html() -> str:
     document.getElementById('refresh-btn').addEventListener('click', loadSchedules);
 
     // 更新定时任务卡片的流量徽章
+    // 更新定时任务卡片的流量徽章
     async function updateScheduleTrafficBadges() {{
       try {{
         const res = await fetch('/api/daily_traffic_stats');
@@ -4169,23 +4176,33 @@ def _schedules_html() -> str:
             
             const badgeEl = document.getElementById(`traffic-badge-${{schedule.id}}`);
             if (badgeEl && (srcNode || dstNode)) {{
-              // 计算这个任务相关节点的总流量
-              let totalBytes = 0;
-              if (srcNode) totalBytes += srcNode.total_bytes;
-              if (dstNode && dstNode.node_id !== srcNode?.node_id) totalBytes += dstNode.total_bytes;
+              // Helper to format traffic
+              const formatTraffic = (bytes) => {{
+                   const mb = bytes / (1024 * 1024);
+                   const gb = bytes / (1024 * 1024 * 1024);
+                   if (gb >= 1) return gb.toFixed(2) + 'G';
+                   return mb.toFixed(2) + 'M';
+              }};
               
-              // 自动转换单位 Mb/Gb
-              let trafficText;
-              const mb = totalBytes / (1024 * 1024);
-              const gb = totalBytes / (1024 * 1024 * 1024);
-              
-              if (gb >= 1) {{
-                trafficText = gb.toFixed(2) + ' Gb';
-              }} else {{
-                trafficText = mb.toFixed(2) + ' Mb';
+              const parts = [];
+              // Show Source Node Traffic
+              if (srcNode) {{
+                 parts.push(`${{srcNode.name}}: ${{formatTraffic(srcNode.total_bytes)}}`);
+              }}
+              // Show Dist Node Traffic
+              if (dstNode && dstNode.node_id !== srcNode?.node_id) {{
+                 parts.push(`${{dstNode.name}}: ${{formatTraffic(dstNode.total_bytes)}}`);
               }}
               
-              badgeEl.textContent = trafficText;
+              if (parts.length > 0) {{
+                 badgeEl.textContent = parts.join('  ');
+                 badgeEl.title = "今日累计流量";
+                 // Remove pill shape if content is too long? Or keep it. 
+                 // Keeping it might squeeze text. Let's keep class but maybe adjust padding if needed.
+                 // Current class: inline-flex items-center gap-1 rounded-full bg-slate-800/60 px-2 py-0.5 text-[10px] ...
+              }} else {{
+                 badgeEl.textContent = '--';
+              }}
             }}
           }});
         }}
