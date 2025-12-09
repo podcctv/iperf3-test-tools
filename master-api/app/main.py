@@ -874,51 +874,11 @@ def _login_html() -> str:
               <div class="flex flex-wrap items-center gap-3">
                 <button data-refresh-nodes class="rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200">刷新节点</button>
                 <a href="/web/schedules" class="rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-100 shadow-sm transition hover:bg-emerald-500/25">定时任务</a>
+                <button id="open-settings" onclick="toggleSettingsModal(true)" class="rounded-lg border border-indigo-500/40 bg-indigo-500/15 px-4 py-2 text-sm font-semibold text-indigo-100 shadow-sm transition hover:bg-indigo-500/25 inline-flex items-center gap-2">
+                  <span class="text-base">⚙️</span>
+                  <span>设置</span>
+                </button>
                 <button id="logout-btn" class="rounded-lg border border-rose-500/40 bg-rose-500/15 px-4 py-2 text-sm font-semibold text-rose-100 shadow-sm transition hover:bg-rose-500/25">退出登录</button>
-              </div>
-            </div>
-
-            <div class="panel-card rounded-2xl p-5 space-y-3">
-              <div class="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h3 class="text-lg font-semibold text-white">代理配置文件</h3>
-                  <p class="text-sm text-slate-400">导入或导出 agent_configs.json。</p>
-                </div>
-                <div class="flex flex-wrap items-center gap-2">
-                  <input id="config-file-input" type="file" accept="application/json" class="hidden" />
-                  <button id="export-configs" class="rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200">导出</button>
-                  <button id="import-configs" class="rounded-lg border border-sky-500/40 bg-sky-500/15 px-4 py-2 text-sm font-semibold text-sky-100 shadow-sm transition hover:bg-sky-500/25">导入</button>
-                </div>
-              </div>
-              <div id="config-alert" class="hidden rounded-xl border border-slate-700 bg-slate-800/60 px-4 py-3 text-sm text-slate-100"></div>
-              <p class="text-xs text-slate-500">可在不同实例之间迁移配置，便于备份。</p>
-            </div>
-
-            <div class="panel-card rounded-2xl p-6">
-              <div class="mb-4">
-                <h3 class="text-xl font-bold text-white mb-1">Change Password</h3>
-                <p class="text-sm text-slate-400">Update your access password immediately.</p>
-              </div>
-              
-              <div id="change-password-alert" class="alert hidden"></div>
-              
-              <div class="grid gap-4 md:grid-cols-3 items-end">
-                <div class="space-y-1">
-                  <label class="text-xs font-semibold text-slate-300" for="current-password">Current Password</label>
-                  <input id="current-password" type="password" class="form-input" placeholder="Current" />
-                </div>
-                <div class="space-y-1">
-                  <label class="text-xs font-semibold text-slate-300" for="new-password">New Password</label>
-                  <input id="new-password" type="password" class="form-input" placeholder="Min 6 chars" />
-                </div>
-                <div class="space-y-1">
-                  <label class="text-xs font-semibold text-slate-300" for="confirm-password">Confirm New</label>
-                  <input id="confirm-password" type="password" class="form-input" placeholder="Confirm" />
-                </div>
-              </div>
-              
-              <div class="mt-4 flex justify-end">
-                <button id="change-password-btn" class="btn-primary" style="width: auto; padding-left: 2rem; padding-right: 2rem;">Update Password</button>
               </div>
             </div>
 
@@ -1133,6 +1093,87 @@ def _login_html() -> str:
       <div class="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
         <button id="cancel-add-node" class="w-full sm:w-auto rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-slate-500">取消</button>
         <button id="save-node" class="w-full sm:w-auto rounded-xl bg-gradient-to-r from-emerald-500 to-sky-500 px-4 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-500/20 transition hover:scale-[1.01] hover:shadow-xl">保存节点</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div id="settings-modal" class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-950/80 px-4 py-6 backdrop-blur">
+    <div class="relative w-full max-w-2xl rounded-3xl border border-slate-800 bg-slate-900/80 p-6 shadow-2xl shadow-black/40">
+      <button id="close-settings" onclick="toggleSettingsModal(false)" class="absolute right-4 top-4 rounded-full border border-slate-700/80 bg-slate-800/80 p-2 text-slate-300 transition hover:bg-slate-700/80">✕</button>
+      
+      <div class="mb-6 flex items-center justify-between gap-2">
+        <div>
+          <p class="text-xs uppercase tracking-[0.2em] text-indigo-300/80">系统管理</p>
+          <h3 class="text-2xl font-semibold text-white">设置</h3>
+        </div>
+        <span class="rounded-full bg-indigo-500/10 px-3 py-1 text-xs font-semibold text-indigo-200 ring-1 ring-indigo-500/40">Settings</span>
+      </div>
+
+      <!-- Tab Navigation -->
+      <div class="mb-6 inline-flex items-center gap-2 rounded-full border border-slate-700/70 bg-slate-900/70 p-1 shadow-inner shadow-black/20">
+        <button id="password-tab" onclick="setActiveSettingsTab('password')" class="rounded-full bg-gradient-to-r from-indigo-500/80 to-purple-500/80 px-4 py-2 text-sm font-semibold text-slate-50 shadow-lg shadow-indigo-500/15 ring-1 ring-indigo-400/40 transition hover:brightness-110">
+          🔐 密码管理
+        </button>
+        <button id="config-tab" onclick="setActiveSettingsTab('config')" class="rounded-full px-4 py-2 text-sm font-semibold text-slate-300 transition hover:text-white">
+          📦 配置管理
+        </button>
+      </div>
+
+      <!-- Password Management Panel -->
+      <div id="password-panel" class="space-y-4">
+        <div class="rounded-xl border border-slate-800/60 bg-slate-950/40 p-4">
+          <h4 class="mb-3 text-lg font-semibold text-white">修改密码</h4>
+          <p class="mb-4 text-sm text-slate-400">更新您的访问密码以保护系统安全。</p>
+          
+          <div id="change-password-alert" class="alert hidden mb-4"></div>
+          
+          <div class="grid gap-4 md:grid-cols-3">
+            <div class="space-y-2">
+              <label class="text-xs font-semibold text-slate-300" for="current-password">当前密码</label>
+              <input id="current-password" type="password" class="form-input" placeholder="Current Password" />
+            </div>
+            <div class="space-y-2">
+              <label class="text-xs font-semibold text-slate-300" for="new-password">新密码</label>
+              <input id="new-password" type="password" class="form-input" placeholder="最少 6 位" />
+            </div>
+            <div class="space-y-2">
+              <label class="text-xs font-semibold text-slate-300" for="confirm-password">确认新密码</label>
+              <input id="confirm-password" type="password" class="form-input" placeholder="再次输入" />
+            </div>
+          </div>
+          
+          <div class="mt-4 flex justify-end">
+            <button id="change-password-btn" class="rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-500/20 transition hover:scale-[1.02] hover:shadow-xl">
+              更新密码
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Config Management Panel -->
+      <div id="config-panel" class="hidden space-y-4">
+        <div class="rounded-xl border border-slate-800/60 bg-slate-950/40 p-4">
+          <h4 class="mb-3 text-lg font-semibold text-white">代理配置文件</h4>
+          <p class="mb-4 text-sm text-slate-400">导入或导出 agent_configs.json，便于在不同实例之间迁移配置。</p>
+          
+          <div id="config-alert" class="hidden mb-4 rounded-xl border border-slate-700 bg-slate-800/60 px-4 py-3 text-sm text-slate-100"></div>
+          
+          <input id="config-file-input" type="file" accept="application/json" class="hidden" />
+          
+          <div class="flex flex-wrap items-center gap-3">
+            <button id="export-configs" class="rounded-xl border border-slate-700 bg-slate-800/60 px-5 py-2.5 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200 inline-flex items-center gap-2">
+              <span>📤</span>
+              <span>导出配置</span>
+            </button>
+            <button id="import-configs" class="rounded-xl border border-sky-500/40 bg-sky-500/15 px-5 py-2.5 text-sm font-semibold text-sky-100 shadow-sm transition hover:bg-sky-500/25 inline-flex items-center gap-2">
+              <span>📥</span>
+              <span>导入配置</span>
+            </button>
+          </div>
+          
+          <p class="mt-4 text-xs text-slate-500">💡 提示: 配置文件包含所有节点信息，可用于备份或迁移到其他服务器。</p>
+        </div>
       </div>
     </div>
   </div>
@@ -1404,6 +1445,45 @@ def _login_html() -> str:
 
     function closeAddNodeModal() {
       toggleAddNodeModal(false);
+    }
+
+    // Settings Modal Functions
+    const settingsModal = document.getElementById('settings-modal');
+    const passwordPanel = document.getElementById('password-panel');
+    const configPanel = document.getElementById('config-panel');
+    const passwordTab = document.getElementById('password-tab');
+    const configTab = document.getElementById('config-tab');
+
+    function toggleSettingsModal(isOpen) {
+      if (!settingsModal) return;
+      if (isOpen) {
+        settingsModal.classList.remove('hidden');
+        settingsModal.classList.add('flex');
+        setActiveSettingsTab('password'); // Default to password tab
+      } else {
+        settingsModal.classList.add('hidden');
+        settingsModal.classList.remove('flex');
+      }
+    }
+
+    function setActiveSettingsTab(tab) {
+      const isPassword = tab === 'password';
+      
+      // Toggle panels
+      if (passwordPanel) passwordPanel.classList.toggle('hidden', !isPassword);
+      if (configPanel) configPanel.classList.toggle('hidden', isPassword);
+      
+      // Update tab styles
+      if (passwordTab) {
+        passwordTab.className = isPassword
+          ? 'rounded-full bg-gradient-to-r from-indigo-500/80 to-purple-500/80 px-4 py-2 text-sm font-semibold text-slate-50 shadow-lg shadow-indigo-500/15 ring-1 ring-indigo-400/40 transition hover:brightness-110'
+          : 'rounded-full px-4 py-2 text-sm font-semibold text-slate-300 transition hover:text-white';
+      }
+      if (configTab) {
+        configTab.className = isPassword
+          ? 'rounded-full px-4 py-2 text-sm font-semibold text-slate-300 transition hover:text-white'
+          : 'rounded-full bg-gradient-to-r from-indigo-500/80 to-purple-500/80 px-4 py-2 text-sm font-semibold text-slate-50 shadow-lg shadow-indigo-500/15 ring-1 ring-indigo-400/40 transition hover:brightness-110';
+      }
     }
 
     function startProgressBar(container, bar, label, expectedMs, initialText, showCountdown = true) {
