@@ -4464,6 +4464,24 @@ def _schedules_html() -> str:
         const s = Math.floor((diff % 60000) / 1000);
         el.textContent = `${{h.toString().padStart(2, '0')}}:${{m.toString().padStart(2, '0')}}:${{s.toString().padStart(2, '0')}}`;
       }});
+      
+      // Auto-refresh schedules if 'Running...' to detect completion
+      const runningEls = document.querySelectorAll('span[class*="Running"]'); // This regex might be fragile if class changes. 
+      // Better: check if any element text content is 'Running...'
+      let isAnyRunning = false;
+      document.querySelectorAll('[data-countdown]').forEach(el => {{
+          if (el.textContent === 'Running...') isAnyRunning = true;
+      }});
+      
+      if (isAnyRunning) {{
+          // Poll faster if something is running
+             const now = Date.now();
+             if (!window.lastFastPoll || (now - window.lastFastPoll) > 5000) {{
+                 loadSchedules().then(() => {{
+                     window.lastFastPoll = now;
+                 }});
+             }}
+      }}
     }}
 
     // 事件绑定
@@ -4517,43 +4535,14 @@ def _schedules_html() -> str:
             }}
         }}
 
-        // 2. Fetch Schedule Stats for Badges
-        const schedRes = await fetch('/api/daily_schedule_traffic_stats');
-        const schedData = await schedRes.json();
-        
-        if (schedData.status === 'ok') {{
-          const schedules = await (await apiFetch('/schedules')).json();
-          schedules.forEach(schedule => {{
-             // Find nodes involved
-             const srcNode = nodes.find(n => n.id === schedule.src_node_id);
-             const dstNode = nodes.find(n => n.id === schedule.dst_node_id);
-             
-             // Get their GLOBAL daily stats from step 1
-             let srcStat = data.nodes.find(n => n.node_id === schedule.src_node_id);
-             let dstStat = data.nodes.find(n => n.node_id === schedule.dst_node_id);
-             
-             const formatBytes = (b) => {{
-                 if (!b) return '0GB';
-                 const gb = b / (1024 * 1024 * 1024);
-                 return gb.toFixed(2) + 'GB';
-             }};
-             
-             const srcText = srcNode ? `${{srcNode.name}}: ${{formatBytes(srcStat?.total_bytes)}}` : 'Unknown: -';
-             const dstText = dstNode ? `${{dstNode.name}}: ${{formatBytes(dstStat?.total_bytes)}}` : 'Unknown: -';
-             
-             // Update badge
+        // 2. Hide Schedule Badges (As requested)
+        const schedules = await (await apiFetch('/schedules')).json();
+        schedules.forEach(schedule => {{
              const badgeEl = document.getElementById(`traffic-badge-${{schedule.id}}`);
              if (badgeEl) {{
-                 // Render as HTML for colors
-                 badgeEl.innerHTML = `
-                    <span class="text-sky-300/80">${{srcText}}</span>
-                    <span class="text-slate-600 mx-1">|</span>
-                    <span class="text-emerald-300/80">${{dstText}}</span>
-                 `;
-                 badgeEl.className = "px-2 py-1 rounded-md bg-slate-900/50 border border-slate-700/50 text-[10px] font-mono flex items-center shadow-inner"; 
+                 badgeEl.style.display = 'none'; 
              }}
-          }});
-        }}
+        }});
         
       }} catch (err) {{
         console.error('Failed to update traffic stats:', err);
