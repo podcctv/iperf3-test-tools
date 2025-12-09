@@ -3844,11 +3844,14 @@ def _schedules_html() -> str:
 
         const htmlContent = `
             <!-- Schedule Header -->
-            <div class="flex items-start justify-between">
+            <div class="flex items-center justify-between">
               <div class="flex-1">
                 <h3 class="text-lg font-bold text-white">${{schedule.name}}</h3>
                 <div class="mt-2 flex items-center gap-4 text-sm text-slate-300">
-                  <span id="sched-route-${{schedule.id}}">${{srcNode?.name || 'Unknown'}} ${{arrow}} ${{dstNode?.name || 'Unknown'}}</span>
+                  <span id="sched-route-${{schedule.id}}">${{srcNode?.name || 'Unknown'}} <span class="w-6 inline-block text-center text-slate-500">${{
+                    schedule.direction === 'download' ? '←' : 
+                    schedule.direction === 'bidirectional' ? '↔' : '→'
+                  }}</span> ${{dstNode?.name || 'Unknown'}}</span>
                   <span class="text-slate-500">|</span>
                   <span>${{schedule.protocol.toUpperCase()}}</span>
                   <span class="text-slate-500">|</span>
@@ -3862,22 +3865,19 @@ def _schedules_html() -> str:
                 </div>
               </div>
               
-              <div class="flex flex-col items-end gap-2">
-                <div class="flex items-center gap-3">
-                  <div class="text-right">
-                    <div class="text-xs text-slate-400">Next Run</div>
-                    <div class="text-sm font-mono text-emerald-400" data-countdown="${{schedule.next_run_at || ''}}" data-schedule-id="${{schedule.id}}">Calculating...</div>
-                  </div>
-                  <div id="status-badge-${{schedule.id}}">${{statusBadge}}</div>
+              <div class="flex items-center gap-4">
+                <div class="hidden md:block text-xs text-right space-y-0.5">
+                   <div class="text-slate-400">Next Run</div>
+                   <div class="font-mono text-emerald-400" data-countdown="${{schedule.next_run_at || ''}}" data-schedule-id="${{schedule.id}}">Calculating...</div>
                 </div>
-                
-                <div class="flex gap-2 mt-2">
-                  <button onclick="toggleSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:border-sky-500 transition" id="btn-toggle-${{schedule.id}}">
-                    ${{runBtnText}}
-                  </button>
-                  <button onclick="runSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:emerald-500 transition">立即运行</button>
-                  <button onclick="editSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:border-sky-500 transition">编辑</button>
-                  <button onclick="deleteSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-rose-700 bg-rose-900/20 text-xs font-semibold text-rose-300 hover:bg-rose-900/40 transition">删除</button>
+                ${{statusBadge}}
+                <div class="flex items-center gap-2">
+                    <button onclick="toggleSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:border-sky-500 transition whitespace-nowrap" id="btn-toggle-${{schedule.id}}">
+                    ${{schedule.enabled ? '暂停' : '启用'}}
+                    </button>
+                    <button onclick="runSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:emerald-500 transition whitespace-nowrap">立即运行</button>
+                    <button onclick="editSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:border-sky-500 transition whitespace-nowrap">编辑</button>
+                    <button onclick="deleteSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-rose-700 bg-rose-900/20 text-xs font-semibold text-rose-300 hover:bg-rose-900/40 transition whitespace-nowrap">删除</button>
                 </div>
               </div>
             </div>
@@ -3983,113 +3983,7 @@ def _schedules_html() -> str:
       }}
     }}
 
-    function renderSchedulesLegacy() {{
-      const container = document.getElementById('schedules-container');
-      
-      if (schedules.length === 0) {{
-        container.innerHTML = '<div class="text-center text-slate-400 py-12">暂无定时任务,点击"新建任务"开始</div>';
-        return;
-      }}
-      
-      container.innerHTML = schedules.map(schedule => {{
-        const srcNode = nodes.find(n => n.id === schedule.src_node_id);
-        const dstNode = nodes.find(n => n.id === schedule.dst_node_id);
-        const statusBadge = schedule.enabled 
-          ? '<span class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-semibold"><span class="h-2 w-2 rounded-full bg-emerald-400"></span>运行中</span>'
-                <div class="glass-card p-2 rounded-lg bg-slate-900/30 flex flex-col gap-1">
-                    <div class="text-slate-400">Source</div>
-                    <div class="font-mono text-sky-300">
-                        ${{srcNode ? maskAddress(srcNode.ip, true) : 'Unknown'}}
-                        <span id="sched-src-isp-${{schedule.id}}" class="ml-1 text-[10px] text-slate-500 border-l border-slate-700 pl-1"></span>
-                    </div>
-                </div>
-                 <div class="glass-card p-2 rounded-lg bg-slate-900/30 flex flex-col gap-1">
-                    <div class="text-slate-400">Destination</div>
-                    <div class="font-mono text-emerald-300">
-                        ${{dstNode ? maskAddress(dstNode.ip, true) : 'Unknown'}}
-                        <span id="sched-dst-isp-${{schedule.id}}" class="ml-1 text-[10px] text-slate-500 border-l border-slate-700 pl-1"></span>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Chart Container -->
-            <div class="glass-card rounded-xl p-4">
-              <div class="flex items-center justify-between mb-4">
-                <h4 class="text-sm font-semibold text-slate-200">24小时带宽监控</h4>
-                <div class="flex items-center gap-2">
-                  <button onclick="toggleHistory(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:border-sky-500 transition">
-                    📊 历史记录
-                  </button>
-                  <button onclick="changeDate(${{schedule.id}}, -1)" class="px-2 py-1 rounded border border-slate-700 bg-slate-800 text-xs text-slate-300 hover:border-sky-500">◀ 前一天</button>
-                  <span id="date-${{schedule.id}}" class="text-xs text-slate-400">今天</span>
-                  <button onclick="changeDate(${{schedule.id}}, 1)" class="px-2 py-1 rounded border border-slate-700 bg-slate-800 text-xs text-slate-300 hover:border-sky-500">后一天 ▶</button>
-                </div>
-              </div>
-              <canvas id="chart-${{schedule.id}}" height="80"></canvas>
-              <div id="stats-${{schedule.id}}"></div>
-            </div>
-            
-            <!-- History Table (Collapsible) -->
-            <div id="history-panel-${{schedule.id}}" class="glass-card rounded-xl p-4 mt-4 hidden">
-               <div class="flex items-center justify-between mb-3">
-                 <h4 class="text-sm font-semibold text-slate-200">最近执行记录</h4>
-                 <button onclick="toggleHistory(${{schedule.id}})" class="text-xs text-slate-400 hover:text-slate-200">✕ 关闭</button>
-               </div>
-               <div class="overflow-x-auto max-h-60 overflow-y-auto custom-scrollbar">
-                 <table class="w-full text-left text-xs">
-                   <thead class="text-slate-400 border-b border-slate-700 sticky top-0 bg-slate-900/90 backdrop-blur z-10">
-                     <tr>
-                       <th class="pb-2">时间</th>
-                       <th class="pb-2">上传 (Mbps)</th>
-                       <th class="pb-2">下载 (Mbps)</th>
-                       <th class="pb-2">延迟 (ms)</th>
-                       <th class="pb-2">丢包 (%)</th>
-                       <th class="pb-2">状态</th>
-                     </tr>
-                   </thead>
-                   <tbody id="history-${{schedule.id}}" class="text-slate-300 divide-y divide-slate-800">
-                     <tr><td colspan="6" class="py-2 text-center text-slate-500">加载中...</td></tr>
-                   </tbody>
-                 </table>
-               </div>
-            </div>
-          </div>
-        `;
-      }}).join('');
-      
-      // 渲染图表和表格
-      setTimeout(() => {{
-        schedules.forEach(schedule => {{
-          loadChartData(schedule.id);
-        }});
-        updateCountdowns();
-        // 自动刷新逻辑 - 只在有新数据时才刷新图表
-        if (window.refreshInterval) clearInterval(window.refreshInterval);
-        window.refreshInterval = setInterval(async () => {{
-             // 检查是否有新数据，只刷新图表数据，不重绘整个页面
-             const res = await apiFetch('/schedules');
-             const newSchedules = await res.json();
-             
-             // 更新 next_run_at 时间，但不重绘整个页面
-             newSchedules.forEach(ns => {{
-                const countdownEl = document.querySelector(`[data-countdown][data-schedule-id="${{ns.id}}"]`);
-                if (countdownEl && ns.next_run_at) {{
-                  countdownEl.dataset.countdown = ns.next_run_at;
-                }}
-             }});
-             
-             // 只在有新数据时才刷新图表（每分钟检查一次）
-             const now = new Date();
-             if (!window.lastChartRefresh || (now - window.lastChartRefresh) > 60000) {{
-               schedules.forEach(s => loadChartData(s.id));
-               window.lastChartRefresh = now;
-             }}
-        }}, 15000); 
 
-        if (window.countdownInterval) clearInterval(window.countdownInterval);
-        window.countdownInterval = setInterval(updateCountdowns, 1000);
-      }}, 100);
-    }}
 
     function toggleHistory(scheduleId) {{
         const panel = document.getElementById(`history-panel-${{scheduleId}}`);
