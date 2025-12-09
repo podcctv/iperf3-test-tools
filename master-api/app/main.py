@@ -3556,9 +3556,15 @@ def _schedules_html() -> str:
           const time = new Date(r.executed_at).toLocaleTimeString('zh-CN');
           const statusColor = r.status === 'success' ? 'text-emerald-400' : 'text-rose-400';
           const s = r.test_result?.summary || {{}};
+          const protocol = r.test_result?.protocol || 'tcp';
           
           // Convert bits_per_second to Mbps
           const speedMbps = s.bits_per_second ? (s.bits_per_second / 1000000).toFixed(2) : '-';
+          
+          // TCP 不显示丢包，UDP 才有丢包数据
+          const lostPercent = protocol === 'udp' 
+            ? (s.lost_percent?.toFixed(2) || '-')
+            : '<span class="text-slate-600">N/A</span>';
           
           return `
             <tr>
@@ -3566,7 +3572,7 @@ def _schedules_html() -> str:
               <td class="py-2 text-sky-400">${{speedMbps}}</td>
               <td class="py-2 text-emerald-400">${{speedMbps}}</td>
               <td class="py-1">${{s.latency_ms?.toFixed(2) || '-'}}</td>
-              <td class="py-1">${{s.lost_percent?.toFixed(2) || '-'}}</td>
+              <td class="py-1">${{lostPercent}}</td>
               <td class="py-1 ${{statusColor}} text-xs" title="${{r.error_message || ''}}">
                 ${{r.status}}
                 ${{r.status === 'failed' ? '<span class="ml-1 cursor-help">ⓘ</span>' : ''}}
@@ -4520,8 +4526,17 @@ def _load_schedules_on_startup():
         ).all()
         
         for schedule in schedules:
+            # 如果 next_run_at 为空，初始化它
+            if not schedule.next_run_at:
+                from datetime import timedelta
+                if schedule.last_run_at:
+                    schedule.next_run_at = schedule.last_run_at + timedelta(seconds=schedule.interval_seconds)
+                else:
+                    schedule.next_run_at = datetime.now(timezone.utc) + timedelta(seconds=schedule.interval_seconds)
+                db.commit()
+            
             _add_schedule_to_scheduler(schedule)
-            logger.info(f"Loaded schedule {schedule.id}: {schedule.name}")
+            logger.info(f"Loaded schedule {schedule.id}: {schedule.name}, next run at {schedule.next_run_at}")
     finally:
         db.close()
 
