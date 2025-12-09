@@ -1287,10 +1287,6 @@ def _login_html() -> str:
     let changePasswordAlert, currentPasswordInput, newPasswordInput, confirmPasswordInput, changePasswordBtn;
 
     // Initialize all elements when DOM is ready
-    let loginButton, passwordInput, loginStatus, loginStatusDot, loginStatusLabel, loginHint, authHint;
-    let configAlert, importConfigsBtn, exportConfigsBtn, configFileInput;
-    let changePasswordAlert, currentPasswordInput, newPasswordInput, confirmPasswordInput, changePasswordBtn;
-    let originalLoginLabel;
     
     // Settings Modal Functions
     function toggleSettingsModal(show) {
@@ -4227,14 +4223,7 @@ async def schedules_page(request: Request):
     if not auth_manager().is_authenticated(request):
         return HTMLResponse(content="<script>window.location.href='/web';</script>")
     
-    html = _schedules_html()
-    # Inject apiFetch helper for schedules page scripts
-    js_inject = """
-    <script>
-    const apiFetch = (url, options = {}) => fetch(url, { credentials: 'include', ...options });
-    </script>
-    """
-    return HTMLResponse(content=html.replace("<head>", "<head>" + js_inject))
+    return HTMLResponse(content=_schedules_html())
 
 
 @app.get("/auth/status")
