@@ -638,11 +638,13 @@ async def _on_shutdown() -> None:
 
 @app.get("/geo")
 async def geo_lookup(ip: str = Query(..., description="IP 地址")) -> dict:
-    code = await lookup_geo_country_code(ip)
-    return {"country_code": code}
+    info = await lookup_geo_info(ip)
+    if info:
+        return {"country_code": info.get("country_code"), "isp": info.get("isp")}
+    return {"country_code": None, "isp": None}
 
 
-async def lookup_geo_country_code(ip: str) -> str | None:
+async def lookup_geo_info(ip: str) -> dict | None:
     now = time.time()
     cached = _geo_cache.get(ip)
     if cached and now - cached[1] < GEO_CACHE_TTL_SECONDS:
@@ -653,40 +655,49 @@ async def lookup_geo_country_code(ip: str) -> str | None:
         _geo_cache[cache_key] = (None, now)
         return None
 
-    async def _fetch_from_ipapi(client: httpx.AsyncClient, target_ip: str) -> str | None:
-        resp = await client.get(f"https://ipapi.co/{target_ip}/country/")
-        if resp.status_code == 200:
-            code = resp.text.strip().upper()
-            if len(code) == 2:
-                return code
+    async def _fetch_from_ipapi(client: httpx.AsyncClient, target_ip: str) -> dict | None:
+        try:
+            resp = await client.get(f"https://ipapi.co/{target_ip}/json/")
+            if resp.status_code == 200:
+                data = resp.json()
+                code = data.get("country_code")
+                isp = data.get("org") or data.get("asn") 
+                if code:
+                    return {"country_code": code.upper(), "isp": isp}
+        except Exception:
+            pass
         return None
 
-    async def _fetch_from_ip_api(client: httpx.AsyncClient, target_ip: str) -> str | None:
-        resp = await client.get(
-            f"https://ip-api.com/json/{target_ip}?fields=status,countryCode,message"
-        )
-        if resp.status_code == 200:
-            data = resp.json()
-            if data.get("status") == "success":
-                code = data.get("countryCode")
-                if isinstance(code, str) and len(code) == 2:
-                    return code.upper()
+    async def _fetch_from_ip_api(client: httpx.AsyncClient, target_ip: str) -> dict | None:
+        try:
+            resp = await client.get(
+                f"http://ip-api.com/json/{target_ip}?fields=status,countryCode,isp,org,as,message"
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get("status") == "success":
+                    code = data.get("countryCode")
+                    isp = data.get("isp") or data.get("org") or data.get("as")
+                    if isinstance(code, str) and len(code) == 2:
+                        return {"country_code": code.upper(), "isp": isp}
+        except Exception:
+            pass
         return None
 
     try:
         async with httpx.AsyncClient(timeout=5) as client:
             for fetcher in (
+                lambda c: _fetch_from_ip_api(c, resolved_ip), # ip-api.com usually has better ISP names
                 lambda c: _fetch_from_ipapi(c, resolved_ip),
-                lambda c: _fetch_from_ip_api(c, resolved_ip),
             ):
-                code = await fetcher(client)
-                if code:
-                    _geo_cache[cache_key] = (code, now)
+                result = await fetcher(client)
+                if result:
+                    _geo_cache[cache_key] = (result, now)
                     if cache_key != resolved_ip:
-                        _geo_cache[resolved_ip] = (code, now)
-                    return code
+                        _geo_cache[resolved_ip] = (result, now)
+                    return result
     except Exception:  # pragma: no cover - external dependency
-        logger.exception("Failed to lookup geo country code for %s", ip)
+        logger.exception("Failed to lookup geo info for %s", ip)
 
     _geo_cache[cache_key] = (None, now)
     return None
@@ -2366,6 +2377,16 @@ def _login_html() -> str:
     }
 
 
+    function maskIp(ip, hidden) {
+      if (!hidden || !ip) return ip;
+      // Mask last two segments: 1.2.3.4 -> 1.2.*.*
+      const parts = ip.split('.');
+      if (parts.length === 4) {
+          return `${parts[0]}.${parts[1]}.*.*`;
+      }
+      return ip.replace(/\d+$/, '*'); // Fallback for IPv6 or other
+    }
+
     async function refreshNodes() {
       if (isRefreshingNodes) return;
       isRefreshingNodes = true;
@@ -2426,10 +2447,12 @@ def _login_html() -> str:
               </div>
               ${backboneBadges ? `<div class=\"flex flex-wrap items-center gap-2\">${backboneBadges}</div>` : ''}
               <div class="flex flex-wrap items-center gap-2" data-streaming-badges="${node.id}">${streamingBadges || ''}</div>
-              <p class="${styles.textMuted} flex items-center gap-2">
-                <span class="font-mono" data-node-ip-display="${node.id}">${ipMasked}</span>
-                <span class="text-slate-500" data-node-agent-port="${node.id}">:${agentPortDisplay}</span>
-                <span data-node-iperf-display="${node.id}">· iperf ${iperfPortDisplay}${node.description ? ' · ' + node.description : ''}</span>
+              <p class="${styles.textMuted} flex items-center gap-2 text-xs">
+                <span class="font-mono text-slate-400" data-node-ip-display="${node.id}">${ipMasked}</span>
+                <span class="text-slate-600" data-node-agent-port="${node.id}">:${agentPortDisplay}</span>
+                
+                <!-- ISP Display -->
+                <span class="text-slate-500 border-l border-slate-700 pl-2" id="isp-${node.id}"></span>
               </p>
             </div>
             <div class="flex flex-wrap items-center justify-start gap-2 lg:flex-col lg:items-end lg:justify-center lg:min-w-[170px] opacity-100 md:opacity-0 md:pointer-events-none md:transition md:duration-200 md:group-hover:opacity-100 md:group-hover:pointer-events-auto md:focus-within:opacity-100 md:focus-within:pointer-events-auto">
@@ -2509,6 +2532,22 @@ def _login_html() -> str:
           suiteDstSelect.value = String(firstNodeId);
         }
       }
+
+      // Fetch ISP info
+      nodes.forEach(node => {
+          if (!ipPrivacyState[node.id]) {
+             fetch(`/geo?ip=${node.ip}`)
+               .then(r => r.json())
+               .then(d => {
+                   const el = document.getElementById(`isp-${node.id}`);
+                   if (el && d.isp) {
+                       el.textContent = d.isp;
+                       el.title = d.country_code || '';
+                   }
+               })
+               .catch(() => {});
+          }
+      });
 
       syncTestPort();
       syncSuitePort();
@@ -3989,17 +4028,22 @@ def _schedules_html() -> str:
       const udpUpData = labels.map(t => timeMap.get(t).udp_up || 0);
       const udpDownData = labels.map(t => timeMap.get(t).udp_down || 0);
       
-      // Stats Calculation (Simplified: just max/avg of ALL valid uploads/downloads)
-      const allUp = [...tcpUpData, ...udpUpData].map(v => parseFloat(v)||0).filter(v=>v>0);
-      const allDown = [...tcpDownData, ...udpDownData].map(v => parseFloat(v)||0).filter(v=>v>0);
+      // Stats Calculation Helper
+      const calcStats = (data) => {{
+          const values = data.map(v => parseFloat(v)||0).filter(v => v > 0);
+          if (!values.length) return null;
+          const max = Math.max(...values);
+          const avg = values.reduce((a, b) => a + b, 0) / values.length;
+          const cur = values[values.length - 1];
+          return {{ max: max.toFixed(2), avg: avg.toFixed(2), cur: cur.toFixed(2) }};
+      }};
 
-      const uploadMax = allUp.length ? Math.max(...allUp) : 0;
-      const uploadAvg = allUp.length ? allUp.reduce((a,b)=>a+b,0)/allUp.length : 0;
-      const uploadCurrent = allUp.length ? allUp[allUp.length-1] : 0; 
-
-      const downloadMax = allDown.length ? Math.max(...allDown) : 0;
-      const downloadAvg = allDown.length ? allDown.reduce((a,b)=>a+b,0)/allDown.length : 0;
-      const downloadCurrent = allDown.length ? allDown[allDown.length-1] : 0;
+      const statsData = [
+         {{ label: 'TCP 上传', color: 'sky', val: calcStats(tcpUpData) }},
+         {{ label: 'TCP 下载', color: 'emerald', val: calcStats(tcpDownData) }},
+         {{ label: 'UDP 上传', color: 'yellow', val: calcStats(udpUpData) }},
+         {{ label: 'UDP 下载', color: 'purple', val: calcStats(udpDownData) }}
+      ].filter(item => item.val);
       
       // 创建图表
       const ctx = canvas.getContext('2d');
@@ -4048,7 +4092,7 @@ def _schedules_html() -> str:
               tension: 0.4,
               fill: true
             }}
-          ]
+          ].filter(ds => ds.data.some(v => parseFloat(v) > 0))
         }},
         options: {{
           responsive: true,
@@ -4131,20 +4175,25 @@ def _schedules_html() -> str:
       // 显示统计信息
       const statsEl = document.getElementById(`stats-${{scheduleId}}`);
       if (statsEl) {{
-        statsEl.innerHTML = `
-          <div class="text-xs text-slate-400 mt-2 flex gap-6">
-            <div>
-              <span class="text-sky-400">Max 上传:</span> ${{uploadMax.toFixed(2)}}Mb; 
-              <span class="text-sky-400">Average 上传:</span> ${{uploadAvg.toFixed(2)}}Mb; 
-              <span class="text-sky-400">Current 上传:</span> ${{uploadCurrent.toFixed(2)}}Mb;
-            </div>
-            <div>
-              <span class="text-emerald-400">Max 下载:</span> ${{downloadMax.toFixed(2)}}Mb; 
-              <span class="text-emerald-400">Average 下载:</span> ${{downloadAvg.toFixed(2)}}Mb; 
-              <span class="text-emerald-400">Current 下载:</span> ${{downloadCurrent.toFixed(2)}}Mb;
-            </div>
-          </div>
-        `;
+          if (statsData.length === 0) {{
+              statsEl.innerHTML = '<div class="text-xs text-slate-500 mt-2 text-center">暂无数据</div>';
+          }} else {{
+              statsEl.innerHTML = `<div class="mt-4 grid grid-cols-2 lg:grid-cols-4 gap-3">` + 
+              statsData.map(s => `
+                <div class="rounded-xl border border-${{s.color}}-500/20 bg-${{s.color}}-500/5 p-3 text-xs shadow-sm">
+                  <div class="flex items-center gap-2 mb-2 pb-2 border-b border-${{s.color}}-500/10">
+                    <div class="w-1.5 h-1.5 rounded-full bg-${{s.color}}-400 shadow shadow-${{s.color}}-400/50"></div>
+                    <span class="font-bold text-${{s.color}}-400">${{s.label}}</span>
+                  </div>
+                  <div class="space-y-1">
+                    <div class="flex justify-between items-center text-${{s.color}}-100/70"><span>Max</span><span class="font-mono text-${{s.color}}-100 font-medium">${{s.val.max}}<span class="text-[10px] opacity-60 ml-0.5">Mb</span></span></div>
+                    <div class="flex justify-between items-center text-${{s.color}}-100/70"><span>Avg</span><span class="font-mono text-${{s.color}}-100 font-medium">${{s.val.avg}}<span class="text-[10px] opacity-60 ml-0.5">Mb</span></span></div>
+                    <div class="flex justify-between items-center text-${{s.color}}-100/70"><span>Cur</span><span class="font-mono text-${{s.color}}-100 font-medium">${{s.val.cur}}<span class="text-[10px] opacity-60 ml-0.5">Mb</span></span></div>
+                  </div>
+                </div>
+              `).join('') + 
+              `</div>`;
+          }}
       }}
       
       // 更新日期显示
@@ -5085,13 +5134,13 @@ async def get_daily_traffic_stats(db: Session = Depends(get_db)):
                     
                     if "sum_sent" in end_data:
                         bytes_sent = end_data["sum_sent"].get("bytes", 0)
-                    elif "sum" in end_data: # Fallback for some versions
-                         bytes_sent = end_data["sum"].get("bytes", 0)
                          
                     if "sum_received" in end_data:
                         bytes_recvd = end_data["sum_received"].get("bytes", 0)
-                    elif "sum" in end_data:
-                         bytes_recvd = end_data["sum"].get("bytes", 0)
+                    
+                    # Only fallback if BOTH are missing (very old iperf or minimal output)
+                    if bytes_sent == 0 and bytes_recvd == 0 and "sum" in end_data:
+                         bytes_sent = end_data["sum"].get("bytes", 0)
                     
                     # Add to total (Consumption includes both directions if applicable, or just the main payload)
                     # For unidirectional, one is usually 0 or small control traffic
@@ -5145,8 +5194,11 @@ async def get_daily_schedule_traffic_stats(db: Session = Depends(get_db)):
             iperf_data = raw_result.get("iperf_result", {})
             end_data = iperf_data.get("end", {})
             
-            bytes_sent = end_data.get("sum_sent", {}).get("bytes", 0) or end_data.get("sum", {}).get("bytes", 0)
-            bytes_recvd = end_data.get("sum_received", {}).get("bytes", 0) or end_data.get("sum", {}).get("bytes", 0)
+            bytes_sent = end_data.get("sum_sent", {}).get("bytes", 0)
+            bytes_recvd = end_data.get("sum_received", {}).get("bytes", 0)
+            
+            if bytes_sent == 0 and bytes_recvd == 0:
+                bytes_sent = end_data.get("sum", {}).get("bytes", 0)
             
             stats[schedule_id] = stats.get(schedule_id, 0) + (bytes_sent + bytes_recvd)
         except Exception:
