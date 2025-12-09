@@ -5225,16 +5225,27 @@ async def _sync_to_single_agent(
             logger.info(f"Whitelist synced to {node.name} ({node.ip})" + (" [retry]" if is_retry else ""))
             
             # Update Node status
+            # Update Node status
             if db:
                 node.whitelist_sync_status = "synced"
+                node.whitelist_sync_message = "正常"
                 node.whitelist_sync_at = datetime.utcnow()
                 db.commit()
             
             return True
         else:
+            error_detail = f"HTTP {response.status_code}"
+            # Try to get error message from response
+            try:
+                err_json = response.json()
+                if "error" in err_json:
+                     error_detail += f" - {err_json['error']}"
+            except:
+                pass
+                
             if not is_retry:
                 results["failed"] += 1
-                error_msg = f"{node.name}: HTTP {response.status_code}"
+                error_msg = f"{node.name}: {error_detail}"
                 results["errors"].append(error_msg)
                 logger.warning(f"Failed to sync whitelist to {node.name}: {error_msg}")
             
@@ -5242,12 +5253,23 @@ async def _sync_to_single_agent(
             # We'll update it to failed for now, if retry succeeds it will overwrite
             if db:
                 node.whitelist_sync_status = "failed"
+                node.whitelist_sync_message = error_detail
                 node.whitelist_sync_at = datetime.utcnow()
                 db.commit()
                 
             return False
     except Exception as e:
         if not is_retry:
+            results["failed"] += 1
+            results["errors"].append(f"{node.name}: {str(e)}")
+            
+        if db:
+            node.whitelist_sync_status = "failed"
+            node.whitelist_sync_message = str(e)
+            node.whitelist_sync_at = datetime.utcnow()
+            db.commit()
+            
+        return False
             results["failed"] += 1
             error_msg = f"{node.name}: {str(e)}"
             results["errors"].append(error_msg)

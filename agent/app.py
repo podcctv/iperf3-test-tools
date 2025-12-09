@@ -1468,11 +1468,11 @@ def update_whitelist() -> Any:
     master_ip = os.getenv("MASTER_IP", "")
     client_ip = request.headers.get('X-Real-IP') or request.headers.get('X-Forwarded-For') or request.remote_addr
     
-    if master_ip and client_ip != master_ip:
-        app.logger.warning(f"Rejected whitelist update from non-master IP: {client_ip}")
+    if master_ip and master_ip != "0.0.0.0" and client_ip != master_ip:
+        app.logger.warning(f"Rejected whitelist update from non-master IP: {client_ip} (expected {master_ip})")
         return jsonify({
             "status": "error",
-            "error": "Only Master can update whitelist"
+            "error": f"Only Master can update whitelist. Request from {client_ip}, expected {master_ip}"
         }), 403
     
     try:
