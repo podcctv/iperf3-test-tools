@@ -1178,6 +1178,9 @@ def _login_html() -> str:
         <button id="config-tab" onclick="setActiveSettingsTab('config')" class="rounded-full px-4 py-2 text-sm font-semibold text-slate-300 transition hover:text-white">
           📦 配置管理
         </button>
+        <button id="whitelist-tab" onclick="setActiveSettingsTab('whitelist')" class="rounded-full px-4 py-2 text-sm font-semibold text-slate-300 transition hover:text-white">
+          🛡️ IP 白名单
+        </button>
       </div>
 
       <!-- Password Management Panel -->
@@ -1233,6 +1236,69 @@ def _login_html() -> str:
           </div>
           
           <p class="mt-4 text-xs text-slate-500">💡 提示: 配置文件包含所有节点信息，可用于备份或迁移到其他服务器。</p>
+        </div>
+      </div>
+
+      <!-- IP Whitelist Management Panel -->
+      <div id="whitelist-panel" class="hidden space-y-4">
+        <div class="rounded-xl border border-slate-800/60 bg-slate-950/40 p-4">
+          <h4 class="mb-3 text-lg font-semibold text-white">IP 白名单管理</h4>
+          <p class="mb-4 text-sm text-slate-400">管理允许访问 Agent 的 IP 地址列表，支持 CIDR 网段。</p>
+          
+          <div id="whitelist-alert" class="hidden mb-4 rounded-xl border border-slate-700 bg-slate-800/60 px-4 py-3 text-sm text-slate-100"></div>
+          
+          <!-- Whitelist Stats -->
+          <div id="whitelist-stats" class="mb-4 grid grid-cols-3 gap-3">
+            <div class="rounded-lg border border-slate-700/50 bg-slate-900/40 p-3">
+              <div class="text-xs text-slate-400">总 IP 数</div>
+              <div id="whitelist-total" class="text-2xl font-bold text-white">--</div>
+            </div>
+            <div class="rounded-lg border border-slate-700/50 bg-slate-900/40 p-3">
+              <div class="text-xs text-slate-400">同步状态</div>
+              <div id="whitelist-sync-status" class="text-sm font-semibold text-emerald-400">● 已同步</div>
+            </div>
+            <div class="rounded-lg border border-slate-700/50 bg-slate-900/40 p-3">
+              <div class="text-xs text-slate-400">CIDR 范围</div>
+              <div id="whitelist-cidr-count" class="text-2xl font-bold text-white">--</div>
+            </div>
+          </div>
+          
+          <!-- Whitelist Actions -->
+          <div class="flex flex-wrap items-center gap-3">
+            <button id="view-whitelist-btn" class="rounded-xl border border-slate-700 bg-slate-800/60 px-5 py-2.5 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200 inline-flex items-center gap-2">
+              <span>👁️</span>
+              <span>查看白名单</span>
+            </button>
+            <button id="sync-whitelist-btn" class="rounded-xl border border-emerald-500/40 bg-emerald-500/15 px-5 py-2.5 text-sm font-semibold text-emerald-100 shadow-sm transition hover:bg-emerald-500/25 inline-flex items-center gap-2">
+              <span>🔄</span>
+              <span>同步到所有 Agent</span>
+            </button>
+            <button id="check-whitelist-status-btn" class="rounded-xl border border-blue-500/40 bg-blue-500/15 px-5 py-2.5 text-sm font-semibold text-blue-100 shadow-sm transition hover:bg-blue-500/25 inline-flex items-center gap-2">
+              <span>📊</span>
+              <span>检查同步状态</span>
+            </button>
+          </div>
+          
+          <!-- Whitelist Display Area -->
+          <div id="whitelist-display" class="hidden mt-4 rounded-lg border border-slate-700 bg-slate-900/50 p-4 max-h-96 overflow-y-auto">
+            <div class="flex items-center justify-between mb-3">
+              <h5 class="text-sm font-semibold text-white">当前白名单</h5>
+              <button id="close-whitelist-display" class="text-slate-400 hover:text-white">✕</button>
+            </div>
+            <div id="whitelist-list" class="space-y-2">
+              <!-- Whitelist items will be displayed here -->
+            </div>
+          </div>
+          
+          <!-- Sync Results Display -->
+          <div id="whitelist-sync-result" class="hidden mt-4 rounded-lg border border-slate-700 bg-slate-900/50 p-4">
+            <h5 class="text-sm font-semibold text-white mb-2">同步结果</h5>
+            <div id="sync-result-content" class="text-xs text-slate-300">
+              <!-- Sync results will be displayed here -->
+            </div>
+          </div>
+          
+          <p class="mt-4 text-xs text-slate-500">💡 提示: 添加/删除节点时会自动同步白名单，也可手动触发同步。</p>
         </div>
       </div>
     </div>
@@ -3313,9 +3379,26 @@ def _schedules_html() -> str:
   <div class="container mx-auto px-4 py-8 max-w-7xl">
     <!-- Header -->
     <div class="mb-8 flex items-center justify-between">
-      <div>
-        <h1 class="text-3xl font-bold text-white">定时任务管理</h1>
-        <p class="text-slate-400 mt-1">Schedule Management & Monitoring</p>
+      <div class="flex items-center gap-4">
+        <div>
+          <h1 class="text-3xl font-bold text-white">定时任务管理</h1>
+          <p class="text-slate-400 mt-1">Schedule Management & Monitoring</p>
+        </div>
+        <!-- Daily Traffic Statistics Badges -->
+        <div id="traffic-badges" class="flex gap-3 ml-6">
+          <div class="px-3 py-1.5 rounded-lg bg-gradient-to-r from-blue-500/20 to-cyan-500/20 border border-blue-500/30">
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-medium text-blue-300">RFC JINX</span>
+              <span id="traffic-rfc-jinx" class="text-sm font-bold text-white">--G</span>
+            </div>
+          </div>
+          <div class="px-3 py-1.5 rounded-lg bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-500/30">
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-medium text-emerald-300">Suda.HKT</span>
+              <span id="traffic-suda-hkt" class="text-sm font-bold text-white">--G</span>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="flex gap-3">
         <a href="/web" class="px-4 py-2 rounded-lg border border-slate-700 bg-slate-800/60 text-sm font-semibold text-slate-100 hover:border-sky-500 transition">
@@ -3936,10 +4019,40 @@ def _schedules_html() -> str:
     document.getElementById('save-schedule').addEventListener('click', saveSchedule);
     document.getElementById('refresh-btn').addEventListener('click', loadSchedules);
 
+    // 更新流量统计
+    async function updateTrafficStats() {{
+      try {{
+        const res = await fetch('/api/daily_traffic_stats');
+        const data = await res.json();
+        
+        if (data.status === 'ok') {{
+          // 更新 RFC JINX 流量
+          const rfcJinx = data.nodes.find(n => n.name === 'RFC JINX');
+          if (rfcJinx) {{
+            const trafficGB = (rfcJinx.total_bytes / (1024 * 1024 * 1024)).toFixed(2);
+            document.getElementById('traffic-rfc-jinx').textContent = trafficGB + 'G';
+          }}
+          
+          // 更新 Suda.HKT 流量
+          const sudaHkt = data.nodes.find(n => n.name === 'Suda.HKT');
+          if (sudaHkt) {{
+            const trafficGB = (sudaHkt.total_bytes / (1024 * 1024 * 1024)).toFixed(2);
+            document.getElementById('traffic-suda-hkt').textContent = trafficGB + 'G';
+          }}
+        }}
+      }} catch (err) {{
+        console.error('Failed to update traffic stats:', err);
+      }}
+    }}
+
     // 初始化
     (async () => {{
       await loadNodes();
       await loadSchedules();
+      await updateTrafficStats();
+      
+      // 每5分钟更新一次流量统计
+      setInterval(updateTrafficStats, 5 * 60 * 1000);
     }})();
   </script>
 </body>
@@ -4547,6 +4660,74 @@ async def get_whitelist_status(db: Session = Depends(get_db)):
         "total_agents": len(agent_statuses),
         "in_sync_count": in_sync_count,
         "out_of_sync_count": len(agent_statuses) - in_sync_count
+    }
+
+
+
+
+@app.get("/api/daily_traffic_stats")
+async def get_daily_traffic_stats(db: Session = Depends(get_db)):
+    """
+    Get daily traffic statistics for all nodes.
+    Calculates total bytes transferred today based on test results.
+    """
+    from datetime import datetime, timezone, timedelta
+    
+    # Get today's date range (00:00 to 23:59)
+    now = datetime.now(timezone.utc)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_end = now.replace(hour=23, minute=59, second=59, microsecond=999999)
+    
+    # Get all nodes
+    nodes = db.scalars(select(Node)).all()
+    node_stats = []
+    
+    for node in nodes:
+        # Get all test results for this node today (as source or destination)
+        results = db.scalars(
+            select(TestResult).where(
+                or_(
+                    TestResult.src_node_id == node.id,
+                    TestResult.dst_node_id == node.id
+                ),
+                TestResult.created_at >= today_start,
+                TestResult.created_at <= today_end
+            )
+        ).all()
+        
+        # Calculate total bytes
+        total_bytes = 0
+        for result in results:
+            if result.summary and isinstance(result.summary, dict):
+                bits_per_second = result.summary.get("bits_per_second")
+                if bits_per_second and result.test_result:
+                    # Get duration from test result
+                    duration = 10  # default
+                    if isinstance(result.test_result, dict):
+                        iperf_result = result.test_result.get("iperf_result", {})
+                        end_data = iperf_result.get("end", {})
+                        sum_data = end_data.get("sum_received") or end_data.get("sum", {})
+                        if sum_data and "seconds" in sum_data:
+                            duration = sum_data["seconds"]
+                    
+                    # Calculate bytes: (bits_per_second * duration) / 8
+                    bytes_transferred = (bits_per_second * duration) / 8
+                    total_bytes += bytes_transferred
+        
+        node_stats.append({
+            "node_id": node.id,
+            "name": node.name,
+            "ip": node.ip,
+            "total_bytes": int(total_bytes),
+            "total_gb": round(total_bytes / (1024 * 1024 * 1024), 2),
+            "test_count": len(results)
+        })
+    
+    return {
+        "status": "ok",
+        "date": today_start.strftime("%Y-%m-%d"),
+        "nodes": node_stats,
+        "total_nodes": len(node_stats)
     }
 
 
