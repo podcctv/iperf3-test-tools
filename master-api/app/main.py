@@ -3447,16 +3447,54 @@ def _schedules_html() -> str:
               </div>
               <canvas id="chart-${{schedule.id}}" height="80"></canvas>
             </div>
+            
+            <!-- History Table -->
+            <div class="glass-card rounded-xl p-4 mt-4">
+               <h4 class="text-sm font-semibold text-slate-200 mb-3">最近执行记录 (History)</h4>
+               <div class="overflow-x-auto">
+                 <table class="w-full text-left text-xs">
+                   <thead class="text-slate-400 border-b border-slate-700">
+                     <tr>
+                       <th class="pb-2">时间</th>
+                       <th class="pb-2">上传 (Mbps)</th>
+                       <th class="pb-2">下载 (Mbps)</th>
+                       <th class="pb-2">延迟 (ms)</th>
+                       <th class="pb-2">丢包 (%)</th>
+                       <th class="pb-2">状态</th>
+                     </tr>
+                   </thead>
+                   <tbody id="history-${{schedule.id}}" class="text-slate-300 divide-y divide-slate-800">
+                     <tr><td colspan="6" class="py-2 text-center text-slate-500">加载中...</td></tr>
+                   </tbody>
+                 </table>
+               </div>
+            </div>
           </div>
         `;
       }}).join('');
       
-      // 渲染图表
+      // 渲染图表和表格
       setTimeout(() => {{
         schedules.forEach(schedule => {{
           loadChartData(schedule.id);
         }});
         updateCountdowns();
+        // 自动刷新逻辑
+        if (window.refreshInterval) clearInterval(window.refreshInterval);
+        window.refreshInterval = setInterval(async () => {{
+             // 仅静默刷新数据，不重绘整个列表以免闪烁
+             schedules.forEach(s => loadChartData(s.id));
+             // 可选: 刷新任务列表状态(需小心处理DOM)
+             const res = await apiFetch('/schedules');
+             const newSchedules = await res.json();
+             newSchedules.forEach(ns => {{
+                // 更新倒计时
+                const countdownEl = document.querySelector(`div[data-countdown*="${{ns.next_run_at?.split('T')[0] || ''}}"]`); // 简单匹配，可能不准
+                // 更准确: 根据 schedule.id 查找
+                // 这里暂略，主要刷新图表
+             }});
+        }}, 15000); 
+
         if (window.countdownInterval) clearInterval(window.countdownInterval);
         window.countdownInterval = setInterval(updateCountdowns, 1000);
       }}, 100);
@@ -3464,15 +3502,54 @@ def _schedules_html() -> str:
 
     // 加载图表数据
     async function loadChartData(scheduleId, date = null) {{
-      if (!date) {{
+      const dateEl = document.getElementById(`date-${{scheduleId}}`);
+      // 如果没有指定date，且当前也没显示日期，则默认今天
+      if (!date && (!dateEl || dateEl.textContent === '今天')) {{
          const d = new Date();
          date = `${{d.getFullYear()}}-${{String(d.getMonth()+1).padStart(2,'0')}}-${{String(d.getDate()).padStart(2,'0')}}`;
+      }} else if (!date) {{
+         // 使用当前显示的日期
+         const currentDate = new Date(dateEl.textContent);
+         date = `${{currentDate.getFullYear()}}-${{String(currentDate.getMonth()+1).padStart(2,'0')}}-${{String(currentDate.getDate()).padStart(2,'0')}}`;
       }}
+      
       const tzOffset = new Date().getTimezoneOffset();
       const res = await apiFetch(`/schedules/${{scheduleId}}/results?date=${{date}}&tz_offset=${{tzOffset}}`);
       const data = await res.json();
       
       renderChart(scheduleId, data.results, date);
+      renderHistoryTable(scheduleId, data.results);
+    }}
+    
+    // 渲染历史表格
+    function renderHistoryTable(scheduleId, results) {{
+      const tbody = document.getElementById(`history-${{scheduleId}}`);
+      if (!tbody) return;
+      
+      if (results.length === 0) {{
+        tbody.innerHTML = '<tr><td colspan="6" class="py-2 text-center text-slate-500">暂无数据</td></tr>';
+        return;
+      }}
+      
+      // 按时间倒序
+      const sorted = [...results].reverse().slice(0, 10); // 显示最近10条
+      
+      tbody.innerHTML = sorted.map(r => {{
+          const time = new Date(r.executed_at).toLocaleTimeString('zh-CN');
+          const statusColor = r.status === 'success' ? 'text-emerald-400' : 'text-rose-400';
+          const s = r.test_result?.summary || {{}};
+          
+          return `
+            <tr>
+              <td class="py-2">${{time}}</td>
+              <td class="py-2 text-sky-400">${{s.sendMbps?.toFixed(2) || '-'}}</td>
+              <td class="py-2 text-emerald-400">${{s.receiveMbps?.toFixed(2) || '-'}}</td>
+              <td class="py-2">${{s.latencyMs?.toFixed(2) || '-'}}</td>
+              <td class="py-2">${{s.lostPercent?.toFixed(2) || '-'}}</td>
+              <td class="py-2 ${{statusColor}} text-xs">${{r.status}}</td>
+            </tr>
+          `;
+      }}).join('');
     }}
 
     // 渲染Chart.js图表
