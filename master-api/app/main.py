@@ -5270,17 +5270,7 @@ async def _sync_to_single_agent(
             db.commit()
             
         return False
-            results["failed"] += 1
-            error_msg = f"{node.name}: {str(e)}"
-            results["errors"].append(error_msg)
-            logger.error(f"Failed to sync whitelist to {node.name}: {e}")
-            
-        if db:
-            node.whitelist_sync_status = "failed"
-            node.whitelist_sync_at = datetime.utcnow()
-            db.commit()
-            
-        return False
+
 
 
 @app.get("/api/daily_traffic_stats")
