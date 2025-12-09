@@ -14,7 +14,7 @@ import httpx
 from fastapi import BackgroundTasks, Body, Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse
 from sqlalchemy import or_, select, text
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from .auth import auth_manager
 from .config import settings
@@ -3597,6 +3597,11 @@ def _schedules_html() -> str:
       </div>
     </div>
 
+    <!-- VPS Daily Summary -->
+    <div id="vps-daily-summary" class="mb-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Populated by JS -->
+    </div>
+
     <!-- Schedules List -->
     <div id="schedules-container" class="space-y-6">
       <div class="text-center text-slate-400 py-12">加载中...</div>
@@ -3734,7 +3739,10 @@ def _schedules_html() -> str:
               <div class="flex-1">
                 <h3 class="text-lg font-bold text-white">${{schedule.name}}</h3>
                 <div class="mt-2 flex items-center gap-4 text-sm text-slate-300">
-                  <span>${{srcNode?.name || 'Unknown'}} → ${{dstNode?.name || 'Unknown'}}</span>
+                  <span>${{srcNode?.name || 'Unknown'}} ${{
+                    schedule.direction === 'download' ? '⬅' : 
+                    schedule.direction === 'bidirectional' ? '⇋' : '→'
+                  }} ${{dstNode?.name || 'Unknown'}}</span>
                   <span class="text-slate-500">|</span>
                   <span>${{schedule.protocol.toUpperCase()}}</span>
                   <span class="text-slate-500">|</span>
@@ -4319,56 +4327,59 @@ def _schedules_html() -> str:
     document.getElementById('refresh-btn').addEventListener('click', loadSchedules);
 
     // 更新定时任务卡片的流量徽章
-    // 更新定时任务卡片的流量徽章
     async function updateScheduleTrafficBadges() {{
       try {{
+        // 1. Fetch Global Stats for VPS Summary
         const res = await fetch('/api/daily_traffic_stats');
         const data = await res.json();
         
         if (data.status === 'ok') {{
-          // 遍历所有定时任务，更新对应的流量徽章
-          const schedules = await (await apiFetch('/schedules')).json();
-          
-          schedules.forEach(schedule => {{
-            const srcNode = data.nodes.find(n => n.node_id === schedule.src_node_id);
-            const dstNode = data.nodes.find(n => n.node_id === schedule.dst_node_id);
-            
-            const badgeEl = document.getElementById(`traffic-badge-${{schedule.id}}`);
-            if (badgeEl && (srcNode || dstNode)) {{
-              // Helper to format traffic
-              const formatTraffic = (bytes) => {{
-                   const mb = bytes / (1024 * 1024);
-                   const gb = bytes / (1024 * 1024 * 1024);
-                   if (gb >= 1) return gb.toFixed(2) + 'G';
-                   return mb.toFixed(2) + 'M';
-              }};
-              
-              const parts = [];
-              // Show Source Node Traffic
-              if (srcNode) {{
-                 parts.push(`${{srcNode.name}}: ${{formatTraffic(srcNode.total_bytes)}}`);
-              }}
-              // Show Dist Node Traffic
-              if (dstNode && dstNode.node_id !== srcNode?.node_id) {{
-                 parts.push(`${{dstNode.name}}: ${{formatTraffic(dstNode.total_bytes)}}`);
-              }}
-              
-              if (parts.length > 0) {{
-                 badgeEl.textContent = parts.join('  ');
-                 badgeEl.title = "今日累计流量";
-                 // Remove pill shape if content is too long? Or keep it. 
-                 // Keeping it might squeeze text. Let's keep class but maybe adjust padding if needed.
-                 // Current class: inline-flex items-center gap-1 rounded-full bg-slate-800/60 px-2 py-0.5 text-[10px] ...
-              }} else {{
-                 badgeEl.textContent = '--';
-              }}
+            const vpsContainer = document.getElementById('vps-daily-summary');
+            if (vpsContainer) {{
+                vpsContainer.innerHTML = data.nodes.map(n => {{
+                    return `
+                      <div class="glass-card p-4 rounded-xl flex items-center justify-between">
+                        <div>
+                          <h4 class="text-sm font-semibold text-slate-200">${{n.name}}</h4>
+                          <div class="text-xs text-slate-500">${{n.ip}}</div>
+                        </div>
+                        <div class="text-right">
+                          <div class="text-lg font-bold text-sky-400">${{n.total_gb}}G</div>
+                          <div class="text-xs text-slate-500">今日流量</div>
+                        </div>
+                      </div>
+                    `;
+                }}).join('');
             }}
+        }}
+
+        // 2. Fetch Schedule Stats for Badges
+        const schedRes = await fetch('/api/daily_schedule_traffic_stats');
+        const schedData = await schedRes.json();
+        
+        if (schedData.status === 'ok') {{
+          const schedules = await (await apiFetch('/schedules')).json();
+          schedules.forEach(schedule => {{
+             const bytes = schedData.stats[schedule.id] || 0;
+             const mb = bytes / (1024 * 1024);
+             const gb = bytes / (1024 * 1024 * 1024);
+             let text = mb.toFixed(2) + 'MB';
+             if (gb >= 1) text = gb.toFixed(2) + 'GB';
+             
+             // Update badge
+             const badgeEl = document.getElementById(`traffic-badge-${{schedule.id}}`);
+             if (badgeEl) {{
+                 badgeEl.textContent = text;
+                 badgeEl.className = "px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-xs font-mono text-slate-300"; // Reset style
+             }}
           }});
         }}
+        
       }} catch (err) {{
-        console.error('Failed to update schedule traffic badges:', err);
+        console.error('Failed to update traffic stats:', err);
       }}
     }}
+
 
     // 初始化
     (async () => {{
@@ -5069,6 +5080,45 @@ async def get_daily_traffic_stats(db: Session = Depends(get_db)):
     }
 
 
+@app.get("/api/daily_schedule_traffic_stats")
+async def get_daily_schedule_traffic_stats(db: Session = Depends(get_db)):
+    """
+    Get daily traffic statistics per schedule.
+    """
+    from datetime import datetime, timezone
+    
+    # Get today's date range (00:00 to 23:59)
+    now = datetime.now(timezone.utc)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    # Query ScheduleResults joined with TestResults
+    # Explicit join to avoid relationship dependency if not defined
+    rows = db.execute(
+        select(TestResult.raw_result, ScheduleResult.schedule_id)
+        .join(ScheduleResult, TestResult.id == ScheduleResult.test_result_id)
+        .where(ScheduleResult.executed_at >= today_start)
+    ).all()
+    
+    stats = {} # schedule_id -> total_bytes
+    
+    for raw_result, schedule_id in rows:
+        if not raw_result or not isinstance(raw_result, dict):
+            continue
+            
+        try:
+            iperf_data = raw_result.get("iperf_result", {})
+            end_data = iperf_data.get("end", {})
+            
+            bytes_sent = end_data.get("sum_sent", {}).get("bytes", 0) or end_data.get("sum", {}).get("bytes", 0)
+            bytes_recvd = end_data.get("sum_received", {}).get("bytes", 0) or end_data.get("sum", {}).get("bytes", 0)
+            
+            stats[schedule_id] = stats.get(schedule_id, 0) + (bytes_sent + bytes_recvd)
+        except Exception:
+            continue
+            
+    return {"status": "ok", "stats": stats}
+
+
 
 async def _call_agent_test(src: Node, payload: dict, duration: int) -> dict:
     agent_url = f"http://{src.ip}:{src.agent_port}/run_test"
@@ -5375,6 +5425,13 @@ async def _execute_schedule_task(schedule_id: int):
                     # 调用agent执行测试
                     raw_data = await _call_agent_test(src_node, test_params, schedule.duration)
                     summary = _summarize_metrics(raw_data)
+                    
+                    # Fix: Filter metrics based on direction to prevent pollution
+                    if not is_bidir and summary:
+                        if not is_reverse: # Upload only
+                            summary["download_bits_per_second"] = 0
+                        else: # Download only
+                            summary["upload_bits_per_second"] = 0
                     
                     # 保存测试结果
                     test_result = TestResult(
