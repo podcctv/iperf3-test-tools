@@ -857,7 +857,7 @@ def _login_html() -> str:
                   <label class="form-label" for="password-input">Password</label>
                   <input id="password-input" class="form-input" type="password" placeholder="Enter dashboard password" autocomplete="current-password" required />
                 </div>
-                <button id="login-btn" type="submit" class="btn-primary">
+                <button id="login-btn" type="button" class="btn-primary" onclick="login()">
                   Login
                 </button>
               </form>
@@ -1139,17 +1139,42 @@ def _login_html() -> str:
 
     <script>
     const apiFetch = (url, options = {}) => fetch(url, { credentials: 'include', ...options });
-    const loginForm = document.getElementById('login-form');
-    const loginCard = document.getElementById('login-card');
-    const appCard = document.getElementById('app-card');
-    const loginAlert = document.getElementById('login-alert');
-    const loginButton = document.getElementById('login-btn');
-    const passwordInput = document.getElementById('password-input');
-    const loginStatus = document.getElementById('login-status');
-    const loginStatusDot = document.getElementById('login-status-dot');
-    const loginStatusLabel = document.getElementById('login-status-label');
-    const loginHint = document.getElementById('login-hint');
-    const authHint = document.getElementById('auth-hint');
+    
+    // Defer element lookup until needed or DOM ready to avoid null references
+    let loginForm, loginCard, appCard, loginAlert, loginButton, passwordInput;
+    let loginStatus, loginStatusDot, loginStatusLabel, loginHint, authHint;
+
+    document.addEventListener('DOMContentLoaded', () => {
+        console.log('DOM fully loaded. Initializing elements...');
+        loginForm = document.getElementById('login-form');
+        loginCard = document.getElementById('login-card');
+        appCard = document.getElementById('app-card');
+        loginAlert = document.getElementById('login-alert');
+        loginButton = document.getElementById('login-btn');
+        passwordInput = document.getElementById('password-input');
+        
+        // Listeners
+        loginButton?.addEventListener('click', (e) => {
+            e.preventDefault();
+            console.log('Login button clicked via listener');
+            login();
+        });
+        passwordInput?.addEventListener('keyup', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault(); 
+                login();
+            }
+        });
+        
+        // Run initial checks
+        checkAuth();
+        ensureAutoRefresh();
+    });
+
+    // Keep other globals that might be used by other functions
+    const originalLoginLabel = 'Login'; // Fallback
+    const configAlert = document.getElementById('config-alert');
+    // ... rest of globals ...
     const originalLoginLabel = loginButton?.textContent || '';
     const configAlert = document.getElementById('config-alert');
     const importConfigsBtn = document.getElementById('import-configs');
