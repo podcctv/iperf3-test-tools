@@ -3651,7 +3651,7 @@ def _schedules_html() -> str:
 
 @app.get("/web", response_class=HTMLResponse)
 def dashboard() -> HTMLResponse:
-    """Serve主控面板页面，认证在前端处理。"""
+    """Serve dashboard page."""
 
     return HTMLResponse(content=_login_html())
 
