@@ -3432,7 +3432,6 @@ def _schedules_html() -> str:
                 <button onclick="runSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:border-emerald-500 transition">立即运行</button>
                 <button onclick="editSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:border-sky-500 transition">编辑</button>
                 <button onclick="deleteSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-rose-700 bg-rose-900/20 text-xs font-semibold text-rose-300 hover:bg-rose-900/40 transition">删除</button>
-              </div>
             </div>
             
             <!-- Chart Container -->
@@ -3440,6 +3439,9 @@ def _schedules_html() -> str:
               <div class="flex items-center justify-between mb-4">
                 <h4 class="text-sm font-semibold text-slate-200">24小时带宽监控</h4>
                 <div class="flex items-center gap-2">
+                  <button onclick="toggleHistory(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:border-sky-500 transition">
+                    📊 历史记录
+                  </button>
                   <button onclick="changeDate(${{schedule.id}}, -1)" class="px-2 py-1 rounded border border-slate-700 bg-slate-800 text-xs text-slate-300 hover:border-sky-500">◀ 前一天</button>
                   <span id="date-${{schedule.id}}" class="text-xs text-slate-400">今天</span>
                   <button onclick="changeDate(${{schedule.id}}, 1)" class="px-2 py-1 rounded border border-slate-700 bg-slate-800 text-xs text-slate-300 hover:border-sky-500">后一天 ▶</button>
@@ -3448,9 +3450,12 @@ def _schedules_html() -> str:
               <canvas id="chart-${{schedule.id}}" height="80"></canvas>
             </div>
             
-            <!-- History Table -->
-            <div class="glass-card rounded-xl p-4 mt-4">
-               <h4 class="text-sm font-semibold text-slate-200 mb-3">最近执行记录 (History)</h4>
+            <!-- History Table (Collapsible) -->
+            <div id="history-panel-${{schedule.id}}" class="glass-card rounded-xl p-4 mt-4 hidden">
+               <div class="flex items-center justify-between mb-3">
+                 <h4 class="text-sm font-semibold text-slate-200">最近执行记录</h4>
+                 <button onclick="toggleHistory(${{schedule.id}})" class="text-xs text-slate-400 hover:text-slate-200">✕ 关闭</button>
+               </div>
                <div class="overflow-x-auto max-h-60 overflow-y-auto custom-scrollbar">
                  <table class="w-full text-left text-xs">
                    <thead class="text-slate-400 border-b border-slate-700 sticky top-0 bg-slate-900/90 backdrop-blur z-10">
@@ -3589,23 +3594,31 @@ def _schedules_html() -> str:
       // 创建图表
       const ctx = canvas.getContext('2d');
       charts[scheduleId] = new Chart(ctx, {{
-        type: 'bar',
+        type: 'line',
         data: {{
           labels: labels,
           datasets: [
             {{
               label: '上传 (Mbps)',
               data: uploadData,
-              backgroundColor: 'rgba(59, 130, 246, 0.6)',
+              backgroundColor: 'rgba(59, 130, 246, 0.1)',
               borderColor: 'rgba(59, 130, 246, 1)',
-              borderWidth: 1,
+              borderWidth: 2,
+              fill: true,
+              tension: 0.4,
+              pointRadius: 3,
+              pointHoverRadius: 5,
             }},
             {{
               label: '下载 (Mbps)',
               data: downloadData,
-              backgroundColor: 'rgba(16, 185, 129, 0.6)',
+              backgroundColor: 'rgba(16, 185, 129, 0.1)',
               borderColor: 'rgba(16, 185, 129, 1)',
-              borderWidth: 1,
+              borderWidth: 2,
+              fill: true,
+              tension: 0.4,
+              pointRadius: 3,
+              pointHoverRadius: 5,
             }}
           ]
         }},
@@ -3754,6 +3767,14 @@ def _schedules_html() -> str:
         alert('任务已触发, 请稍后刷新查看结果');
       }} catch (err) {{
         alert('执行失败: ' + err.message);
+      }}
+    }}
+
+    // Toggle history panel visibility
+    function toggleHistory(scheduleId) {{
+      const panel = document.getElementById(`history-panel-${{scheduleId}}`);
+      if (panel) {{
+        panel.classList.toggle('hidden');
       }}
     }}
 
