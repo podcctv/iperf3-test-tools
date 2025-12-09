@@ -75,6 +75,25 @@ def _ensure_iperf_port_column() -> None:
             connection.commit()
 
 
+def _ensure_whitelist_sync_columns() -> None:
+    if engine.dialect.name != "sqlite":
+        return
+
+    with engine.connect() as connection:
+        columns = connection.exec_driver_sql("PRAGMA table_info(nodes)").fetchall()
+        column_names = {col[1] for col in columns}
+        
+        if "whitelist_sync_status" not in column_names:
+            connection.exec_driver_sql(
+                "ALTER TABLE nodes ADD COLUMN whitelist_sync_status VARCHAR DEFAULT 'unknown'"
+            )
+        if "whitelist_sync_at" not in column_names:
+            connection.exec_driver_sql(
+                "ALTER TABLE nodes ADD COLUMN whitelist_sync_at DATETIME"
+            )
+        connection.commit()
+
+
 def _ensure_test_result_columns() -> None:
     dialect = engine.dialect.name
     with engine.connect() as connection:
@@ -199,6 +218,9 @@ ZHEJIANG_TARGETS = [
 def _bootstrap_state() -> None:
     db = SessionLocal()
     try:
+        _ensure_test_result_columns()
+        _ensure_iperf_port_column()
+        _ensure_whitelist_sync_columns()
         state_store.restore(db)
     finally:
         db.close()
@@ -1634,6 +1656,15 @@ def _login_html() -> str:
     }
 
     async function checkWhitelistStatus() {
+        const btn = document.getElementById('check-whitelist-status-btn');
+        const resultDiv = document.getElementById('whitelist-sync-result');
+        const contentDiv = document.getElementById('sync-result-content');
+        
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<span>📊</span><span>检查中...</span>';
+        }
+        
         try {
             // Fetch stats from Master's whitelist list
             const resStats = await apiFetch('/admin/whitelist'); 
@@ -1650,10 +1681,58 @@ def _login_html() -> str:
             // For sync status
             const resSync = await apiFetch('/admin/whitelist/status');
             const dataSync = await resSync.json();
-            // We could update UI with sync status if there were elements for it, currently just fetching to verify API works
+            
+            if (resultDiv && contentDiv) {
+                resultDiv.classList.remove('hidden');
+                let html = '<ul class="space-y-1">';
+                
+                if (dataSync.agents) {
+                    for (const agent of dataSync.agents) {
+                        let statusColor = 'text-slate-400';
+                        let statusText = '未知';
+                        let icon = '❓';
+                        
+                        if (agent.status === 'in_sync') {
+                            statusColor = 'text-emerald-400';
+                            statusText = '已同步';
+                            icon = '✅';
+                        } else if (agent.status === 'out_of_sync') {
+                            statusColor = 'text-yellow-400';
+                            statusText = '未同步';
+                            icon = '⚠️';
+                        } else { 
+                            statusColor = 'text-rose-400';
+                            statusText = agent.status === 'unreachable' ? '无法连接' : (agent.error || '错误');
+                            icon = '❌';
+                        }
+                        
+                        html += `<li class="flex justify-between items-center text-xs">
+                            <span>${agent.node_name}</span>
+                            <span class="${statusColor} flex items-center gap-1">${icon} ${statusText}</span>
+                        </li>`;
+                    }
+                }
+                html += '</ul>';
+                
+                // Summary
+                html += `<div class="mt-3 pt-2 border-t border-slate-700/50 text-xs flex justify-between font-medium">
+                    <span class="text-slate-400">总计: ${dataSync.total_agents}</span>
+                    <span class="text-emerald-400">已同步: ${dataSync.in_sync_count}</span>
+                    <span class="text-rose-400">异常: ${dataSync.out_of_sync_count}</span>
+                </div>`;
+                
+                contentDiv.innerHTML = html;
+            }
             
         } catch (e) {
             console.error('Failed to update whitelist stats', e);
+            if (contentDiv) contentDiv.innerHTML = `<span class="text-rose-400">检查失败: ${e.message}</span>`;
+            if (resultDiv) resultDiv.classList.remove('hidden');
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<span>📊</span><span>检查同步状态</span>';
+            }
         }
     }
 
@@ -2554,6 +2633,19 @@ def _login_html() -> str:
         const statusBadge = node.status === 'online'
           ? `<span class="${styles.badgeOnline}"><span class=\"h-2 w-2 rounded-full bg-emerald-400\"></span><span>在线</span></span>`
           : `<span class="${styles.badgeOffline}"><span class=\"h-2 w-2 rounded-full bg-rose-400\"></span><span>离线</span></span>`;
+          
+          // Whitelist Sync Badge
+          let syncBadge = '';
+          const syncTime = node.whitelist_sync_at ? new Date(node.whitelist_sync_at).toLocaleString() : '未知';
+          if (node.whitelist_sync_status === 'synced') {
+              syncBadge = `<span class="inline-flex items-center rounded-md bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-400 ring-1 ring-inset ring-emerald-500/20 cursor-help" title="白名单已同步 (${syncTime})">🛡️ 已同步</span>`;
+          } else if (node.whitelist_sync_status === 'not_synced') {
+              syncBadge = `<span class="inline-flex items-center rounded-md bg-yellow-500/10 px-2 py-0.5 text-xs font-medium text-yellow-400 ring-1 ring-inset ring-yellow-500/20 cursor-help" title="白名单内容不一致 (${syncTime})">🛡️ 未同步</span>`;
+          } else if (node.whitelist_sync_status === 'failed') {
+             syncBadge = `<span class="inline-flex items-center rounded-md bg-rose-500/10 px-2 py-0.5 text-xs font-medium text-rose-400 ring-1 ring-inset ring-rose-500/20 cursor-help" title="白名单同步失败 (${syncTime})">🛡️ 错误</span>`;
+          } else {
+             syncBadge = `<span class="inline-flex items-center rounded-md bg-slate-500/10 px-2 py-0.5 text-xs font-medium text-slate-400 ring-1 ring-inset ring-slate-500/20" title="白名单同步状态未知">🛡️ 检查中</span>`;
+          }
 
 
           const ports = node.detected_iperf_port ? `${node.detected_iperf_port}` : `${node.iperf_port}`;
@@ -2576,6 +2668,7 @@ def _login_html() -> str:
               <div class="flex flex-wrap items-center gap-2">
                 ${statusBadge}
                 ${locationBadge}
+                ${syncBadge}
                 <span class="text-base font-semibold text-white drop-shadow">${node.name}</span>
                 <button type="button" class="${styles.iconButton}" data-privacy-toggle="${node.id}" aria-label="切换 IP 隐藏">
                   <span class="text-base">${ipPrivacyState[node.id] ? '🙈' : '👁️'}</span>
@@ -4934,6 +5027,8 @@ async def _check_node_health(node: Node) -> NodeWithStatus:
                     backbone_latency=backbone_latency or None,
                     streaming=streaming_statuses or None,
                     streaming_checked_at=streaming_checked_at,
+                    whitelist_sync_status=getattr(node, "whitelist_sync_status", "unknown"),
+                    whitelist_sync_at=getattr(node, "whitelist_sync_at", None),
                 )
     except Exception:
         pass
@@ -4951,6 +5046,8 @@ async def _check_node_health(node: Node) -> NodeWithStatus:
         checked_at=checked_at,
         detected_iperf_port=None,
         detected_agent_port=None,
+        whitelist_sync_status=getattr(node, "whitelist_sync_status", "unknown"),
+        whitelist_sync_at=getattr(node, "whitelist_sync_at", None),
     )
 
 
@@ -5110,7 +5207,7 @@ async def _sync_whitelist_to_agents(db: Session, max_retries: int = 2) -> dict:
     # First attempt - send whitelist to each agent
     async with httpx.AsyncClient(timeout=10) as client:
         for node in nodes:
-            success = await _sync_to_single_agent(client, node, whitelist, results)
+            success = await _sync_to_single_agent(client, node, whitelist, results, db=db)
             if not success:
                 failed_nodes.append(node)
     
@@ -5127,7 +5224,7 @@ async def _sync_whitelist_to_agents(db: Session, max_retries: int = 2) -> dict:
             still_failed = []
             async with httpx.AsyncClient(timeout=10) as client:
                 for node in failed_nodes:
-                    success = await _sync_to_single_agent(client, node, whitelist, results, is_retry=True)
+                    success = await _sync_to_single_agent(client, node, whitelist, results, is_retry=True, db=db)
                     if success:
                         results["retried"] += 1
                     else:
@@ -5143,7 +5240,8 @@ async def _sync_to_single_agent(
     node: Node,
     whitelist: list[str],
     results: dict,
-    is_retry: bool = False
+    is_retry: bool = False,
+    db: Session | None = None
 ) -> bool:
     """
     Sync whitelist to a single agent.
@@ -5151,11 +5249,15 @@ async def _sync_to_single_agent(
     Returns:
         True if successful, False otherwise
     """
+    from datetime import datetime
+    
+    status = "failed"
     try:
         url = f"http://{node.ip}:{node.agent_port}/update_whitelist"
         response = await client.post(url, json={"allowed_ips": whitelist})
         
         if response.status_code == 200:
+            status = "synced"
             if not is_retry:
                 results["success"] += 1
             else:
@@ -5166,6 +5268,13 @@ async def _sync_to_single_agent(
                 results["errors"] = [e for e in results["errors"] if not e.startswith(f"{node.name}:")]
             
             logger.info(f"Whitelist synced to {node.name} ({node.ip})" + (" [retry]" if is_retry else ""))
+            
+            # Update Node status
+            if db:
+                node.whitelist_sync_status = "synced"
+                node.whitelist_sync_at = datetime.utcnow()
+                db.commit()
+            
             return True
         else:
             if not is_retry:
@@ -5173,6 +5282,14 @@ async def _sync_to_single_agent(
                 error_msg = f"{node.name}: HTTP {response.status_code}"
                 results["errors"].append(error_msg)
                 logger.warning(f"Failed to sync whitelist to {node.name}: {error_msg}")
+            
+            # Update Node status (only if not retrying anymore or if we want to show intermediate failure)
+            # We'll update it to failed for now, if retry succeeds it will overwrite
+            if db:
+                node.whitelist_sync_status = "failed"
+                node.whitelist_sync_at = datetime.utcnow()
+                db.commit()
+                
             return False
     except Exception as e:
         if not is_retry:
@@ -5180,6 +5297,12 @@ async def _sync_to_single_agent(
             error_msg = f"{node.name}: {str(e)}"
             results["errors"].append(error_msg)
             logger.error(f"Failed to sync whitelist to {node.name}: {e}")
+            
+        if db:
+            node.whitelist_sync_status = "failed"
+            node.whitelist_sync_at = datetime.utcnow()
+            db.commit()
+            
         return False
 
 
@@ -5414,6 +5537,8 @@ async def get_whitelist_status(db: Session = Depends(get_db)):
     
     agent_statuses = []
     
+    from datetime import datetime
+    
     async with httpx.AsyncClient(timeout=5) as client:
         for node in nodes:
             try:
@@ -5427,6 +5552,10 @@ async def get_whitelist_status(db: Session = Depends(get_db)):
                     # Check if whitelists match
                     in_sync = set(master_whitelist) == set(agent_whitelist)
                     
+                    # Update DB status
+                    node.whitelist_sync_status = "synced" if in_sync else "not_synced"
+                    node.whitelist_sync_at = datetime.utcnow()
+                    
                     agent_statuses.append({
                         "node_id": node.id,
                         "node_name": node.name,
@@ -5436,6 +5565,10 @@ async def get_whitelist_status(db: Session = Depends(get_db)):
                         "in_sync": in_sync
                     })
                 else:
+                    # Update DB status
+                    node.whitelist_sync_status = "failed"
+                    node.whitelist_sync_at = datetime.utcnow()
+                    
                     agent_statuses.append({
                         "node_id": node.id,
                         "node_name": node.name,
@@ -5445,6 +5578,10 @@ async def get_whitelist_status(db: Session = Depends(get_db)):
                         "in_sync": False
                     })
             except Exception as e:
+                # Update DB status
+                node.whitelist_sync_status = "failed"
+                node.whitelist_sync_at = datetime.utcnow()
+                
                 agent_statuses.append({
                     "node_id": node.id,
                     "node_name": node.name,
@@ -5453,6 +5590,8 @@ async def get_whitelist_status(db: Session = Depends(get_db)):
                     "error": str(e),
                     "in_sync": False
                 })
+    
+    db.commit()
     
     in_sync_count = sum(1 for s in agent_statuses if s.get("in_sync", False))
     

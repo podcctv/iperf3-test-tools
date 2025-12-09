@@ -16,6 +16,8 @@ class Node(Base):
     agent_port = Column(Integer, default=8000)
     iperf_port = Column(Integer, default=DEFAULT_IPERF_PORT)
     description = Column(String, nullable=True)
+    whitelist_sync_status = Column(String, default="unknown")  # unknown, synced, failed
+    whitelist_sync_at = Column(DateTime(timezone=True), nullable=True)
 
     outgoing_tests = relationship("TestResult", foreign_keys="TestResult.src_node_id", back_populates="src_node")
     incoming_tests = relationship("TestResult", foreign_keys="TestResult.dst_node_id", back_populates="dst_node")

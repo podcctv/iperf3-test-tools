@@ -30,6 +30,8 @@ class NodeUpdate(BaseModel):
 
 class NodeRead(NodeBase):
     id: int
+    whitelist_sync_status: str | None = "unknown"
+    whitelist_sync_at: datetime | None = None
 
     class Config:
         from_attributes = True
