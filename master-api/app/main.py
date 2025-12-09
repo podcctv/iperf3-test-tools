@@ -4113,26 +4113,6 @@ async def _check_node_health(node: Node) -> NodeWithStatus:
 
 
 
-
-@app.post("/admin/sync_whitelist")
-async def sync_whitelist_endpoint(db: Session = Depends(get_db)):
-    """
-    Manually trigger whitelist synchronization to all agents.
-    Returns sync results with success/failed counts.
-    """
-    results = await _sync_whitelist_to_agents(db)
-    return {
-        "status": "ok",
-        "message": f"Whitelist synced to {results['success']}/{results['total_agents']} agents",
-        "results": results
-    }
-
-
-@app.get("/health")
-def health() -> dict:
-    return {"status": "ok"}
-
-
 @app.post("/nodes", response_model=NodeRead)
 def create_node(node: NodeCreate, db: Session = Depends(get_db)):
     obj = Node(

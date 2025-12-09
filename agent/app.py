@@ -1101,6 +1101,103 @@ def _read_port_from_request(data: Dict[str, Any]) -> int:
     return port
 
 
+def _get_client_ip() -> str:
+    """Extract client IP from request headers or remote_addr."""
+    return (
+        request.headers.get('X-Real-IP') 
+        or request.headers.get('X-Forwarded-For', '').split(',')[0].strip()
+        or request.remote_addr 
+        or 'unknown'
+    )
+
+
+def _validate_iperf_params(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Validate and sanitize iperf3 parameters to prevent abuse."""
+    errors = []
+    
+    # Validate duration (1-300 seconds)
+    duration = data.get("duration", 10)
+    try:
+        duration = int(duration)
+        if duration < 1 or duration > 300:
+            errors.append("duration must be between 1 and 300 seconds")
+    except (ValueError, TypeError):
+        errors.append("duration must be an integer")
+    
+    # Validate parallel connections (1-128)
+    parallel = data.get("parallel", 1)
+    try:
+        parallel = int(parallel)
+        if parallel < 1 or parallel > 128:
+            errors.append("parallel must be between 1 and 128")
+    except (ValueError, TypeError):
+        errors.append("parallel must be an integer")
+    
+    # Validate protocol
+    protocol = data.get("protocol", "tcp")
+    if protocol.lower() not in ["tcp", "udp"]:
+        errors.append("protocol must be 'tcp' or 'udp'")
+    
+    # Validate omit (0-60 seconds)
+    omit = data.get("omit")
+    if omit is not None:
+        try:
+            omit = int(omit)
+            if omit < 0 or omit > 60:
+                errors.append("omit must be between 0 and 60 seconds")
+        except (ValueError, TypeError):
+            errors.append("omit must be an integer")
+    
+    if errors:
+        raise ValueError("; ".join(errors))
+    
+    return {
+        "duration": duration,
+        "parallel": parallel,
+        "protocol": protocol.lower(),
+        "omit": omit
+    }
+
+
+def require_whitelisted_ip(f):
+    """Decorator to enforce IP whitelist validation on endpoints."""
+    from functools import wraps
+    
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        client_ip = _get_client_ip()
+        
+        if not whitelist.is_allowed(client_ip):
+            app.logger.warning(
+                f"[SECURITY] Rejected request from non-whitelisted IP: {client_ip} "
+                f"to endpoint: {request.endpoint}"
+            )
+            return jsonify({
+                "status": "error",
+                "error": "IP not whitelisted",
+                "message": "Your IP address is not authorized to access this service. "
+                          "Contact the administrator to add your IP to the whitelist.",
+                "client_ip": client_ip
+            }), 403
+        
+        app.logger.info(f"[ACCESS] Request from whitelisted IP: {client_ip} to {request.endpoint}")
+        return f(*args, **kwargs)
+    
+    return decorated_function
+
+
+def _create_error_response(error_type: str, message: str, status_code: int = 400, **extra) -> tuple:
+    """Create standardized error response."""
+    response = {
+        "status": "error",
+        "error": error_type,
+        "message": message,
+        "timestamp": int(time.time())
+    }
+    response.update(extra)
+    return jsonify(response), status_code
+
+
 def _start_server_process(port: int) -> subprocess.Popen:
     cmd = f"iperf3 -s -p {port}"
     return subprocess.Popen(shlex.split(cmd))
@@ -1160,39 +1257,68 @@ def stop_server() -> Any:
 
 
 @app.route("/run_test", methods=["POST"])
+@require_whitelisted_ip
 def run_test() -> Any:
-    # IP Whitelist verification
-    client_ip = request.headers.get('X-Real-IP') or request.headers.get('X-Forwarded-For') or request.remote_addr
-    if not whitelist.is_allowed(client_ip):
-        app.logger.warning(f"Rejected test request from non-whitelisted IP: {client_ip}")
-        return jsonify({
-            "status": "error", 
-            "error": "IP not whitelisted. Contact administrator to add your IP to the whitelist."
-        }), 403
+    """
+    Execute iperf3 test with IP whitelist validation and enhanced error handling.
     
-    data = request.get_json(force=True)
+    This endpoint requires the client IP to be in the whitelist.
+    All parameters are validated before execution.
+    """
+    client_ip = _get_client_ip()
+    
+    try:
+        data = request.get_json(force=True)
+    except Exception as e:
+        app.logger.error(f"[ERROR] Failed to parse JSON from {client_ip}: {e}")
+        return _create_error_response("invalid_json", "Request body must be valid JSON")
+    
+    # Validate required fields
     target = data.get("target")
     if not target:
-        return jsonify({"status": "error", "error": "missing_target"}), 400
-
+        return _create_error_response("missing_parameter", "Missing required parameter: target")
+    
+    # Validate target is not a local/private IP to prevent SSRF
+    try:
+        import ipaddress
+        target_ip = ipaddress.ip_address(target)
+        if target_ip.is_loopback and client_ip not in ["127.0.0.1", "::1"]:
+            return _create_error_response(
+                "invalid_target", 
+                "Cannot target loopback addresses from remote clients"
+            )
+    except ValueError:
+        # Not an IP address, might be hostname - allow it
+        pass
+    
+    # Validate and sanitize parameters
+    try:
+        validated_params = _validate_iperf_params(data)
+        duration = validated_params["duration"]
+        parallel = validated_params["parallel"]
+        protocol = validated_params["protocol"]
+        omit = validated_params["omit"]
+    except ValueError as e:
+        app.logger.warning(f"[VALIDATION] Parameter validation failed from {client_ip}: {e}")
+        return _create_error_response("invalid_parameters", str(e))
+    
+    # Read optional parameters
     try:
         port = _read_port_from_request(data)
-        duration = int(data.get("duration", 10))
-        protocol = data.get("protocol", "tcp")
-        parallel = int(data.get("parallel", 1))
         reverse_mode = str(data.get("reverse", "false")).lower() in ["1", "true", "yes"]
         bandwidth = data.get("bandwidth")
         datagram_size = data.get("datagram_size")
-        omit = data.get("omit")
-    except ValueError:
-        return jsonify({"status": "error", "error": "invalid_parameter"}), 400
-
-    proto_flag = "-u" if protocol.lower() == "udp" else ""
+    except ValueError as e:
+        return _create_error_response("invalid_parameter", str(e))
+    
+    # Build iperf3 command
+    proto_flag = "-u" if protocol == "udp" else ""
     reverse_flag = "-R" if reverse_mode else ""
     extra_flags: list[str] = []
+    
     if bandwidth:
         extra_flags.extend(["-b", str(bandwidth)])
-    if datagram_size and protocol.lower() == "udp":
+    if datagram_size and protocol == "udp":
         extra_flags.extend(["-l", str(datagram_size)])
     if omit:
         extra_flags.extend(["-O", str(omit)])
@@ -1219,6 +1345,11 @@ def run_test() -> Any:
     cmd_parts.append("-J")
 
     cmd = " ".join(cmd_parts)
+    
+    app.logger.info(
+        f"[TEST] Starting iperf3 test from {client_ip} to {target}:{port} "
+        f"({protocol}, {duration}s, P={parallel})"
+    )
 
     try:
         result = subprocess.run(
@@ -1228,18 +1359,21 @@ def run_test() -> Any:
             timeout=duration + 15,
         )
     except subprocess.TimeoutExpired:
-        return jsonify({"status": "error", "error": "timeout"}), 504
-
+        app.logger.error(f"[TIMEOUT] Test from {client_ip} to {target} timed out")
+        return _create_error_response("timeout", "Test execution timed out", 504)
 
     if result.returncode != 0:
         error_msg = result.stderr.strip() or result.stdout.strip() or f"iperf3 failed with exit code {result.returncode}"
-        return jsonify({"status": "error", "error": error_msg}), 500
+        app.logger.error(f"[FAILED] Test from {client_ip} failed: {error_msg}")
+        return _create_error_response("test_failed", error_msg, 500)
 
     try:
         output = json.loads(result.stdout)
-    except json.JSONDecodeError:
-        return jsonify({"status": "error", "error": "parse_failed"}), 500
+    except json.JSONDecodeError as e:
+        app.logger.error(f"[PARSE_ERROR] Failed to parse iperf3 output from {client_ip}: {e}")
+        return _create_error_response("parse_failed", "Failed to parse iperf3 output", 500)
 
+    app.logger.info(f"[SUCCESS] Test from {client_ip} to {target} completed successfully")
     return jsonify({"status": "ok", "iperf_result": output})
 
 

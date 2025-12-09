@@ -59,21 +59,18 @@ class IPWhitelist:
             
             logger.info(f"Total allowed IPs: {len(self._allowed_ips)}")
     
-    def is_allowed(self, ip: str) -> bool:
-        """Check if an IP is in the whitelist"""
-        with self._lock:
-            return ip in self._allowed_ips
-    
     def update(self, ips: List[str]) -> None:
         """Update whitelist with new IP list"""
         with self._lock:
             self._allowed_ips.clear()
             
-            # Add new IPs
+            # Add new IPs with validation
             for ip in ips:
                 ip = ip.strip()
-                if ip:
+                if ip and self._is_valid_ip(ip):
                     self._allowed_ips.add(ip)
+                elif ip:
+                    logger.warning(f"Skipping invalid IP address: {ip}")
             
             # Always allow localhost
             self._allowed_ips.add("127.0.0.1")
@@ -90,6 +87,48 @@ class IPWhitelist:
                 logger.info(f"Updated whitelist with {len(self._allowed_ips)} IPs")
             except Exception as e:
                 logger.error(f"Failed to save whitelist to file: {e}")
+    
+    def _is_valid_ip(self, ip: str) -> bool:
+        """Validate IP address format (supports both IPv4 and IPv6)"""
+        import ipaddress
+        try:
+            ipaddress.ip_address(ip)
+            return True
+        except ValueError:
+            # Check if it's a CIDR notation
+            try:
+                ipaddress.ip_network(ip, strict=False)
+                return True
+            except ValueError:
+                return False
+    
+    def is_allowed(self, ip: str) -> bool:
+        """Check if an IP is in the whitelist (supports CIDR matching)"""
+        import ipaddress
+        
+        with self._lock:
+            # Direct match
+            if ip in self._allowed_ips:
+                return True
+            
+            # Check CIDR ranges
+            try:
+                ip_obj = ipaddress.ip_address(ip)
+                for allowed in self._allowed_ips:
+                    try:
+                        # Check if it's a network (CIDR)
+                        network = ipaddress.ip_network(allowed, strict=False)
+                        if ip_obj in network:
+                            return True
+                    except ValueError:
+                        # Not a network, skip
+                        continue
+            except ValueError:
+                # Invalid IP format
+                logger.warning(f"Invalid IP address format: {ip}")
+                return False
+            
+            return False
     
     def get_all(self) -> List[str]:
         """Get all allowed IPs"""
