@@ -2592,12 +2592,14 @@ def _login_html() -> str:
           // Whitelist Sync Badge
           let syncBadge = '';
           const syncTime = node.whitelist_sync_at ? new Date(node.whitelist_sync_at).toLocaleString() : '未知';
+          const errorMsg = node.whitelist_sync_message || '未知错误';
+          
           if (node.whitelist_sync_status === 'synced') {
               syncBadge = `<span class="inline-flex items-center rounded-md bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-400 ring-1 ring-inset ring-emerald-500/20 cursor-help" title="白名单已同步 (${syncTime})">🛡️ 已同步</span>`;
           } else if (node.whitelist_sync_status === 'not_synced') {
               syncBadge = `<span class="inline-flex items-center rounded-md bg-yellow-500/10 px-2 py-0.5 text-xs font-medium text-yellow-400 ring-1 ring-inset ring-yellow-500/20 cursor-help" title="白名单内容不一致 (${syncTime})">🛡️ 未同步</span>`;
           } else if (node.whitelist_sync_status === 'failed') {
-             syncBadge = `<span class="inline-flex items-center rounded-md bg-rose-500/10 px-2 py-0.5 text-xs font-medium text-rose-400 ring-1 ring-inset ring-rose-500/20 cursor-help" title="白名单同步失败 (${syncTime})">🛡️ 错误</span>`;
+             syncBadge = `<span class="inline-flex items-center rounded-md bg-rose-500/10 px-2 py-0.5 text-xs font-medium text-rose-400 ring-1 ring-inset ring-rose-500/20 cursor-help" title="同步失败: ${errorMsg} (${syncTime})">🛡️ 错误</span>`;
           } else {
              syncBadge = `<span class="inline-flex items-center rounded-md bg-slate-500/10 px-2 py-0.5 text-xs font-medium text-slate-400 ring-1 ring-inset ring-slate-500/20" title="白名单同步状态未知">🛡️ 检查中</span>`;
           }
@@ -4983,6 +4985,7 @@ async def _check_node_health(node: Node) -> NodeWithStatus:
                     streaming=streaming_statuses or None,
                     streaming_checked_at=streaming_checked_at,
                     whitelist_sync_status=getattr(node, "whitelist_sync_status", "unknown"),
+                    whitelist_sync_message=getattr(node, "whitelist_sync_message", None),
                     whitelist_sync_at=getattr(node, "whitelist_sync_at", None),
                 )
     except Exception:
@@ -5531,8 +5534,12 @@ async def get_whitelist_status(db: Session = Depends(get_db)):
                     data = response.json()
                     agent_whitelist = data.get("allowed_ips", [])
                     
-                    # Check if whitelists match
-                    in_sync = set(master_whitelist) == set(agent_whitelist)
+                    # Check if whitelists match (ignoring localhost)
+                    ignored_ips = {'127.0.0.1', '::1'}
+                    agent_ips_clean = {ip for ip in agent_whitelist if ip not in ignored_ips}
+                    master_ips_clean = {ip for ip in master_whitelist if ip not in ignored_ips}
+                    
+                    in_sync = master_ips_clean == agent_ips_clean
                     
                     # Update DB status
                     node.whitelist_sync_status = "synced" if in_sync else "not_synced"
