@@ -3755,10 +3755,54 @@ def _schedules_html() -> str:
     }}
 
     // 加载定时任务列表
+    // Masking Helper (Global for Schedules)
+    function maskAddress(addr, hidden) {{
+        if (!hidden || !addr) return addr;
+        // Check if IP
+        if (addr.match(/^\d+\.\d+\.\d+\.\d+$/)) {{
+             const p = addr.split('.');
+             return `${{p[0]}}.${{p[1]}}.*.*`;
+        }}
+        // Check if Domain (at least one dot)
+        if (addr.includes('.')) {{
+            const parts = addr.split('.');
+            if (parts.length > 2) {{
+                // aa.bb.cc -> aa.**.**
+                // aa.bb.cc.dd -> aa.bb.**.**
+                // Strategy: Keep first part, mask specific suffix or just last two parts
+                // User requirement: aa.bb.cc -> mask bb.cc
+                // So keep part[0], mask rest
+                return parts[0] + '.*.' + parts.slice(2).map(() => '*').join('.');
+            }} else if (parts.length === 2) {{
+                return parts[0] + '.*';
+            }}
+        }}
+        return addr.substring(0, addr.length/2) + '*'.repeat(Math.ceil(addr.length/2));
+    }}
+
     async function loadSchedules() {{
       const res = await apiFetch('/schedules');
       schedules = await res.json();
       renderSchedules();
+      
+      // Fetch ISPs
+      schedules.forEach(s => {{
+         const src = nodes.find(n => n.id === s.src_node_id);
+         const dst = nodes.find(n => n.id === s.dst_node_id);
+         
+         const fetchIsp = (ip, elemId) => {{
+             if (!ip) return;
+             fetch(`/geo?ip=${{ip}}`)
+               .then(r => r.json())
+               .then(d => {{
+                   const el = document.getElementById(elemId);
+                   if (el && d.isp) el.textContent = d.isp;
+               }}).catch(()=>{});
+         }};
+         
+         if (src) fetchIsp(src.ip, `sched-src-isp-${{s.id}}`);
+         if (dst) fetchIsp(dst.ip, `sched-dst-isp-${{s.id}}`);
+      }});
     }}
 
     // 渲染定时任务列表
@@ -3809,10 +3853,28 @@ def _schedules_html() -> str:
                 <button onclick="toggleSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:border-sky-500 transition">
                   ${{schedule.enabled ? '暂停' : '启用'}}
                 </button>
-                <button onclick="runSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:border-emerald-500 transition">立即运行</button>
+                <button onclick="runSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:emerald-500 transition">立即运行</button>
                 <button onclick="editSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:border-sky-500 transition">编辑</button>
                 <button onclick="deleteSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-rose-700 bg-rose-900/20 text-xs font-semibold text-rose-300 hover:bg-rose-900/40 transition">删除</button>
               </div>
+            </div>
+            
+            <!-- Nodes Info with ISP & Masking -->
+            <div class="grid grid-cols-2 gap-4 text-xs">
+                <div class="glass-card p-2 rounded-lg bg-slate-900/30 flex flex-col gap-1">
+                    <div class="text-slate-400">Source</div>
+                    <div class="font-mono text-sky-300">
+                        ${{srcNode ? maskAddress(srcNode.ip, true) : 'Unknown'}}
+                        <span id="sched-src-isp-${{schedule.id}}" class="ml-1 text-[10px] text-slate-500 border-l border-slate-700 pl-1"></span>
+                    </div>
+                </div>
+                 <div class="glass-card p-2 rounded-lg bg-slate-900/30 flex flex-col gap-1">
+                    <div class="text-slate-400">Destination</div>
+                    <div class="font-mono text-emerald-300">
+                        ${{dstNode ? maskAddress(dstNode.ip, true) : 'Unknown'}}
+                        <span id="sched-dst-isp-${{schedule.id}}" class="ml-1 text-[10px] text-slate-500 border-l border-slate-700 pl-1"></span>
+                    </div>
+                </div>
             </div>
             
             <!-- Chart Container -->
@@ -4426,7 +4488,10 @@ def _schedules_html() -> str:
                       <div class="glass-card p-4 rounded-xl flex items-center justify-between">
                         <div>
                           <h4 class="text-sm font-semibold text-slate-200">${{n.name}}</h4>
-                          <div class="text-xs text-slate-500">${{n.ip}}</div>
+                          <div class="text-xs text-slate-500 font-mono">
+                             ${{maskIp(n.ip, true)}}
+                             <span id="vps-isp-${{n.node_id}}" class="ml-2 pl-2 border-l border-slate-700 text-slate-600"></span>
+                          </div>
                         </div>
                         <div class="text-right">
                           <div class="text-lg font-bold text-sky-400">${{n.total_gb}}G</div>
@@ -4435,6 +4500,20 @@ def _schedules_html() -> str:
                       </div>
                     `;
                 }}).join('');
+
+                // Fetch ISPs for these nodes
+                data.nodes.forEach(n => {{
+                    fetch(`/geo?ip=${{n.ip}}`)
+                      .then(r => r.json())
+                      .then(d => {{
+                          const el = document.getElementById(`vps-isp-${{n.node_id}}`);
+                          if (el && d.isp) {{
+                              el.textContent = d.isp;
+                              el.title = d.country_code || '';
+                          }}
+                      }})
+                      .catch(() => {{}});
+                }});
             }}
         }}
 
@@ -4445,17 +4524,33 @@ def _schedules_html() -> str:
         if (schedData.status === 'ok') {{
           const schedules = await (await apiFetch('/schedules')).json();
           schedules.forEach(schedule => {{
-             const bytes = schedData.stats[schedule.id] || 0;
-             const mb = bytes / (1024 * 1024);
-             const gb = bytes / (1024 * 1024 * 1024);
-             let text = mb.toFixed(2) + 'MB';
-             if (gb >= 1) text = gb.toFixed(2) + 'GB';
+             // Find nodes involved
+             const srcNode = nodes.find(n => n.id === schedule.src_node_id);
+             const dstNode = nodes.find(n => n.id === schedule.dst_node_id);
+             
+             // Get their GLOBAL daily stats from step 1
+             let srcStat = data.nodes.find(n => n.node_id === schedule.src_node_id);
+             let dstStat = data.nodes.find(n => n.node_id === schedule.dst_node_id);
+             
+             const formatBytes = (b) => {{
+                 if (!b) return '0GB';
+                 const gb = b / (1024 * 1024 * 1024);
+                 return gb.toFixed(2) + 'GB';
+             }};
+             
+             const srcText = srcNode ? `${{srcNode.name}}: ${{formatBytes(srcStat?.total_bytes)}}` : 'Unknown: -';
+             const dstText = dstNode ? `${{dstNode.name}}: ${{formatBytes(dstStat?.total_bytes)}}` : 'Unknown: -';
              
              // Update badge
              const badgeEl = document.getElementById(`traffic-badge-${{schedule.id}}`);
              if (badgeEl) {{
-                 badgeEl.textContent = text;
-                 badgeEl.className = "px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-xs font-mono text-slate-300"; // Reset style
+                 // Render as HTML for colors
+                 badgeEl.innerHTML = `
+                    <span class="text-sky-300/80">${{srcText}}</span>
+                    <span class="text-slate-600 mx-1">|</span>
+                    <span class="text-emerald-300/80">${{dstText}}</span>
+                 `;
+                 badgeEl.className = "px-2 py-1 rounded-md bg-slate-900/50 border border-slate-700/50 text-[10px] font-mono flex items-center shadow-inner"; 
              }}
           }});
         }}
