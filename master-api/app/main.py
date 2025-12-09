@@ -822,11 +822,6 @@ def _login_html() -> str:
   <div class="radix-themes min-h-screen" data-theme="dark">
     <div class="page-frame">
       <div class="page-content">
-        <div class="page-header">
-          <p class="eyebrow">iperf3 控制中心</p>
-          <h1 class="page-title">主控面板</h1>
-          <p class="page-subtitle">集中管理节点、发起测试并查看最新结果，稳定的远程运维体验从这里开始。</p>
-        </div>
 
         <div class="card-stack">
           <div class="login-container" id="login-card">
@@ -838,9 +833,8 @@ def _login_html() -> str:
                   </div>
               </div>
 
-              <h1 class="login-title">Control Center</h1>
-              <p class="login-subtitle">Secure Access Gateway</p>
-
+              <h1 class="login-title">iperf web login</h1>
+              
               <div id="login-alert" class="alert alert-error hidden"></div>
 
               <form id="login-form">
@@ -849,7 +843,7 @@ def _login_html() -> str:
                   <input id="password-input" class="form-input" type="password" placeholder="Enter dashboard password" autocomplete="current-password" required />
                 </div>
                 <button id="login-btn" type="submit" class="btn-primary">
-                  Unlock Dashboard
+                  Login
                 </button>
               </form>
             </div>
@@ -3297,6 +3291,10 @@ def _schedule_html() -> str:
     logoutBtn.addEventListener('click', logout);
     saveScheduleBtn.addEventListener('click', saveSchedule);
     refreshSchedulesBtn.addEventListener('click', refreshSchedules);
+    loginForm?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      login();
+    });
 
     checkAuth();
     refreshNodes();
