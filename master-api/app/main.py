@@ -1586,6 +1586,22 @@ def _login_html() -> str:
             passwordInput.focus();
         }
         
+        // Whitelist management button listeners
+        const viewWhitelistBtn = document.getElementById('view-whitelist-btn');
+        if (viewWhitelistBtn) {
+            viewWhitelistBtn.addEventListener('click', () => viewWhitelist());
+        }
+        
+        const syncWhitelistBtn = document.getElementById('sync-whitelist-btn');
+        if (syncWhitelistBtn) {
+            syncWhitelistBtn.addEventListener('click', () => syncWhitelist());
+        }
+        
+        const checkWhitelistStatusBtn = document.getElementById('check-whitelist-status-btn');
+        if (checkWhitelistStatusBtn) {
+            checkWhitelistStatusBtn.addEventListener('click', () => checkWhitelistStatus());
+        }
+        
         // Run initial checks
         checkAuth();
     });
@@ -3815,6 +3831,10 @@ def _schedules_html() -> str:
         return;
       }}
       
+      // Clear initial loading text if present
+      const loadingText = container.querySelector('.text-center.text-slate-400');
+      if (loadingText) loadingText.remove();
+      
       // Incremental Update Strategy
       // 1. Remove Deleted Cards
       const currentIds = schedules.map(s => s.id);
@@ -3915,8 +3935,8 @@ def _schedules_html() -> str:
                    </div>
                 </div>
               </div>
-              <div class="h-64 w-full">
-                <canvas id="chart-${{schedule.id}}"></canvas>
+              <div class="w-full" style="position: relative; height: 16rem;">
+                <canvas id="chart-${{schedule.id}}" style="width: 100% !important; height: 100% !important;"></canvas>
               </div>
               <div id="stats-${{schedule.id}}"></div>
               
