@@ -338,8 +338,14 @@ def _summarize_metrics(raw: dict | None) -> dict | None:
     body = raw.get("iperf_result") if isinstance(raw, dict) else None
     result = body or raw
     end = result.get("end", {}) if isinstance(result, dict) else {}
-    sum_received = end.get("sum_received") or end.get("sum") or {}
-    sum_sent = end.get("sum_sent") or end.get("sum") or {}
+
+    sum_received = end.get("sum_received") or {}
+    sum_sent = end.get("sum_sent") or {}
+    # Fallback to 'sum' only if specific fields are missing entirely, but do not blind assign
+    if not sum_received and not sum_sent:
+        sum_general = end.get("sum") or {}
+        # We cannot verify direction here safely without context, but prevents duplication
+        pass
     streams = end.get("streams") or []
     first_stream = streams[0] if streams else None
     receiver_stream = (first_stream or {}).get("receiver") if isinstance(first_stream, dict) else None
@@ -3740,8 +3746,8 @@ def _schedules_html() -> str:
                 <h3 class="text-lg font-bold text-white">${{schedule.name}}</h3>
                 <div class="mt-2 flex items-center gap-4 text-sm text-slate-300">
                   <span>${{srcNode?.name || 'Unknown'}} ${{
-                    schedule.direction === 'download' ? '⬅' : 
-                    schedule.direction === 'bidirectional' ? '⇋' : '→'
+                    schedule.direction === 'download' ? '←' : 
+                    schedule.direction === 'bidirectional' ? '↔' : '→'
                   }} ${{dstNode?.name || 'Unknown'}}</span>
                   <span class="text-slate-500">|</span>
                   <span>${{schedule.protocol.toUpperCase()}}</span>
@@ -3942,46 +3948,58 @@ def _schedules_html() -> str:
       }}
       
       // 准备数据
-      const labels = results.map(r => {{
-        const time = new Date(r.executed_at);
-        return time.toLocaleTimeString('zh-CN', {{ hour: '2-digit', minute: '2-digit' }});
+      // Use map to group by timestamp
+      const timeMap = new Map();
+      const formatTime = (iso) => {{
+          const d = new Date(new Date(iso).getTime() + 8*60*60*1000); // UTC+8
+          return d.toISOString().substring(11, 16);
+      }};
+
+      results.forEach(r => {{
+          // Round to nearest minute to grouping
+          const t = formatTime(r.executed_at);
+          if (!timeMap.has(t)) {{
+              timeMap.set(t, {{ 
+                  tcp_up: null, tcp_down: null, 
+                  udp_up: null, udp_down: null 
+              }});
+          }}
+          
+          const entry = timeMap.get(t);
+          const s = r.test_result?.summary || {{}};
+          const proto = (r.test_result?.protocol || 'tcp').toLowerCase();
+          
+          // Values in Mbps
+          const up = s.upload_bits_per_second ? (s.upload_bits_per_second / 1000000).toFixed(2) : 0;
+          const down = s.download_bits_per_second ? (s.download_bits_per_second / 1000000).toFixed(2) : 0;
+          
+          if (proto === 'tcp') {{
+             if (parseFloat(up) > 0) entry.tcp_up = up;
+             if (parseFloat(down) > 0) entry.tcp_down = down;
+          }} else if (proto === 'udp') {{
+             if (parseFloat(up) > 0) entry.udp_up = up;
+             if (parseFloat(down) > 0) entry.udp_down = down;
+          }}
       }});
       
-      const uploadData = results.map(r => {{
-        const s = r.test_result?.summary;
-        if (!s) return 0;
-        
-        if (s.upload_bits_per_second) return (s.upload_bits_per_second / 1000000).toFixed(2);
-        
-        // Fallback
-        const bps = s.bits_per_second || 0;
-        const isReverse = r.test_result.params?.reverse || r.test_result.raw_result?.start?.test_start?.reverse;
-        if (isReverse) return 0;
-        return (bps / 1000000).toFixed(2);
-      }});
+      // Sort keys
+      const labels = Array.from(timeMap.keys()).sort();
+      const tcpUpData = labels.map(t => timeMap.get(t).tcp_up || 0);
+      const tcpDownData = labels.map(t => timeMap.get(t).tcp_down || 0);
+      const udpUpData = labels.map(t => timeMap.get(t).udp_up || 0);
+      const udpDownData = labels.map(t => timeMap.get(t).udp_down || 0);
       
-      const downloadData = results.map(r => {{
-        const s = r.test_result?.summary;
-        if (!s) return 0;
-        
-        if (s.download_bits_per_second) return (s.download_bits_per_second / 1000000).toFixed(2);
-        
-        // Fallback
-        const bps = s.bits_per_second || 0;
-        const isReverse = r.test_result.params?.reverse || r.test_result.raw_result?.start?.test_start?.reverse;
-        if (!isReverse) return 0;
-        return (bps / 1000000).toFixed(2);
-      }});
-      
-      // 计算统计数据
-      const uploadValues = uploadData.map(v => parseFloat(v) || 0);
-      const downloadValues = downloadData.map(v => parseFloat(v) || 0);
-      const uploadMax = Math.max(...uploadValues);
-      const uploadAvg = uploadValues.reduce((a,b) => a+b, 0) / uploadValues.length;
-      const uploadCurrent = uploadValues[uploadValues.length - 1] || 0;
-      const downloadMax = Math.max(...downloadValues);
-      const downloadAvg = downloadValues.reduce((a,b) => a+b, 0) / downloadValues.length;
-      const downloadCurrent = downloadValues[downloadValues.length - 1] || 0;
+      // Stats Calculation (Simplified: just max/avg of ALL valid uploads/downloads)
+      const allUp = [...tcpUpData, ...udpUpData].map(v => parseFloat(v)||0).filter(v=>v>0);
+      const allDown = [...tcpDownData, ...udpDownData].map(v => parseFloat(v)||0).filter(v=>v>0);
+
+      const uploadMax = allUp.length ? Math.max(...allUp) : 0;
+      const uploadAvg = allUp.length ? allUp.reduce((a,b)=>a+b,0)/allUp.length : 0;
+      const uploadCurrent = allUp.length ? allUp[allUp.length-1] : 0; 
+
+      const downloadMax = allDown.length ? Math.max(...allDown) : 0;
+      const downloadAvg = allDown.length ? allDown.reduce((a,b)=>a+b,0)/allDown.length : 0;
+      const downloadCurrent = allDown.length ? allDown[allDown.length-1] : 0;
       
       // 创建图表
       const ctx = canvas.getContext('2d');
@@ -3991,26 +4009,44 @@ def _schedules_html() -> str:
           labels: labels,
           datasets: [
             {{
-              label: '上传 (Mbps)',
-              data: uploadData,
-              backgroundColor: 'rgba(59, 130, 246, 0.3)',
-              borderColor: 'rgba(59, 130, 246, 1)',
-              borderWidth: 1.5,
-              fill: true,
-              tension: 0.1,
+              label: 'TCP 上传',
+              data: tcpUpData,
+              borderColor: '#38bdf8', // sky-400
+              backgroundColor: 'rgba(56, 189, 248, 0.1)',
+              borderWidth: 2,
               pointRadius: 0,
-              pointHoverRadius: 4,
+              tension: 0.4,
+              fill: true
             }},
             {{
-              label: '下载 (Mbps)',
-              data: downloadData,
-              backgroundColor: 'rgba(16, 185, 129, 0.3)',
-              borderColor: 'rgba(16, 185, 129, 1)',
-              borderWidth: 1.5,
-              fill: true,
-              tension: 0.1,
+              label: 'TCP 下载',
+              data: tcpDownData,
+              borderColor: '#34d399', // emerald-400
+              backgroundColor: 'rgba(52, 211, 153, 0.1)',
+              borderWidth: 2,
               pointRadius: 0,
-              pointHoverRadius: 4,
+              tension: 0.4,
+              fill: true
+            }},
+             {{
+              label: 'UDP 上传',
+              data: udpUpData,
+              borderColor: '#facc15', // yellow-400
+              backgroundColor: 'rgba(250, 204, 21, 0.1)',
+              borderWidth: 2,
+              pointRadius: 0,
+              tension: 0.4,
+              fill: true
+            }},
+            {{
+              label: 'UDP 下载',
+              data: udpDownData,
+              borderColor: '#c084fc', // purple-400
+              backgroundColor: 'rgba(192, 132, 252, 0.1)',
+              borderWidth: 2,
+              pointRadius: 0,
+              tension: 0.4,
+              fill: true
             }}
           ]
         }},
@@ -5404,9 +5440,13 @@ async def _execute_schedule_task(schedule_id: int):
                 protocols = [schedule.protocol]
 
             # Determine direction params
-            direction = getattr(schedule, "direction", "upload")
+            direction = getattr(schedule, "direction", "upload") or "upload"
+            direction = direction.lower() # Normalize case
             is_reverse = (direction == "download")
             is_bidir = (direction == "bidirectional")
+
+            # Use a shared timestamp for all tests in this schedule run (for Chart align)
+            execution_time = datetime.now(timezone.utc)
 
             for proto in protocols:
                 try:
@@ -5441,7 +5481,7 @@ async def _execute_schedule_task(schedule_id: int):
                         params=test_params,
                         raw_result=raw_data,
                         summary=summary,
-                        created_at=datetime.now(timezone.utc),
+                        created_at=execution_time,
                     )
                     db.add(test_result)
                     db.flush()
@@ -5450,7 +5490,7 @@ async def _execute_schedule_task(schedule_id: int):
                     schedule_result = ScheduleResult(
                         schedule_id=schedule_id,
                         test_result_id=test_result.id,
-                        executed_at=datetime.now(timezone.utc),
+                        executed_at=execution_time,
                         status="success",
                     )
                     db.add(schedule_result)
