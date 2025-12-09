@@ -938,33 +938,6 @@ def _login_html() -> str:
                 </div>
                 <div id="nodes-list" class="text-sm text-slate-400 space-y-3">暂无节点。</div>
               </div>
-              
-              <!-- IP Whitelist Management -->
-              <div class="glass-card rounded-2xl p-6">
-                <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-                  <div>
-                    <h3 class="text-lg font-semibold text-white">🔒 IP 白名单管理</h3>
-                    <p class="text-sm text-slate-400">防止未授权 IP 滥用 iperf3 服务</p>
-                  </div>
-                  <button id="sync-whitelist-btn" onclick="syncWhitelist()" class="rounded-lg border border-sky-500/40 bg-sky-500/15 px-4 py-2 text-sm font-semibold text-sky-100 shadow-sm transition hover:bg-sky-500/25">
-                    同步白名单到所有 Agent
-                  </button>
-                </div>
-                
-                <div id="whitelist-status" class="space-y-3">
-                  <div class="flex items-center gap-2 text-sm">
-                    <span class="text-slate-400">状态:</span>
-                    <span id="whitelist-status-text" class="text-emerald-400">● 自动同步已启用</span>
-                  </div>
-                  <div class="flex items-center gap-2 text-sm">
-                    <span class="text-slate-400">说明:</span>
-                    <span class="text-slate-300">添加/删除节点时自动同步白名单，无需手动操作</span>
-                  </div>
-                  <div id="whitelist-sync-result" class="hidden rounded-lg border border-slate-700 bg-slate-900/50 p-3 text-xs">
-                    <!-- Sync results will be displayed here -->
-                  </div>
-                </div>
-              </div>
 
               <div class="panel-card rounded-2xl p-5 space-y-4">
                 <div class="flex flex-wrap items-center justify-between gap-3">
@@ -1160,14 +1133,13 @@ def _login_html() -> str:
   <!-- Settings Modal -->
   <div id="settings-modal" class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-950/80 px-4 py-6 backdrop-blur">
     <div class="relative w-full max-w-2xl rounded-3xl border border-slate-800 bg-slate-900/80 p-6 shadow-2xl shadow-black/40">
-      <button id="close-settings" onclick="toggleSettingsModal(false)" class="absolute right-4 top-4 rounded-full border border-slate-700/80 bg-slate-800/80 p-2 text-slate-300 transition hover:bg-slate-700/80">✕</button>
+      <button id="close-settings" onclick="toggleSettingsModal(false)" class="absolute right-4 top-4 rounded-full border border-slate-700/80 bg-slate-800/80 p-2 text-slate-300 transition hover:bg-slate-700/80 z-10">✕</button>
       
-      <div class="mb-6 flex items-center justify-between gap-2">
+      <div class="mb-6 flex items-center justify-between gap-2 pr-12">
         <div>
           <p class="text-xs uppercase tracking-[0.2em] text-indigo-300/80">系统管理</p>
           <h3 class="text-2xl font-semibold text-white">设置</h3>
         </div>
-        <span class="rounded-full bg-indigo-500/10 px-3 py-1 text-xs font-semibold text-indigo-200 ring-1 ring-indigo-500/40">Settings</span>
       </div>
 
       <!-- Tab Navigation -->
@@ -3379,26 +3351,9 @@ def _schedules_html() -> str:
   <div class="container mx-auto px-4 py-8 max-w-7xl">
     <!-- Header -->
     <div class="mb-8 flex items-center justify-between">
-      <div class="flex items-center gap-4">
-        <div>
-          <h1 class="text-3xl font-bold text-white">定时任务管理</h1>
-          <p class="text-slate-400 mt-1">Schedule Management & Monitoring</p>
-        </div>
-        <!-- Daily Traffic Statistics Badges -->
-        <div id="traffic-badges" class="flex gap-3 ml-6">
-          <div class="px-3 py-1.5 rounded-lg bg-gradient-to-r from-blue-500/20 to-cyan-500/20 border border-blue-500/30">
-            <div class="flex items-center gap-2">
-              <span class="text-xs font-medium text-blue-300">RFC JINX</span>
-              <span id="traffic-rfc-jinx" class="text-sm font-bold text-white">--G</span>
-            </div>
-          </div>
-          <div class="px-3 py-1.5 rounded-lg bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-500/30">
-            <div class="flex items-center gap-2">
-              <span class="text-xs font-medium text-emerald-300">Suda.HKT</span>
-              <span id="traffic-suda-hkt" class="text-sm font-bold text-white">--G</span>
-            </div>
-          </div>
-        </div>
+      <div>
+        <h1 class="text-3xl font-bold text-white">定时任务管理</h1>
+        <p class="text-slate-400 mt-1">Schedule Management & Monitoring</p>
       </div>
       <div class="flex gap-3">
         <a href="/web" class="px-4 py-2 rounded-lg border border-slate-700 bg-slate-800/60 text-sm font-semibold text-slate-100 hover:border-sky-500 transition">
@@ -3540,6 +3495,10 @@ def _schedules_html() -> str:
                   <span>${{schedule.duration}}秒</span>
                   <span class="text-slate-500">|</span>
                   <span>每${{Math.floor(schedule.interval_seconds / 60)}}分钟</span>
+                  <!-- Traffic Badge -->
+                  <span class="px-2 py-0.5 rounded-md bg-gradient-to-r from-blue-500/20 to-cyan-500/20 border border-blue-500/30 text-xs font-semibold text-blue-200" id="traffic-badge-${{schedule.id}}">
+                    --
+                  </span>
                 </div>
               </div>
               <div class="flex items-center gap-3">
@@ -4019,29 +3978,44 @@ def _schedules_html() -> str:
     document.getElementById('save-schedule').addEventListener('click', saveSchedule);
     document.getElementById('refresh-btn').addEventListener('click', loadSchedules);
 
-    // 更新流量统计
-    async function updateTrafficStats() {{
+    // 更新定时任务卡片的流量徽章
+    async function updateScheduleTrafficBadges() {{
       try {{
         const res = await fetch('/api/daily_traffic_stats');
         const data = await res.json();
         
         if (data.status === 'ok') {{
-          // 更新 RFC JINX 流量
-          const rfcJinx = data.nodes.find(n => n.name === 'RFC JINX');
-          if (rfcJinx) {{
-            const trafficGB = (rfcJinx.total_bytes / (1024 * 1024 * 1024)).toFixed(2);
-            document.getElementById('traffic-rfc-jinx').textContent = trafficGB + 'G';
-          }}
+          // 遍历所有定时任务，更新对应的流量徽章
+          const schedules = await (await apiFetch('/schedules')).json();
           
-          // 更新 Suda.HKT 流量
-          const sudaHkt = data.nodes.find(n => n.name === 'Suda.HKT');
-          if (sudaHkt) {{
-            const trafficGB = (sudaHkt.total_bytes / (1024 * 1024 * 1024)).toFixed(2);
-            document.getElementById('traffic-suda-hkt').textContent = trafficGB + 'G';
-          }}
+          schedules.forEach(schedule => {{
+            const srcNode = data.nodes.find(n => n.node_id === schedule.src_node_id);
+            const dstNode = data.nodes.find(n => n.node_id === schedule.dst_node_id);
+            
+            const badgeEl = document.getElementById(`traffic-badge-${{schedule.id}}`);
+            if (badgeEl && (srcNode || dstNode)) {{
+              // 计算这个任务相关节点的总流量
+              let totalBytes = 0;
+              if (srcNode) totalBytes += srcNode.total_bytes;
+              if (dstNode && dstNode.node_id !== srcNode?.node_id) totalBytes += dstNode.total_bytes;
+              
+              // 自动转换单位 Mb/Gb
+              let trafficText;
+              const mb = totalBytes / (1024 * 1024);
+              const gb = totalBytes / (1024 * 1024 * 1024);
+              
+              if (gb >= 1) {{
+                trafficText = gb.toFixed(2) + ' Gb';
+              }} else {{
+                trafficText = mb.toFixed(2) + ' Mb';
+              }}
+              
+              badgeEl.textContent = trafficText;
+            }}
+          }});
         }}
       }} catch (err) {{
-        console.error('Failed to update traffic stats:', err);
+        console.error('Failed to update schedule traffic badges:', err);
       }}
     }}
 
@@ -4049,10 +4023,10 @@ def _schedules_html() -> str:
     (async () => {{
       await loadNodes();
       await loadSchedules();
-      await updateTrafficStats();
+      await updateScheduleTrafficBadges();
       
       // 每5分钟更新一次流量统计
-      setInterval(updateTrafficStats, 5 * 60 * 1000);
+      setInterval(updateScheduleTrafficBadges, 5 * 60 * 1000);
     }})();
   </script>
 </body>
