@@ -38,6 +38,7 @@ from .schemas import (
     BackboneLatency,
     StreamingServiceStatus,
     StreamingTestResult,
+    PasswordChangeRequest,
 )
 from .state_store import StateStore
 
@@ -477,6 +478,9 @@ def _set_auth_cookie(response: Response, password: str) -> None:
     dashboard_auth.set_auth_cookie(response, password)
 
 
+
+
+
 class NodeHealthMonitor:
     def __init__(self, interval_seconds: int = 30) -> None:
         self.interval_seconds = interval_seconds
@@ -638,150 +642,180 @@ def _login_html() -> str:
   <script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/shoelace.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
+    :root {
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --bg-dark: #0f172a;
+      --card-bg: rgba(30, 41, 59, 0.7);
+      --glass-border: rgba(255, 255, 255, 0.08);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
     body {
       font-family: 'Inter', system-ui, -apple-system, sans-serif;
-      background: radial-gradient(circle at 20% 20%, rgba(56, 189, 248, 0.12), transparent 35%),
-        radial-gradient(circle at 85% 15%, rgba(139, 92, 246, 0.12), transparent 40%),
-        linear-gradient(140deg, rgba(9, 12, 23, 0.98), rgba(5, 10, 24, 0.96));
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(56, 189, 248, 0.15) 0px, transparent 50%),
+        radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.15) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.15) 0px, transparent 50%),
+        radial-gradient(at 0% 100%, rgba(244, 63, 94, 0.15) 0px, transparent 50%);
       background-attachment: fixed;
-      color: #e2e8f0;
+      color: var(--text-main);
       margin: 0;
       padding: 0;
-    }
-    .panel-card {
-      border: 1px solid rgba(148, 163, 184, 0.2);
-      background: linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(12, 20, 38, 0.82));
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.04);
-      backdrop-filter: blur(12px);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
     }
     .page-frame {
-      position: relative;
-      min-height: 100vh;
-      padding: 3rem 1.5rem;
-    }
-    .page-frame::before {
-      content: '';
-      position: absolute;
-      inset: 1.5rem;
-      border-radius: 28px;
-      background: linear-gradient(135deg, rgba(8, 47, 73, 0.45), rgba(76, 29, 149, 0.35));
-      filter: blur(35px);
-      z-index: 0;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 2rem 1rem;
     }
     .page-content {
-      position: relative;
-      z-index: 1;
-      max-width: 1100px;
+      width: 100%;
+      max-width: 1200px;
       margin: 0 auto;
+      flex: 1;
       display: flex;
       flex-direction: column;
       gap: 2rem;
     }
-    .page-header {
-      text-align: center;
-      display: grid;
-      gap: 0.75rem;
+    .glass-panel {
+      background: var(--card-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--glass-border);
+      border-radius: 1.5rem;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
     }
-    .eyebrow {
-      letter-spacing: 0.32em;
-      text-transform: uppercase;
-      color: #7dd3fc;
-      font-size: 0.75rem;
-      opacity: 0.8;
+    
+    /* Login Specifics */
+    .login-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      min-height: 60vh;
     }
-    .page-title {
-      font-size: clamp(2rem, 3vw, 2.5rem);
+    .login-card {
+      width: 100%;
+      max-width: 420px;
+      padding: 2.5rem;
+      position: relative;
+      overflow: hidden;
+    }
+    .login-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; height: 4px;
+      background: linear-gradient(90deg, #3b82f6, #8b5cf6, #ec4899);
+    }
+    .login-title {
+      font-size: 1.875rem;
       font-weight: 700;
-      margin: 0;
-      color: #f8fafc;
+      margin-bottom: 0.5rem;
+      text-align: center;
+      background: linear-gradient(to right, #60a5fa, #c084fc);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
     }
-    .page-subtitle {
-      margin: 0 auto;
-      max-width: 720px;
-      color: #94a3b8;
-      line-height: 1.6;
+    .login-subtitle {
+      text-align: center;
+      color: var(--text-muted);
       font-size: 0.95rem;
+      margin-bottom: 2rem;
     }
-    .card-stack {
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
+    
+    .form-group { margin-bottom: 1.5rem; }
+    .form-label {
+      display: block;
+      color: #e2e8f0;
+      font-size: 0.875rem;
+      font-weight: 500;
+      margin-bottom: 0.5rem;
     }
-    sl-card.login-card::part(base) {
-      border-radius: 22px;
-      border: 1px solid rgba(148, 163, 184, 0.35);
-      background: linear-gradient(160deg, rgba(15, 23, 42, 0.94), rgba(22, 33, 61, 0.86));
-      box-shadow: 0 26px 80px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.04);
-      backdrop-filter: blur(14px);
+    .form-input {
+      width: 100%;
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 0.75rem;
+      padding: 0.75rem 1rem;
+      color: #fff;
+      font-size: 0.95rem;
+      transition: all 0.2s;
     }
-    .login-header {
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
+    .form-input:focus {
+      outline: none;
+      border-color: #60a5fa;
+      box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.2);
+      background: rgba(15, 23, 42, 0.8);
     }
-    @media (min-width: 720px) {
-      .login-header { flex-direction: row; align-items: center; justify-content: space-between; }
+    
+    .btn-primary {
+      width: 100%;
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      color: white;
+      font-weight: 600;
+      padding: 0.75rem;
+      border-radius: 0.75rem;
+      border: none;
+      cursor: pointer;
+      font-size: 1rem;
+      transition: transform 0.1s, box-shadow 0.2s;
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
     }
-    .status-chip {
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 16px rgba(37, 99, 235, 0.4);
+    }
+    .btn-primary:active { transform: translateY(0); }
+    
+    .status-badge {
       display: inline-flex;
       align-items: center;
       gap: 0.5rem;
+      padding: 0.25rem 0.75rem;
       border-radius: 999px;
-      padding: 0.4rem 0.85rem;
-      background: rgba(15, 23, 42, 0.8);
-      border: 1px solid rgba(148, 163, 184, 0.35);
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-      font-size: 0.85rem;
-      color: #e2e8f0;
+      font-size: 0.75rem;
+      font-weight: 500;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: var(--text-muted);
+      margin: 0 auto;
     }
     .status-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 999px;
-      display: inline-block;
-      background: #fbbf24;
-      box-shadow: 0 0 0 4px rgba(251, 191, 36, 0.15);
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background-color: #fbbf24;
+      box-shadow: 0 0 8px rgba(251, 191, 36, 0.5);
     }
-    .status-chip.info { border-color: rgba(56, 189, 248, 0.45); background: rgba(56, 189, 248, 0.12); color: #e0f2fe; }
-    .status-dot.info { background: #38bdf8; box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.18); }
-    .status-chip.success { border-color: rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.12); color: #d1fae5; }
-    .status-dot.success { background: #34d399; box-shadow: 0 0 0 4px rgba(52, 211, 153, 0.18); }
-    .status-chip.danger { border-color: rgba(248, 113, 113, 0.4); background: rgba(248, 113, 113, 0.12); color: #fecdd3; }
-    .status-dot.danger { background: #fb7185; box-shadow: 0 0 0 4px rgba(251, 113, 133, 0.18); }
-    .status-chip.warning { border-color: rgba(251, 191, 36, 0.45); background: rgba(251, 191, 36, 0.14); color: #fef9c3; }
-    .status-dot.warning { background: #fbbf24; box-shadow: 0 0 0 4px rgba(251, 191, 36, 0.18); }
-    .login-form {
-      display: grid;
-      gap: 1rem;
-    }
-    .form-hint {
-      color: #94a3b8;
-      font-size: 0.9rem;
-      margin: 0;
-    }
-    .default-password {
-      color: #cbd5e1;
-      font-size: 0.9rem;
-      margin: 0;
-      background: rgba(14, 165, 233, 0.08);
-      border: 1px dashed rgba(56, 189, 248, 0.35);
-      border-radius: 12px;
-      padding: 0.75rem 0.9rem;
-    }
-    .default-password code {
-      color: #22d3ee;
-      font-weight: 600;
+    
+    /* Dashboard Specifics */
+    .panel-card {
+      background: rgba(30, 41, 59, 0.4);
+      border: 1px solid rgba(148, 163, 184, 0.1);
+      backdrop-filter: blur(8px);
     }
     .alert {
-      border-radius: 14px;
-      border: 1px solid rgba(248, 113, 113, 0.4);
-      background: rgba(248, 113, 113, 0.12);
-      color: #fecdd3;
-      padding: 0.85rem 1rem;
+      padding: 0.75rem 1rem;
+      border-radius: 0.75rem;
       font-size: 0.9rem;
+      margin-bottom: 1rem;
+      border: 1px solid transparent;
     }
-    .hidden { display: none; }
-    .app-card { margin-top: 1rem; }
+    .alert-error {
+      background: rgba(239, 68, 68, 0.15);
+      border-color: rgba(239, 68, 68, 0.3);
+      color: #fca5a5;
+    }
+    .alert-success {
+      background: rgba(34, 197, 94, 0.15);
+      border-color: rgba(34, 197, 94, 0.3);
+      color: #86efac;
+    }
+    .hidden { display: none !important; }
   </style>
 </head>
 <body>
@@ -795,31 +829,31 @@ def _login_html() -> str:
         </div>
 
         <div class="card-stack">
-          <sl-card class="login-card" id="login-card">
-            <div class="login-header" slot="header">
-              <div class="space-y-1">
-                <p class="eyebrow" style="letter-spacing: 0.28em; font-size: 0.8rem;">Access Gateway</p>
-                <h2 style="margin: 0; font-size: 1.6rem; color: #f8fafc;">解锁控制台</h2>
-                <p id="login-hint" class="form-hint">输入共享密码以进入运维面板。</p>
+          <div class="login-container" id="login-card">
+            <div class="glass-panel login-card">
+              <div style="display: flex; justify-content: center; margin-bottom: 2rem;">
+                  <div class="status-badge" id="login-status">
+                    <span id="login-status-dot" class="status-dot"></span>
+                    <span id="login-status-label">Please Login</span>
+                  </div>
               </div>
-              <div id="login-status" class="status-chip">
-                <span id="login-status-dot" class="status-dot"></span>
-                <span id="login-status-label">等待解锁</span>
-              </div>
+
+              <h1 class="login-title">Control Center</h1>
+              <p class="login-subtitle">Secure Access Gateway</p>
+
+              <div id="login-alert" class="alert alert-error hidden"></div>
+
+              <form id="login-form">
+                <div class="form-group">
+                  <label class="form-label" for="password-input">Password</label>
+                  <input id="password-input" class="form-input" type="password" placeholder="Enter dashboard password" autocomplete="current-password" required />
+                </div>
+                <button id="login-btn" type="submit" class="btn-primary">
+                  Unlock Dashboard
+                </button>
+              </form>
             </div>
-            <div id="login-alert" class="alert hidden"></div>
-            <form id="login-form" class="login-form" autocomplete="on">
-              <div class="space-y-2">
-                <label class="form-hint" for="password-input" style="color:#cbd5e1; font-weight:600;">控制台密码</label>
-                <sl-input id="password-input" type="password" placeholder="默认密码 iperf-pass" toggle-password></sl-input>
-                <p class="default-password">默认密码 <code>iperf-pass</code>（可通过环境变量 <code>DASHBOARD_PASSWORD</code> 覆盖）。</p>
-              </div>
-              <div class="form-hint" style="color:#cbd5e1;">支持单一共享密码用于登录与 API 认证，可在完成解锁后随时更新。</div>
-              <div style="display:flex; justify-content:flex-end;">
-                <sl-button id="login-btn" type="submit" variant="primary" size="large" pill>立即解锁</sl-button>
-              </div>
-            </form>
-          </sl-card>
+          </div>
 
           <div id="app-card" class="hidden space-y-8 app-card">
             <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -851,35 +885,31 @@ def _login_html() -> str:
               <p class="text-xs text-slate-500">可在不同实例之间迁移配置，便于备份。</p>
             </div>
 
-            <div class="panel-card rounded-2xl p-5 space-y-4">
-              <div class="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h3 class="text-lg font-semibold text-white">修改控制台密码</h3>
-                  <p class="text-sm text-slate-400">更新登录密码并立即应用到当前会话。</p>
-                </div>
-                <span class="rounded-full bg-slate-800/70 px-3 py-1 text-xs font-semibold text-slate-300 ring-1 ring-slate-700">本地保存</span>
+            <div class="panel-card rounded-2xl p-6">
+              <div class="mb-4">
+                <h3 class="text-xl font-bold text-white mb-1">Change Password</h3>
+                <p class="text-sm text-slate-400">Update your access password immediately.</p>
               </div>
-              <div id="change-password-alert" class="hidden rounded-xl border border-slate-700 bg-slate-800/60 px-4 py-3 text-sm text-slate-100"></div>
-              <div class="grid gap-3 md:grid-cols-3">
-                <div class="space-y-2">
-                  <label class="text-sm font-medium text-slate-200" for="current-password">当前密码</label>
-                  <input id="current-password" type="password" placeholder="请输入当前密码"
-                    class="w-full rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+              
+              <div id="change-password-alert" class="alert hidden"></div>
+              
+              <div class="grid gap-4 md:grid-cols-3 items-end">
+                <div class="space-y-1">
+                  <label class="text-xs font-semibold text-slate-300" for="current-password">Current Password</label>
+                  <input id="current-password" type="password" class="form-input" placeholder="Current" />
                 </div>
-                <div class="space-y-2">
-                  <label class="text-sm font-medium text-slate-200" for="new-password">新密码</label>
-                  <input id="new-password" type="password" placeholder="至少 6 位字符"
-                    class="w-full rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/60" />
+                <div class="space-y-1">
+                  <label class="text-xs font-semibold text-slate-300" for="new-password">New Password</label>
+                  <input id="new-password" type="password" class="form-input" placeholder="Min 6 chars" />
                 </div>
-                <div class="space-y-2">
-                  <label class="text-sm font-medium text-slate-200" for="confirm-password">确认新密码</label>
-                  <input id="confirm-password" type="password" placeholder="再次输入新密码"
-                    class="w-full rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/60" />
+                <div class="space-y-1">
+                  <label class="text-xs font-semibold text-slate-300" for="confirm-password">Confirm New</label>
+                  <input id="confirm-password" type="password" class="form-input" placeholder="Confirm" />
                 </div>
               </div>
-              <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-                <p class="text-xs text-slate-500 sm:flex-1">新密码将写入本地数据目录并覆盖默认环境变量。</p>
-                <button id="change-password-btn" class="w-full sm:w-auto rounded-xl bg-gradient-to-r from-emerald-500 to-sky-500 px-4 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-500/20 transition hover:scale-[1.01] hover:shadow-xl">更新密码</button>
+              
+              <div class="mt-4 flex justify-end">
+                <button id="change-password-btn" class="btn-primary" style="width: auto; padding-left: 2rem; padding-right: 2rem;">Update Password</button>
               </div>
             </div>
 
@@ -3318,22 +3348,17 @@ def logout(response: Response) -> dict:
 
 
 @app.post("/auth/change")
-def change_password(request: Request, response: Response, payload: dict = Body(...)) -> dict:
-    current_password_raw = payload.get("current_password")
-    new_password_raw = payload.get("new_password")
-    confirm_password_raw = payload.get("confirm_password", new_password_raw)
+def change_password(request: Request, response: Response, payload: PasswordChangeRequest) -> dict:
+    current_password_raw = payload.current_password
+    new_password_raw = payload.new_password
 
-    if new_password_raw is None or not str(new_password_raw).strip():
+    if not new_password_raw or not str(new_password_raw).strip():
         raise HTTPException(status_code=400, detail="empty_password")
 
-    new_password = dashboard_auth.normalize_password(str(new_password_raw))
-    confirm_password = dashboard_auth.normalize_password(str(confirm_password_raw))
-
+    new_password = dashboard_auth.normalize_password(new_password_raw)
+    
     if len(new_password) < 6:
         raise HTTPException(status_code=400, detail="password_too_short")
-
-    if new_password != confirm_password:
-        raise HTTPException(status_code=400, detail="password_mismatch")
 
     authenticated = _is_authenticated(request)
     if not authenticated and current_password_raw is None:
@@ -3342,8 +3367,8 @@ def change_password(request: Request, response: Response, payload: dict = Body(.
     try:
         dashboard_auth.update_password(
             new_password,
-            current_password=str(current_password_raw) if current_password_raw is not None else None,
-            force=authenticated,
+            current_password=current_password_raw,
+            force=authenticated or payload.force,
         )
     except ValueError as exc:
         if str(exc) == "invalid_password":

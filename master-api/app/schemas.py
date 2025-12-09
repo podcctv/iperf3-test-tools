@@ -186,3 +186,9 @@ class AgentActionResult(BaseModel):
     status: str
     message: Optional[str] = None
     logs: Optional[str] = None
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str | None = None
+    new_password: str
+    force: bool = False

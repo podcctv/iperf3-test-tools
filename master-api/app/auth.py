@@ -13,6 +13,9 @@ from fastapi import Request, Response
 
 from .config import settings
 
+import secrets
+import string
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_DASHBOARD_PASSWORD = "iperf-pass"
@@ -20,22 +23,26 @@ DEFAULT_DASHBOARD_PASSWORD = "iperf-pass"
 
 class DashboardAuthManager:
     def __init__(self) -> None:
-        self._password = self._normalize(self._load_password())
+        self._password = self._load_password()
         self._ensure_password_file()
         self._log_password()
 
     @staticmethod
     def _normalize(password: Optional[str]) -> str:
         if password is None:
-            return DEFAULT_DASHBOARD_PASSWORD
-        stripped = password.strip()
-        return stripped or DEFAULT_DASHBOARD_PASSWORD
+            return ""
+        return password.strip()
+
+    @staticmethod
+    def _generate_random_password(length: int = 12) -> str:
+        alphabet = string.ascii_letters + string.digits
+        return "".join(secrets.choice(alphabet) for _ in range(length))
 
     def _dashboard_token(self, password: str) -> str:
         secret = settings.dashboard_secret.encode()
         return hmac.new(secret, password.encode(), hashlib.sha256).hexdigest()
 
-    def _load_password(self) -> str:
+    def _load_password(self) -> str | None:
         env_password = os.getenv("DASHBOARD_PASSWORD")
         if env_password is not None:
             return self._normalize(env_password)
@@ -49,7 +56,7 @@ class DashboardAuthManager:
             except OSError:
                 logger.exception("Failed to read stored dashboard password from %s", path)
 
-        return self._normalize(settings.dashboard_password)
+        return None
 
     def _save_password(self, password: str) -> None:
         path = settings.dashboard_password_file
@@ -60,16 +67,20 @@ class DashboardAuthManager:
             logger.exception("Failed to persist dashboard password to %s", path)
 
     def _ensure_password_file(self) -> None:
-        path = settings.dashboard_password_file
-        if path.exists():
-            try:
-                if path.read_text(encoding="utf-8").strip():
-                    return
-            except OSError:
-                logger.exception("Failed to read stored dashboard password from %s", path)
-                return
+        if self._password:
+            # If we found a password (env or file), just ensure it's synced to file if it was from env? 
+            # The original logic was: if file exists, read it. If not, save current.
+            # But we might have loaded from env.
+            # Let's keep it simple: if file doesn't exist, save what we have.
+            if not settings.dashboard_password_file.exists():
+                self._save_password(self._password)
+            return
 
-        self._save_password(self._password)
+        # No password found in env or file. Generate one.
+        logger.info("No dashboard password found. Generating a secure random password.")
+        new_pass = self._generate_random_password()
+        self._password = new_pass
+        self._save_password(new_pass)
 
     def _log_password(self) -> None:
         logger.warning("Dashboard password initialized: %s", self.current_password())
