@@ -32,10 +32,10 @@ wget -qO- https://raw.githubusercontent.com/podcctv/iperf3-test-tools/main/insta
 
 ```bash
 # 下载并运行 Agent 安装脚本
-curl -fsSL https://raw.githubusercontent.com/podcctv/iperf3-test-tools/main/install_agent.sh | bash
+curl -fsSL https://raw.githubusercontent.com/podcctv/iperf3-test-tools/update_iperf3_master.sh | bash
 
 # 或者使用 wget
-wget -qO- https://raw.githubusercontent.com/podcctv/iperf3-test-tools/main/install_agent.sh | bash
+wget -qO- https://raw.githubusercontent.com/podcctv/iperf3-test-tools/update_iperf3_master.sh | bash
 ```
 
 ### 方式二：克隆仓库安装
