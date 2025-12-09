@@ -3938,7 +3938,7 @@ def _schedules_html() -> str:
             
             // Initial Chart Load
             loadChartData(schedule.id);
-            loadHistory(schedule.id);
+            // loadHistory(schedule.id); // Integrated into loadChartData
             updateCountdowns(); // Ensure countdown starts
             
             // Mask/ISP update for new card
@@ -4131,6 +4131,13 @@ def _schedules_html() -> str:
         if (window.countdownInterval) clearInterval(window.countdownInterval);
         window.countdownInterval = setInterval(updateCountdowns, 1000);
       }}, 100);
+    }}
+
+    function toggleHistory(scheduleId) {{
+        const panel = document.getElementById(`history-panel-${{scheduleId}}`);
+        if (panel) {{
+            panel.classList.toggle('hidden');
+        }}
     }}
 
     // 加载图表数据
@@ -5664,7 +5671,14 @@ async def create_dual_suite(test: DualSuiteTestCreate, db: Session = Depends(get
 
 @app.get("/tests", response_model=List[TestRead])
 def list_tests(db: Session = Depends(get_db)):
-    results = db.scalars(select(TestResult)).all()
+    # Filter out tests that are part of a schedule (have a matching ScheduleResult)
+    # Use outer join and check for null on the right side
+    results = db.scalars(
+        select(TestResult)
+        .outerjoin(ScheduleResult, ScheduleResult.test_result_id == TestResult.id)
+        .where(ScheduleResult.id == None)
+        .order_by(TestResult.created_at.desc())
+    ).all()
     return results
 
 
@@ -5690,7 +5704,7 @@ def delete_test(test_id: int, db: Session = Depends(get_db)):
     return {"status": "deleted"}
 
 
-def _add_schedule_to_scheduler(schedule: TestSchedule):
+def _add_schedule_to_scheduler(schedule: TestSchedule, next_run_time: datetime | None = None):
     """添加任务到调度器"""
     job_id = f"schedule_{schedule.id}"
     
@@ -5699,14 +5713,18 @@ def _add_schedule_to_scheduler(schedule: TestSchedule):
         scheduler.remove_job(job_id)
     
     # 添加新任务
+    # if next_run_time is provided, we set it as the next_run_time for the job
     scheduler.add_job(
         func=_execute_schedule_task,
         trigger=IntervalTrigger(seconds=schedule.interval_seconds),
         id=job_id,
         args=[schedule.id],
         replace_existing=True,
+        next_run_time=next_run_time
     )
-    logger.info(f"Added schedule {schedule.id} to scheduler with interval {schedule.interval_seconds}s")
+    
+    log_time = next_run_time if next_run_time else "interval default"
+    logger.info(f"Added schedule {schedule.id} to scheduler with interval {schedule.interval_seconds}s, next_run: {log_time}")
 
 
 def _remove_schedule_from_scheduler(schedule_id: int):
@@ -5846,27 +5864,6 @@ def _load_schedules_on_startup():
     """应用启动时加载所有启用的定时任务"""
     db = SessionLocal()
     try:
-        schedules = db.scalars(
-            select(TestSchedule).where(TestSchedule.enabled == True)
-        ).all()
-        
-        for schedule in schedules:
-            # 如果 next_run_at 为空，初始化它
-            if not schedule.next_run_at:
-                from datetime import timedelta
-                if schedule.last_run_at:
-                    schedule.next_run_at = schedule.last_run_at + timedelta(seconds=schedule.interval_seconds)
-                else:
-                    schedule.next_run_at = datetime.now(timezone.utc) + timedelta(seconds=schedule.interval_seconds)
-                db.commit()
-            
-            _add_schedule_to_scheduler(schedule)
-            logger.info(f"Loaded schedule {schedule.id}: {schedule.name}, next run at {schedule.next_run_at}")
-    finally:
-        db.close()
-
-
-@app.post("/schedules", response_model=TestScheduleRead)
 def create_schedule(schedule: TestScheduleCreate, db: Session = Depends(get_db)):
     """创建定时任务"""
     # 验证节点存在
