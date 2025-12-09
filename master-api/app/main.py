@@ -5864,6 +5864,29 @@ def _load_schedules_on_startup():
     """应用启动时加载所有启用的定时任务"""
     db = SessionLocal()
     try:
+        schedules = db.scalars(
+            select(TestSchedule).where(TestSchedule.enabled == True)
+        ).all()
+        
+        for schedule in schedules:
+            # Check for missed run or invalid next_run_at
+            run_at = schedule.next_run_at
+            now = datetime.now(timezone.utc)
+            
+            # If never run or next run is in the past (missed run due to downtime), run immediately
+            if not run_at or run_at <= now:
+                logger.warning(f"Schedule {schedule.id} ({schedule.name}) missed execution or not set. Scheduling immediately.")
+                from datetime import timedelta
+                run_at = now + timedelta(seconds=5) # Add small buffer
+                # Note: We don't update DB here, the execution task will update next_run_at
+            
+            _add_schedule_to_scheduler(schedule, next_run_time=run_at)
+            logger.info(f"Loaded schedule {schedule.id}: {schedule.name}, next run scheduled at {run_at}")
+    finally:
+        db.close()
+
+
+@app.post("/schedules", response_model=TestScheduleRead)
 def create_schedule(schedule: TestScheduleCreate, db: Session = Depends(get_db)):
     """创建定时任务"""
     # 验证节点存在
