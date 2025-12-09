@@ -872,7 +872,7 @@ def _login_html() -> str:
                 <p class="text-sm text-slate-400" id="auth-hint"></p>
               </div>
               <div class="flex flex-wrap items-center gap-3">
-                <button data-refresh-nodes class="rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200">刷新节点</button>
+                <button data-refresh-nodes onclick="refreshNodes()" class="rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200">刷新节点</button>
                 <a href="/web/schedules" class="rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-100 shadow-sm transition hover:bg-emerald-500/25">定时任务</a>
                 <button id="open-settings" onclick="toggleSettingsModal(true)" class="rounded-lg border border-indigo-500/40 bg-indigo-500/15 px-4 py-2 text-sm font-semibold text-indigo-100 shadow-sm transition hover:bg-indigo-500/25 inline-flex items-center gap-2">
                   <span class="text-base">⚙️</span>
@@ -890,7 +890,7 @@ def _login_html() -> str:
                     <p class="text-sm text-slate-400">实时状态与检测到的 iperf 端口。</p>
                   </div>
                   <div class="flex flex-wrap gap-2">
-                    <button data-refresh-nodes class="rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200">刷新</button>
+                    <button data-refresh-nodes onclick="refreshNodes()" class="rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200">刷新</button>
                     <button id="open-add-node" class="rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-100 shadow-sm transition hover:bg-emerald-500/25">添加节点</button>
                   </div>
                 </div>
@@ -942,7 +942,7 @@ def _login_html() -> str:
                       <label class="text-sm font-medium text-slate-200">并行数</label>
                       <input id="parallel" type="number" value="1" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
                     </div>
-                    <div class="space-y-2">
+                    <div class="space-y-2 hidden">
                       <label class="text-sm font-medium text-slate-200">端口</label>
                       <input id="test-port" type="number" value="62001" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
                     </div>
@@ -1000,7 +1000,7 @@ def _login_html() -> str:
                       <label class="text-sm font-medium text-slate-200">并行数 (P)</label>
                       <input id="suite-parallel" type="number" value="1" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
                     </div>
-                    <div class="space-y-2">
+                    <div class="space-y-2 hidden">
                       <label class="text-sm font-medium text-slate-200">端口</label>
                       <input id="suite-port" type="number" value="62001" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
                     </div>
@@ -1144,7 +1144,7 @@ def _login_html() -> str:
           </div>
           
           <div class="mt-4 flex justify-end">
-            <button id="change-password-btn" class="rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-500/20 transition hover:scale-[1.02] hover:shadow-xl">
+            <button id="change-password-btn" onclick="changePassword()" class="rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-500/20 transition hover:scale-[1.02] hover:shadow-xl">
               更新密码
             </button>
           </div>
@@ -1669,8 +1669,17 @@ def _login_html() -> str:
       return streamingServices
         .map((svc) => {
           const status = cache[svc.key];
-          const unlocked = status ? (status.unlocked ?? (status.tier === 'full')) : null;
+          // For Netflix, tier takes precedence over unlocked flag
           const tier = status?.tier;
+          let unlocked = null;
+          if (svc.key === 'netflix' && tier) {
+            // Netflix tier-based unlock status
+            unlocked = tier === 'full' ? true : (tier === 'originals' ? false : null);
+          } else {
+            // Other services use unlocked flag or tier
+            unlocked = status ? (status.unlocked ?? (tier === 'full')) : null;
+          }
+          
           const detail = status && status.detail ? status.detail.replace(/"/g, "'") : '';
           const region = status?.region;
           const tags = [];
@@ -1685,13 +1694,16 @@ def _login_html() -> str:
               statusLabel = '全解锁';
               badgeColor = `${svc.color} ${svc.bg}`;
               tags.push('全解锁');
+              unlocked = true;  // Ensure unlocked is true for full tier
             } else if (netflixTier === 'originals') {
               statusLabel = '仅解锁自制剧';
               badgeColor = mutedStyle;
               tags.push('自制剧');
+              unlocked = false;  // Originals-only is not considered fully unlocked
             } else {
               statusLabel = '未解锁';
               badgeColor = mutedStyle;
+              unlocked = false;
             }
           }
 
@@ -1875,7 +1887,11 @@ def _login_html() -> str:
            setAlert(loginAlert, '登录成功 (Success)');
            card.classList.add('animate-success');
            
-           // Allow a moment for the cookie to be processed/saved by the browser
+           // Hide login card immediately to prevent flash
+           loginCard.style.opacity = '0.5';
+           loginCard.style.pointerEvents = 'none';
+           
+           // Allow more time for the cookie to be processed/saved by the browser
            setTimeout(async () => {
              const authed = await checkAuth(true);
              console.log(`Session check result: ${authed}`);
@@ -1885,8 +1901,10 @@ def _login_html() -> str:
                 setAlert(loginAlert, '会话建立失败 (Session Failed) - Cookie Blocked?');
                 card.classList.remove('animate-success');
                 card.classList.add('animate-shake');
+                loginCard.style.opacity = '1';
+                loginCard.style.pointerEvents = 'auto';
              }
-           }, 800);
+           }, 1200);
            return;
         }
 
@@ -1982,7 +2000,8 @@ def _login_html() -> str:
         return;
       }
 
-      setAlert(changePasswordAlert, '密码已更新，当前会话已使用新密码。');
+      changePasswordAlert.className = 'alert alert-success';
+      setAlert(changePasswordAlert, '✅ 密码已成功更新!当前会话已使用新密码。');
       currentPasswordInput.value = '';
       newPasswordInput.value = '';
       confirmPasswordInput.value = '';
