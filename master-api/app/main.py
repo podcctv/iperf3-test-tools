@@ -4849,11 +4849,11 @@ async def get_daily_traffic_stats(db: Session = Depends(get_db)):
         for result in results:
             if result.summary and isinstance(result.summary, dict):
                 bits_per_second = result.summary.get("bits_per_second")
-                if bits_per_second and result.test_result:
+                if bits_per_second and result.raw_result:
                     # Get duration from test result
                     duration = 10  # default
-                    if isinstance(result.test_result, dict):
-                        iperf_result = result.test_result.get("iperf_result", {})
+                    if isinstance(result.raw_result, dict):
+                        iperf_result = result.raw_result.get("iperf_result", {})
                         end_data = iperf_result.get("end", {})
                         sum_data = end_data.get("sum_received") or end_data.get("sum", {})
                         if sum_data and "seconds" in sum_data:
