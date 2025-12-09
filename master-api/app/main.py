@@ -5183,6 +5183,81 @@ async def _sync_to_single_agent(
         return False
 
 
+@app.get("/api/daily_traffic_stats")
+async def daily_traffic_stats(db: Session = Depends(get_db)):
+    """
+    Get daily traffic statistics per node.
+    Traffic is calculated from midnight (00:00) local time.
+    """
+    from datetime import datetime, timedelta
+    
+    # Get today's midnight in UTC (assuming server uses UTC)
+    # For timezone-aware reset, we'd need to handle tz_offset parameter
+    now = datetime.utcnow()
+    today_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    # Get all nodes
+    nodes = db.scalars(select(Node)).all()
+    node_map = {n.id: n for n in nodes}
+    
+    # Initialize traffic counters
+    traffic_by_node = {n.id: {"bytes": 0, "name": n.name, "ip": n.ip} for n in nodes}
+    
+    # Query schedule results from today only
+    results = db.scalars(
+        select(ScheduleResult)
+        .where(ScheduleResult.executed_at >= today_midnight)
+        .where(ScheduleResult.status == "success")
+    ).all()
+    
+    # Sum up bytes transferred per node
+    for result in results:
+        if not result.test_result:
+            continue
+        
+        raw = result.test_result.raw_result or {}
+        end = raw.get("end") or {}
+        sum_sent = end.get("sum_sent") or {}
+        sum_received = end.get("sum_received") or {}
+        
+        bytes_sent = sum_sent.get("bytes", 0) or 0
+        bytes_received = sum_received.get("bytes", 0) or 0
+        total_bytes = bytes_sent + bytes_received
+        
+        # Get schedule to find src/dst nodes
+        schedule = result.schedule
+        if schedule:
+            src_id = schedule.src_node_id
+            dst_id = schedule.dst_node_id
+            
+            # Add to both source and destination nodes
+            if src_id in traffic_by_node:
+                traffic_by_node[src_id]["bytes"] += total_bytes
+            if dst_id in traffic_by_node:
+                traffic_by_node[dst_id]["bytes"] += total_bytes
+    
+    # Format response
+    node_stats = []
+    for node_id, data in traffic_by_node.items():
+        total_gb = round(data["bytes"] / (1024 ** 3), 2)
+        node_stats.append({
+            "node_id": node_id,
+            "name": data["name"],
+            "ip": data["ip"],
+            "total_bytes": data["bytes"],
+            "total_gb": total_gb
+        })
+    
+    # Sort by traffic (descending)
+    node_stats.sort(key=lambda x: x["total_bytes"], reverse=True)
+    
+    return {
+        "status": "ok",
+        "date": today_midnight.strftime("%Y-%m-%d"),
+        "nodes": node_stats
+    }
+
+
 
 @app.post("/admin/sync_whitelist")
 async def sync_whitelist_endpoint(db: Session = Depends(get_db)):
