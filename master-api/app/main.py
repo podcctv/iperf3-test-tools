@@ -2080,53 +2080,9 @@ def _login_html() -> str:
       }
     }
 
-    // Sync whitelist to all agents
-    async function syncWhitelist() {{
-      const btn = document.getElementById('sync-whitelist-btn');
-      const resultDiv = document.getElementById('whitelist-sync-result');
-      const statusText = document.getElementById('whitelist-status-text');
-      
-      btn.disabled = true;
-      btn.textContent = '同步中...';
-      statusText.textContent = '● 正在同步...';
-      statusText.className = 'text-yellow-400';
-      resultDiv.classList.add('hidden');
-      
-      try {{
-        const res = await apiFetch('/admin/sync_whitelist', {{ method: 'POST' }});
-        const data = await res.json();
-        
-        if (data.status === 'ok') {{
-          statusText.textContent = '● 同步成功';
-          statusText.className = 'text-emerald-400';
-          
-          const results = data.results;
-          resultDiv.innerHTML = `
-            <div class="space-y-2">
-              <div class="font-semibold text-emerald-400">✓ 同步完成</div>
-              <div class="text-slate-300">成功: ${{results.success}}/${{results.total_agents}} 个 Agent</div>
-              ${{results.failed > 0 ? `<div class="text-rose-400">失败: ${{results.failed}} 个 Agent<div class="mt-1 text-xs text-slate-400">${{results.errors.join('<br>')}}</div></div>` : ''}}
-            </div>
-          `;
-          resultDiv.classList.remove('hidden');
-          setTimeout(() => {{ resultDiv.classList.add('hidden'); }}, 10000);
-        }} else {{
-          throw new Error(data.error || '同步失败');
-        }}
-      }} catch (err) {{
-        statusText.textContent = '● 同步失败';
-        statusText.className = 'text-rose-400';
-        resultDiv.innerHTML = `<div class="text-rose-400">✗ 同步失败: ${{err.message}}</div>`;
-        resultDiv.classList.remove('hidden');
-      }} finally {{
-        btn.disabled = false;
-        btn.textContent = '同步白名单到所有 Agent';
-        setTimeout(() => {{
-          statusText.textContent = '● 自动同步已启用';
-          statusText.className = 'text-emerald-400';
-        }}, 5000);
-      }}
-    }}
+    function syncWhitelist() {
+      alert('白名单同步功能正在维护中，请稍后使用。');
+    }
 
     function syncSuitePort() {
       const dst = nodeCache.find((n) => n.id === Number(suiteDstSelect?.value));
