@@ -1201,6 +1201,8 @@ def _login_html() -> str:
             document.getElementById('password-tab').className = 'rounded-full px-4 py-2 text-sm font-semibold text-slate-300 transition hover:text-white';
             document.getElementById('config-tab').className = 'rounded-full px-4 py-2 text-sm font-semibold text-slate-300 transition hover:text-white';
             this.className = 'rounded-full bg-gradient-to-r from-indigo-500/80 to-purple-500/80 px-4 py-2 text-sm font-semibold text-slate-50 shadow-lg shadow-indigo-500/15 ring-1 ring-indigo-400/40 transition hover:brightness-110';
+            // Auto-refresh whitelist data
+            if (typeof refreshWhitelist === 'function') refreshWhitelist();
           } catch(e) { console.error('Whitelist tab error:', e); alert('Error: ' + e.message); }
         " class="rounded-full px-4 py-2 text-sm font-semibold text-slate-300 transition hover:text-white">
           🛡️ IP 白名单
@@ -2500,9 +2502,7 @@ def _login_html() -> str:
       }
     }
 
-    function syncWhitelist() {
-      alert('白名单同步功能正在维护中，请稍后使用。');
-    }
+    // syncWhitelist is defined in the settings modal JavaScript section
 
     function syncSuitePort() {
       const dst = nodeCache.find((n) => n.id === Number(suiteDstSelect?.value));
