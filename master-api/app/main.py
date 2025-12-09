@@ -1367,6 +1367,7 @@ def _login_html() -> str:
                 <tr>
                   <th class="text-left px-4 py-3 font-semibold">IP 地址</th>
                   <th class="text-left px-4 py-3 font-semibold">来源</th>
+                  <th class="text-left px-4 py-3 font-semibold">同步状态</th>
                   <th class="text-left px-4 py-3 font-semibold">类型</th>
                   <th class="text-right px-4 py-3 font-semibold">操作</th>
                 </tr>
@@ -1544,6 +1545,27 @@ def _login_html() -> str:
               </td>
               <td class="px-4 py-3 text-slate-400 text-xs">
                 ${source}
+              </td>
+              <td class="px-4 py-3 text-xs">
+                ${(() => {
+                  if (!nodeInfo) return '<span class="text-slate-500">-</span>';
+                  
+                  // Initial render - default to unknown/unchecked unless we have data
+                  if (!nodeInfo.whitelist_sync_status || nodeInfo.whitelist_sync_status === 'unknown') {
+                    return '<span class="text-slate-500 flex items-center gap-1">❓ 未检查</span>';
+                  }
+                  
+                  if (nodeInfo.whitelist_sync_status === 'synced') {
+                    const timeStr = nodeInfo.whitelist_sync_at ? new Date(nodeInfo.whitelist_sync_at).toLocaleTimeString() : '';
+                    return `<span class="text-emerald-400 flex items-center gap-1" title="已同步 ${timeStr}">✅ 已同步</span>`;
+                  }
+                  
+                  if (nodeInfo.whitelist_sync_status === 'not_synced') {
+                    return '<span class="text-yellow-400 flex items-center gap-1" title="内容不一致">⚠️ 未同步</span>';
+                  }
+                  
+                  return '<span class="text-rose-400 flex items-center gap-1" title="上次同步失败">❌ 错误</span>';
+                })()}
               </td>
               <td class="px-4 py-3">
                 <span class="inline-flex items-center px-2 py-1 rounded-md text-xs font-semibold ${
@@ -1736,6 +1758,9 @@ def _login_html() -> str:
                 
                 contentDiv.innerHTML = html;
             }
+            
+            // Refresh main table to show sync status in column
+            await refreshWhitelist();
             
         } catch (e) {
             console.error('Failed to update whitelist stats', e);
@@ -2026,44 +2051,7 @@ def _login_html() -> str:
       toggleAddNodeModal(false);
     }
 
-    // Settings Modal Functions
-    const settingsModal = document.getElementById('settings-modal');
-    const passwordPanel = document.getElementById('password-panel');
-    const configPanel = document.getElementById('config-panel');
-    const passwordTab = document.getElementById('password-tab');
-    const configTab = document.getElementById('config-tab');
 
-    function toggleSettingsModal(isOpen) {
-      if (!settingsModal) return;
-      if (isOpen) {
-        settingsModal.classList.remove('hidden');
-        settingsModal.classList.add('flex');
-        setActiveSettingsTab('password'); // Default to password tab
-      } else {
-        settingsModal.classList.add('hidden');
-        settingsModal.classList.remove('flex');
-      }
-    }
-
-    function setActiveSettingsTab(tab) {
-      const isPassword = tab === 'password';
-      
-      // Toggle panels
-      if (passwordPanel) passwordPanel.classList.toggle('hidden', !isPassword);
-      if (configPanel) configPanel.classList.toggle('hidden', isPassword);
-      
-      // Update tab styles
-      if (passwordTab) {
-        passwordTab.className = isPassword
-          ? 'rounded-full bg-gradient-to-r from-indigo-500/80 to-purple-500/80 px-4 py-2 text-sm font-semibold text-slate-50 shadow-lg shadow-indigo-500/15 ring-1 ring-indigo-400/40 transition hover:brightness-110'
-          : 'rounded-full px-4 py-2 text-sm font-semibold text-slate-300 transition hover:text-white';
-      }
-      if (configTab) {
-        configTab.className = isPassword
-          ? 'rounded-full px-4 py-2 text-sm font-semibold text-slate-300 transition hover:text-white'
-          : 'rounded-full bg-gradient-to-r from-indigo-500/80 to-purple-500/80 px-4 py-2 text-sm font-semibold text-slate-50 shadow-lg shadow-indigo-500/15 ring-1 ring-indigo-400/40 transition hover:brightness-110';
-      }
-    }
 
     function startProgressBar(container, bar, label, expectedMs, initialText, showCountdown = true) {
       const start = Date.now();
@@ -5325,7 +5313,7 @@ async def daily_traffic_stats(db: Session = Depends(get_db)):
     Get daily traffic statistics per node.
     Traffic is calculated from midnight (00:00) local time.
     """
-    from datetime import datetime, timedelta, timezone
+    from sqlalchemy.orm import joinedload
     
     # Use UTC+8 (China/Hong Kong time) for daily reset
     utc_plus_8 = timezone(timedelta(hours=8))
@@ -5334,17 +5322,21 @@ async def daily_traffic_stats(db: Session = Depends(get_db)):
     
     # Get all nodes
     nodes = db.scalars(select(Node)).all()
-    node_map = {n.id: n for n in nodes}
     
     # Initialize traffic counters
     traffic_by_node = {n.id: {"bytes": 0, "name": n.name, "ip": n.ip} for n in nodes}
     
     # Query schedule results from today only
+    # Eager load test_result and schedule to ensure data is available
     results = db.scalars(
         select(ScheduleResult)
+        .options(
+            joinedload(ScheduleResult.test_result),
+            joinedload(ScheduleResult.schedule)
+        )
         .where(ScheduleResult.executed_at >= today_midnight)
         .where(ScheduleResult.status == "success")
-    ).all()
+    ).unique().all()
     
     # Sum up bytes transferred per node
     for result in results:
@@ -5353,12 +5345,20 @@ async def daily_traffic_stats(db: Session = Depends(get_db)):
         
         raw = result.test_result.raw_result or {}
         end = raw.get("end") or {}
-        sum_sent = end.get("sum_sent") or {}
-        sum_received = end.get("sum_received") or {}
         
-        bytes_sent = sum_sent.get("bytes", 0) or 0
-        bytes_received = sum_received.get("bytes", 0) or 0
-        total_bytes = bytes_sent + bytes_received
+        # Calculate actual transfer size (avoiding double counting)
+        transfer_bytes = 0
+        
+        # Priority: sum (UDP/Summary) > sum_sent (TCP Sender) > sum_received (TCP Receiver)
+        if "sum" in end:
+             transfer_bytes = end["sum"].get("bytes", 0)
+        elif "sum_sent" in end:
+             transfer_bytes = end["sum_sent"].get("bytes", 0)
+        elif "sum_received" in end:
+             transfer_bytes = end["sum_received"].get("bytes", 0)
+            
+        if not transfer_bytes:
+            continue
         
         # Get schedule to find src/dst nodes
         schedule = result.schedule
@@ -5368,9 +5368,9 @@ async def daily_traffic_stats(db: Session = Depends(get_db)):
             
             # Add to both source and destination nodes
             if src_id in traffic_by_node:
-                traffic_by_node[src_id]["bytes"] += total_bytes
+                traffic_by_node[src_id]["bytes"] += transfer_bytes
             if dst_id in traffic_by_node:
-                traffic_by_node[dst_id]["bytes"] += total_bytes
+                traffic_by_node[dst_id]["bytes"] += transfer_bytes
     
     # Format response
     node_stats = []
@@ -5433,7 +5433,9 @@ async def get_whitelist(db: Session = Depends(get_db)):
                 "id": node.id,
                 "name": node.name,
                 "ip": node.ip,
-                "description": node.description
+                "description": node.description,
+                "whitelist_sync_status": getattr(node, "whitelist_sync_status", "unknown"),
+                "whitelist_sync_at": getattr(node, "whitelist_sync_at", None)
             }
             for node in nodes
         ]

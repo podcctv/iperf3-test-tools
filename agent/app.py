@@ -1448,6 +1448,16 @@ def streaming_probe() -> Any:
     return jsonify(payload)
 
 
+@app.route("/whitelist", methods=["GET"])
+def get_whitelist() -> Any:
+    """Get current whitelist."""
+    return jsonify({
+        "status": "ok",
+        "allowed_ips": list(whitelist._allowed_ips),
+        "updated_at": whitelist._last_updated.isoformat() if whitelist._last_updated else None
+    })
+
+
 @app.route("/update_whitelist", methods=["POST"])
 def update_whitelist() -> Any:
     """
