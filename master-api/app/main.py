@@ -3427,7 +3427,7 @@ def _schedules_html() -> str:
               <div class="flex items-center gap-3">
                 <div class="hidden md:block text-xs text-right mr-2 space-y-1">
                    <div class="text-slate-400">Next Run</div>
-                   <div class="font-mono text-emerald-400" data-countdown="${{schedule.next_run_at || ''}}">Calculating...</div>
+                   <div class="font-mono text-emerald-400" data-countdown="${{schedule.next_run_at || ''}}" data-schedule-id="${{schedule.id}}">Calculating...</div>
                 </div>
                 ${{statusBadge}}
                 <button onclick="toggleSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:border-sky-500 transition">
@@ -3490,20 +3490,27 @@ def _schedules_html() -> str:
           loadChartData(schedule.id);
         }});
         updateCountdowns();
-        // 自动刷新逻辑
+        // 自动刷新逻辑 - 只在有新数据时才刷新图表
         if (window.refreshInterval) clearInterval(window.refreshInterval);
         window.refreshInterval = setInterval(async () => {{
-             // 仅静默刷新数据，不重绘整个列表以免闪烁
-             schedules.forEach(s => loadChartData(s.id));
-             // 可选: 刷新任务列表状态(需小心处理DOM)
+             // 检查是否有新数据，只刷新图表数据，不重绘整个页面
              const res = await apiFetch('/schedules');
              const newSchedules = await res.json();
+             
+             // 更新 next_run_at 时间，但不重绘整个页面
              newSchedules.forEach(ns => {{
-                // 更新倒计时
-                const countdownEl = document.querySelector(`div[data-countdown*="${{ns.next_run_at?.split('T')[0] || ''}}"]`); // 简单匹配，可能不准
-                // 更准确: 根据 schedule.id 查找
-                // 这里暂略，主要刷新图表
+                const countdownEl = document.querySelector(`[data-countdown][data-schedule-id="${{ns.id}}"]`);
+                if (countdownEl && ns.next_run_at) {{
+                  countdownEl.dataset.countdown = ns.next_run_at;
+                }}
              }});
+             
+             // 只在有新数据时才刷新图表（每分钟检查一次）
+             const now = new Date();
+             if (!window.lastChartRefresh || (now - window.lastChartRefresh) > 60000) {{
+               schedules.forEach(s => loadChartData(s.id));
+               window.lastChartRefresh = now;
+             }}
         }}, 15000); 
 
         if (window.countdownInterval) clearInterval(window.countdownInterval);
