@@ -1418,60 +1418,172 @@ def _login_html() -> str:
         console.log('Activating whitelist tab');
         whitelistTab.className = activeBtnClass;
         whitelistPanel.classList.remove('hidden');
-        // Initial fetch of stats when opening tab
+        // Initial fetch of stats and list when opening tab
         checkWhitelistStatus();
+        refreshWhitelist();
       }
       console.log('setActiveSettingsTab completed');
     }
 
     // IP Whitelist Functions
-    async function viewWhitelist() {
-      const display = document.getElementById('whitelist-display');
-      const list = document.getElementById('whitelist-list');
-      const btn = document.getElementById('view-whitelist-btn');
+    
+    // Show alert message
+    function showWhitelistAlert(message, type = 'info') {
+      const alert = document.getElementById('whitelist-alert');
+      if (!alert) return;
       
-      if (!display.classList.contains('hidden')) {
-          display.classList.add('hidden');
-          return;
+      alert.classList.remove('hidden', 'border-emerald-500', 'bg-emerald-500/10', 'text-emerald-100',
+                             'border-rose-500', 'bg-rose-500/10', 'text-rose-100',
+                             'border-blue-500', 'bg-blue-500/10', 'text-blue-100');
+      
+      if (type === 'success') {
+        alert.classList.add('border-emerald-500', 'bg-emerald-500/10', 'text-emerald-100');
+      } else if (type === 'error') {
+        alert.classList.add('border-rose-500', 'bg-rose-500/10', 'text-rose-100');
+      } else {
+        alert.classList.add('border-blue-500', 'bg-blue-500/10', 'text-blue-100');
       }
       
+      alert.textContent = message;
+      alert.classList.remove('hidden');
+      
+      // Auto-hide after 5 seconds
+      setTimeout(() => alert.classList.add('hidden'), 5000);
+    }
+    
+    // Refresh whitelist table
+    async function refreshWhitelist() {
+      const tbody = document.getElementById('whitelist-table-body');
+      if (!tbody) return;
+      
       try {
-        btn.disabled = true;
         const res = await apiFetch('/admin/whitelist');
         const data = await res.json();
         
-        list.innerHTML = '';
-        if (data.whitelist && data.whitelist.length > 0) {
-            data.whitelist.forEach(ip => {
-                const item = document.createElement('div');
-                item.className = 'flex items-center justify-between rounded bg-slate-800/40 px-3 py-2 text-xs text-slate-300';
-                item.innerHTML = `<span>${ip}</span><button onclick="removeWhitelistIp('${ip}')" class="text-rose-400 hover:text-rose-300">🗑️</button>`;
-                list.appendChild(item);
-            });
-        } else {
-            list.innerHTML = '<div class="text-center text-slate-500 py-2">白名单为空</div>';
+        if (!data.whitelist || data.whitelist.length === 0) {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="4" class="px-4 py-8 text-center text-slate-500">
+                暂无白名单 IP，点击上方"添加"按钮开始
+              </td>
+            </tr>
+          `;
+          return;
         }
         
-        display.classList.remove('hidden');
+        // Update stats
+        document.getElementById('whitelist-total').textContent = data.count || data.whitelist.length;
+        const cidrCount = data.whitelist.filter(ip => ip.includes('/')).length;
+        document.getElementById('whitelist-cidr-count').textContent = cidrCount;
+        
+        // Render table rows
+        tbody.innerHTML = data.whitelist.map(ip => {
+          // Find corresponding node info if available
+          const nodeInfo = data.nodes?.find(n => n.ip === ip);
+          const isCIDR = ip.includes('/');
+          const isIPv6 = ip.includes(':');
+          
+          let ipType = 'IPv4';
+          if (isCIDR) ipType = 'CIDR';
+          else if (isIPv6) ipType = 'IPv6';
+          
+          let source = nodeInfo ? `节点: ${nodeInfo.name}` : '手动添加';
+          
+          return `
+            <tr class="hover:bg-slate-800/40 transition">
+              <td class="px-4 py-3">
+                <code class="text-sm font-mono text-sky-300">${ip}</code>
+              </td>
+              <td class="px-4 py-3 text-slate-400 text-xs">
+                ${source}
+              </td>
+              <td class="px-4 py-3">
+                <span class="inline-flex items-center px-2 py-1 rounded-md text-xs font-semibold ${
+                  isCIDR ? 'bg-purple-500/20 text-purple-300' :
+                  isIPv6 ? 'bg-blue-500/20 text-blue-300' :
+                  'bg-emerald-500/20 text-emerald-300'
+                }">
+                  ${ipType}
+                </span>
+              </td>
+              <td class="px-4 py-3 text-right">
+                <button 
+                  onclick="removeWhitelistIp('${ip}')" 
+                  class="px-3 py-1 rounded-lg border border-rose-700 bg-rose-900/20 text-xs font-semibold text-rose-300 hover:bg-rose-900/40 transition"
+                >
+                  删除
+                </button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+        
       } catch (e) {
-        alert('获取白名单失败: ' + e.message);
-      } finally {
-        btn.disabled = false;
+        showWhitelistAlert(`获取白名单失败: ${e.message}`, 'error');
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="4" class="px-4 py-8 text-center text-rose-400">
+              加载失败: ${e.message}
+            </td>
+          </tr>
+        `;
       }
     }
     
+    // Add IP to whitelist
+    async function addWhitelistIp() {
+      const input = document.getElementById('whitelist-ip-input');
+      if (!input) return;
+      
+      const ip = input.value.trim();
+      if (!ip) {
+        showWhitelistAlert('请输入 IP 地址', 'error');
+        return;
+      }
+      
+      try {
+        const res = await apiFetch('/admin/whitelist/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ip })
+        });
+        
+        const data = await res.json();
+        
+        if (res.ok) {
+          showWhitelistAlert(`IP ${ip} 已添加到白名单`, 'success');
+          input.value = ''; // Clear input
+          await refreshWhitelist(); // Refresh list
+          await checkWhitelistStatus(); // Update stats
+        } else {
+          showWhitelistAlert(data.detail || '添加失败', 'error');
+        }
+      } catch (e) {
+        showWhitelistAlert(`添加失败: ${e.message}`, 'error');
+      }
+    }
+    
+    // Remove IP from whitelist
     async function removeWhitelistIp(ip) {
         if (!confirm(`确定要从白名单中移除 IP ${ip} 吗?`)) return;
+        
         try {
-            const res = await apiFetch(`/admin/whitelist/remove?ip=${encodeURIComponent(ip)}`, { method: 'DELETE' });
+            const res = await apiFetch('/admin/whitelist/remove', {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ip })
+            });
+            
             if (res.ok) {
-                viewWhitelist(); // Refresh list
-                checkWhitelistStatus(); // Refresh stats
+                showWhitelistAlert(`IP ${ip} 已从白名单移除`, 'success');
+                await refreshWhitelist(); // Refresh list
+                await checkWhitelistStatus(); // Update stats
             } else {
-                alert('移除失败');
+                const data = await res.json();
+                showWhitelistAlert(data.detail || '移除失败', 'error');
             }
         } catch (e) {
-            alert('移除失败: ' + e.message);
+            showWhitelistAlert(`移除失败: ${e.message}`, 'error');
         }
     }
 
@@ -1501,7 +1613,7 @@ def _login_html() -> str:
              checkWhitelistStatus(); // Refresh stats
             
         } catch (e) {
-            alert('同步请求失败: ' + e.message);
+            showWhitelistAlert(`同步请求失败: ${e.message}`, 'error');
         } finally {
              btn.disabled = false;
              btn.innerHTML = '<span>🔄</span><span>同步到所有 Agent</span>';
