@@ -1,147 +1,343 @@
 # iperf3-test-tools / iperf3 测试工具包
 
-A lightweight **master/agent** toolkit for orchestrating iperf3 tests across multiple servers. The master API keeps track of nodes, triggers tests, stores results, and polls agents for health and logs.
+一个轻量级的 **主控/代理** 分布式网络测试工具，支持一键安装、自动更新、可视化监控。
 
-一个轻量级的 **主控/代理** 工具集，可在多台服务器间编排 iperf3 测试。主控 API 负责管理节点、触发测试、存储结果，并轮询代理获取状态与日志。
+A lightweight **master/agent** distributed network testing toolkit with one-click installation, auto-update, and visual monitoring.
 
-## Architecture / 架构概览
+## ✨ 核心特性 / Key Features
 
-* **master-api (FastAPI + Postgres)** – central control plane, REST API, embedded dashboard, remote agent lifecycle helpers (redeploy/remove/logs). Runs via Docker Compose with a Postgres service by default.
-* **agent (Flask + iperf3)** – lightweight container exposing control endpoints and the iperf3 server/client binary.
-* **deploy scripts** – `install_master.sh` sets up the master stack (API + dashboard + optional local agent); `install_agent.sh` builds and runs an agent-only container on any host; `deploy_agents.sh` can stream the agent image to SSH targets listed in a user-provided inventory file.
+- 🚀 **一键安装更新** - 单条命令完成安装和更新，自动检测版本差异
+- 📊 **可视化面板** - 实时监控节点状态、测试结果、流媒体解锁
+- ⏰ **定时任务** - 支持周期性测试，自动生成趋势图表
+- 🌐 **分布式架构** - Master/Agent 模式，轻松管理多节点
+- 🔄 **远程管理** - 通过面板一键重部署、查看日志、管理容器
 
-## Prerequisites / 先决条件
+## 🎯 快速开始 / Quick Start
 
-* Docker & Docker Compose available on the target host(s).
-* Outbound internet access if you want the installers to auto-download the repository or Docker images.
+### 方式一：一键安装脚本（推荐）
 
-## Installation / 安装
-
-### Master node (API + dashboard + optional local agent) / 主控节点
-
-```bash
-./install_master.sh [--deploy-remote] [--clean-existing] [--master-port 9000] [--web-port 9100] [--agent-port 8000] [--iperf-port 62001] [--no-start-server]
-```
-
-* Auto-updates the git checkout when possible, builds the master-api image, brings up Postgres, and starts the dashboard on `http://<host>:9100/web` (password `iperf-pass` by default).
-* Pass `--clean-existing` to stop/remove any existing master/api/db containers and the local `iperf-agent` container before reinstalling.
-* With `--deploy-remote`, provide an inventory file path via `--hosts-file <path>` to call `./deploy_agents.sh` automatically.
-* You can avoid host port conflicts by overriding the defaults: `./install_master.sh --master-port 19000 --web-port 19100 --agent-port 18000 --iperf-port 16201`. The aliases `--master-api-port` and `--dashboard-port` are also accepted for the master and dashboard ports.
-
-### Agent-only host / 仅部署代理
-
-`install_agent.sh` now works both **inside** the repository and as a standalone file downloaded elsewhere. If no `agent/` directory is found next to the script, it will fetch the repository to `~/.cache/iperf3-test-tools/agent-build` via `git` (or a GitHub tarball as fallback) before building the image.
+**主控节点（Master + Dashboard）：**
 
 ```bash
-# default ports: agent API 8000, iperf3 62001
-bash ./install_agent.sh [--agent-port 8000] [--agent-listen-port 8000] [--iperf-port 62001] [--no-start-server] [--repo-url <url>] [--repo-ref <ref>]
+# 下载并运行一键安装脚本
+curl -fsSL https://raw.githubusercontent.com/podcctv/iperf3-test-tools/main/install_master.sh | bash
+
+# 或者使用 wget
+wget -qO- https://raw.githubusercontent.com/podcctv/iperf3-test-tools/main/install_master.sh | bash
 ```
 
-After installation the script prints the URL you can register on the master dashboard, e.g. `http://<agent-ip>:8000` with iperf3 port `62001`.
+安装完成后访问：`http://your-ip:9100/web`（默认密码：`iperf-pass`）
 
-### Remote agent rollout via SSH / SSH 批量部署
+**测试节点（Agent Only）：**
 
-Use `deploy_agents.sh` with an explicit inventory file (one host per line, format `user@ip [agent_port] [iperf_port]`, SSH port allowed as `user@ip:2222`):
+```bash
+# 下载并运行 Agent 安装脚本
+curl -fsSL https://raw.githubusercontent.com/podcctv/iperf3-test-tools/main/install_agent.sh | bash
 
+# 或者使用 wget
+wget -qO- https://raw.githubusercontent.com/podcctv/iperf3-test-tools/main/install_agent.sh | bash
+```
+
+### 方式二：克隆仓库安装
+
+```bash
+# 克隆仓库
+git clone https://github.com/podcctv/iperf3-test-tools.git
+cd iperf3-test-tools
+
+# 安装主控节点
+./install_master.sh
+
+# 或安装测试节点
+./install_agent.sh
+```
+
+## 🔄 一键更新 / One-Click Update
+
+项目提供了智能更新脚本，自动检测版本并更新：
+
+```bash
+# 在项目目录运行
+bash update_iperf3_master.sh
+```
+
+**更新流程：**
+1. ✅ 自动检测本地和远程版本差异
+2. ✅ 清理本地修改，同步最新代码
+3. ✅ 提供交互式安装选项：
+   - 自动安装 Master（含本机 Agent）
+   - 自动安装 Agent（仅测试节点）
+   - 手动安装 Agent（NAT VPS 指定端口）
+   - 仅更新代码（不执行安装）
+
+**示例输出：**
+```
+[INFO] Checking iperf3-test-tools...
+[INFO] Local:  125e1e8
+[INFO] Remote: 4f92a5c
+[INFO] New version detected. Updating...
+[INFO] Update completed.
+
+================ 安装选项 ================
+1) 自动安装 master（含本机 agent 容器）
+2) 自动安装 agent（仅作为测试节点）
+3) 手动安装 agent（NAT VPS 指定端口）
+4) 不执行安装（仅更新代码）
+=========================================
+```
+
+## 📦 架构说明 / Architecture
+
+```
+┌─────────────────────────────────────┐
+│  Master Node (主控节点)              │
+│  ┌─────────────────────────────┐   │
+│  │ FastAPI + PostgreSQL        │   │
+│  │ - REST API                  │   │
+│  │ - Web Dashboard             │   │
+│  │ - Scheduler                 │   │
+│  └─────────────────────────────┘   │
+│  ┌─────────────────────────────┐   │
+│  │ Local Agent (可选)           │   │
+│  └─────────────────────────────┘   │
+└─────────────────────────────────────┘
+           │
+           │ HTTP API
+           ▼
+┌─────────────────────────────────────┐
+│  Agent Nodes (测试节点)              │
+│  ┌──────────┐  ┌──────────┐        │
+│  │ Agent 1  │  │ Agent 2  │  ...   │
+│  │ Flask    │  │ Flask    │        │
+│  │ iperf3   │  │ iperf3   │        │
+│  └──────────┘  └──────────┘        │
+└─────────────────────────────────────┘
+```
+
+**组件说明：**
+- **Master API** - FastAPI + PostgreSQL，提供 REST API 和 Web 面板
+- **Agent** - Flask + iperf3，轻量级测试节点
+- **Scheduler** - APScheduler，支持定时任务和周期性测试
+
+## 🎨 功能特性 / Features
+
+### 1. 节点管理
+- ✅ 自动发现节点状态（在线/离线）
+- ✅ 实时监控 iperf3 服务器状态
+- ✅ 远程启动/停止 iperf3 服务器
+- ✅ 自动同步 iperf3 端口变化
+
+### 2. 测试功能
+- ✅ TCP/UDP 协议测试
+- ✅ 单向/双向测试
+- ✅ 并行连接测试
+- ✅ 自定义带宽、数据包大小
+- ✅ 测试结果可视化（图表 + 表格）
+
+### 3. 定时任务
+- ✅ 创建周期性测试任务
+- ✅ 24小时趋势图（平滑线图）
+- ✅ 历史记录查询（可折叠面板）
+- ✅ 自动重试和错误提示
+- ✅ 手动触发执行
+
+### 4. 流媒体检测
+- ✅ Netflix、Disney+、YouTube 等解锁检测
+- ✅ ChatGPT、Gemini 等 AI 服务检测
+- ✅ 自动缓存结果（24小时）
+- ✅ 支持手动刷新
+
+### 5. 骨干网延迟
+- ✅ 三大运营商骨干网延迟监控
+- ✅ 自动缓存结果（60秒）
+- ✅ 实时更新显示
+
+## 🔧 高级配置 / Advanced Configuration
+
+### 自定义端口
+
+**Master 节点：**
+```bash
+./install_master.sh \
+  --master-port 9000 \
+  --web-port 9100 \
+  --agent-port 8000 \
+  --iperf-port 62001
+```
+
+**Agent 节点：**
+```bash
+./install_agent.sh \
+  --agent-port 8000 \
+  --iperf-port 62001
+```
+
+### NAT VPS 端口映射
+
+对于需要端口映射的 NAT VPS：
+
+```bash
+./install_agent.sh \
+  --agent-port 20730 \
+  --agent-listen-port 8000 \
+  --iperf-port 20735
+```
+
+### 批量部署 Agent
+
+创建 `hosts.txt` 文件：
+```
+root@10.0.0.11 8000 62001
+root@10.0.0.12 8001 62002
+root@10.0.0.13:2222 8000 62001
+```
+
+执行批量部署：
 ```bash
 docker build -t iperf-agent:latest ./agent
-./deploy_agents.sh --hosts-file /path/to/your/hosts.txt
+./deploy_agents.sh --hosts-file hosts.txt
 ```
 
-## Running the master stack manually / 手动启动主控服务
+## 🔐 密码管理 / Password Management
+
+### 默认密码
+- 默认密码：`iperf-pass`
+- 访问地址：`http://your-ip:9100/web`
+
+### 修改密码
+1. 登录面板后，点击右上角"修改密码"
+2. 输入新密码（至少6位）并确认
+
+### 重置密码
+如果忘记密码，可以通过命令行重置：
 
 ```bash
-# Build images
-docker build -t iperf-agent:latest ./agent
-docker-compose build master-api
+# 在项目目录运行
+docker compose exec master-api python -m app.auth --set-password 'YourNewPass' --force
 
-# Launch API + dashboard + Postgres
-MASTER_API_PORT=9000 MASTER_WEB_PORT=9100 docker-compose up -d
+# 查看密码文件位置
+docker compose exec master-api python -m app.auth --show-location
 ```
 
-* API: `http://localhost:9000`
-* Dashboard: `http://localhost:9100/web` (password set by `DASHBOARD_PASSWORD`, default `iperf-pass`).
+## 📊 API 使用示例 / API Examples
 
-## Dashboard login & password recovery / 登录与密码找回
+### 注册节点
+```bash
+curl -X POST http://localhost:9000/nodes \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "node-tokyo",
+    "ip": "10.0.0.11",
+    "agent_port": 8000,
+    "iperf_port": 62001,
+    "description": "Tokyo VPS"
+  }'
+```
 
-1. 打开运维面板 `http://<host>:9100/web`，输入默认密码 **iperf-pass** 完成解锁（可通过环境变量 `DASHBOARD_PASSWORD` 覆盖）。
-2. 登录后可在页面内直接修改密码（需要二次确认，长度至少 6 位）。
-3. 如果忘记密码或 Cookie 失效，可在容器内用 CLI 强制重置：
-   ```bash
-   # 在部署目录运行，重置 master-api 容器的面板密码
-   docker compose exec master-api python -m app.auth --set-password 'YourNewPass' --force
+### 查看节点状态
+```bash
+curl http://localhost:9000/nodes/status
+```
 
-   # 若只想查看密码文件位置（会跟随 data 挂载持久化）
-   docker compose exec master-api python -m app.auth --show-location
-   ```
-   CLI 会直接写入 `/app/data/dashboard_password.txt` 并输出成功提示，适合无法登录时的紧急恢复。
+### 运行测试
+```bash
+curl -X POST http://localhost:9000/tests \
+  -H "Content-Type: application/json" \
+  -d '{
+    "src_node_id": 1,
+    "dst_node_id": 2,
+    "protocol": "tcp",
+    "duration": 10,
+    "parallel": 1
+  }'
+```
 
-## API & dashboard workflow / 使用流程
-
-1. **Register nodes / 注册节点**
-   ```bash
-   curl -X POST http://localhost:9000/nodes \
-     -H "Content-Type: application/json" \
-     -d '{"name":"node-a","ip":"10.0.0.11","agent_port":8000,"description":"rack1"}'
-   ```
-2. **Check live status / 查看实时状态**
-   ```bash
-   curl http://localhost:9000/nodes/status
-   ```
-   The master polls each agent's `/health` endpoint and reports `online/offline`, `server_running`, and a timestamp.
-3. **Run a test / 创建并运行测试**
-   ```bash
-   curl -X POST http://localhost:9000/tests \
-     -H "Content-Type: application/json" \
-     -d '{"src_node_id":1,"dst_node_id":2,"protocol":"tcp","duration":10,"parallel":1,"port":62001}'
-   ```
-   The master calls the source agent's `/run_test`, stores the raw iperf3 JSON output, and returns the record.
-4. **View results / 查看结果**
-   ```bash
-   curl http://localhost:9000/tests
-   ```
-
-All of these actions are also exposed in the web dashboard (add node, run test, view status, redeploy/remove agents, view agent logs).
-
-## Persistence & scheduling / 状态持久化与计划调度
-
-* The master now snapshots **nodes**, the **most recent test results** (default last 50), and **scheduled test definitions** into `data/master_state.json`. This file is mounted outside the container by default (`./data:/app/data` in `docker-compose.yml`) so data survives Docker reinstalls.
-* The dashboard exposes a "Delete All" button under **Recent Tests** to quickly clear stored history while keeping nodes/schedules intact. Individual test rows still support one-by-one deletion.
-* A new "Scheduled Tests" section lets you record recurring test intents (source/destination, interval, protocol, port, notes). The API stores these in the database and state snapshot today so later automation can pick them up for periodic execution and analytics.
-
-Available schedule endpoints:
-
+### 创建定时任务
 ```bash
 curl -X POST http://localhost:9000/schedules \
   -H "Content-Type: application/json" \
-  -d '{"name":"nightly","src_node_id":1,"dst_node_id":2,"interval_seconds":3600}'
-curl http://localhost:9000/schedules
-curl -X DELETE http://localhost:9000/schedules/1
+  -d '{
+    "name": "Tokyo-HK Daily Test",
+    "src_node_id": 1,
+    "dst_node_id": 2,
+    "protocol": "tcp",
+    "duration": 5,
+    "interval_seconds": 3600,
+    "enabled": true
+  }'
 ```
 
-## Environment variables / 环境变量
+## 🌍 环境变量 / Environment Variables
 
-* `DATABASE_URL` – SQLAlchemy connection string (default Postgres via Compose, fallback `sqlite:///./iperf.db`).
-* `REQUEST_TIMEOUT` – HTTP timeout for agent health checks and test dispatch (seconds).
-* `DASHBOARD_PASSWORD` – Web dashboard password (default `iperf-pass`).
-* `DASHBOARD_SECRET` – Secret used to sign the dashboard auth cookie (default `iperf-dashboard-secret`).
-* `DASHBOARD_COOKIE_NAME` – Auth cookie name (default `iperf_dashboard_auth`).
-* `AGENT_CONFIG_PATH` – Path where dashboard persists remote agent configs (default `./agent_configs.json`).
-* `AGENT_IMAGE` – Docker image tag used when (re)deploying agents (default `iperf-agent:latest`).
-* `STATE_FILE_PATH` – JSON snapshot location for nodes/tests/schedules (default `./data/master_state.json`).
-* `STATE_RECENT_TESTS` – Number of most recent tests to keep in the snapshot file (default `50`).
-* `STREAMING_PROBE_MODE` – Agent-only: set to `external` to force use of the upstream `ip.sh` streaming checker. Default `builtin` runs a short HTTP reachability probe for quicker feedback.
-* `STREAMING_HTTP_TIMEOUT` – Agent-only: per-request timeout (seconds) for the builtin streaming probe (default `5`).
-* `STREAMING_AUTO_ENABLED` – Agent-only: whether to auto-run the streaming unlock suite on startup and every 24 hours (default `true`).
-* `STREAMING_AUTO_INTERVAL` – Agent-only: interval seconds between automatic streaming unlock runs (default `86400`).
-* `STREAMING_CACHE_PATH` – Agent-only: where to store cached streaming/AI unlock results (default `/tmp/streaming_probe_cache.json`).
+| 变量名 | 说明 | 默认值 |
+|--------|------|--------|
+| `DATABASE_URL` | PostgreSQL 连接字符串 | `postgresql://...` |
+| `DASHBOARD_PASSWORD` | 面板密码 | `iperf-pass` |
+| `MASTER_API_PORT` | Master API 端口 | `9000` |
+| `MASTER_WEB_PORT` | Web 面板端口 | `9100` |
+| `REQUEST_TIMEOUT` | Agent 请求超时（秒） | `10` |
+| `AGENT_IMAGE` | Agent Docker 镜像 | `iperf-agent:latest` |
+| `STATE_RECENT_TESTS` | 保留最近测试数量 | `50` |
 
-## Notes / 补充说明
+## 🐛 故障排查 / Troubleshooting
 
-* Agent status is derived from live `/health` probes; unreachable nodes show as `offline`.
-* `deploy_agents.sh` streams the local `iperf-agent:latest` image to remote hosts if missing—build it locally first.
-* Dashboard-driven remote management (redeploy/remove container, view logs) persists inventory in `agent_configs.json` so settings survive container restarts.
+### 1. 端口冲突
+```bash
+# 检查端口占用
+netstat -tulpn | grep :9000
 
-## Script updates & troubleshooting / 脚本更新与排障
+# 使用自定义端口重新安装
+./install_master.sh --master-port 19000 --web-port 19100
+```
 
-If installer or deployment scripts fail to refresh, follow the steps in [`docs/script-update-guide.md`](docs/script-update-guide.md) for common fixes and an optional auto-update helper (`tools/auto_update.sh`).
+### 2. 容器无法启动
+```bash
+# 查看容器日志
+docker logs master-api-master-api-1
+
+# 重新构建并启动
+docker-compose down
+docker-compose build
+docker-compose up -d
+```
+
+### 3. Agent 连接失败
+```bash
+# 检查 Agent 状态
+curl http://agent-ip:8000/health
+
+# 检查防火墙
+ufw allow 8000/tcp
+ufw allow 62001/tcp
+```
+
+### 4. 定时任务失败
+- 检查 `/debug/failures` 端点查看详细错误
+- 确认目标节点的 iperf3 服务器正在运行
+- 查看 master-api 容器日志
+
+## 📝 更新日志 / Changelog
+
+### v1.0.0 (Latest)
+- ✅ 一键安装和更新脚本
+- ✅ 定时任务功能
+- ✅ 平滑线图显示
+- ✅ 可折叠历史记录
+- ✅ 自动端口同步
+- ✅ 流媒体解锁检测
+- ✅ Netflix Guest Mode 检测优化
+
+## 📄 License
+
+MIT License - 详见 [LICENSE](LICENSE) 文件
+
+## 🤝 贡献 / Contributing
+
+欢迎提交 Issue 和 Pull Request！
+
+---
+
+**快速链接：**
+- [安装脚本更新指南](docs/script-update-guide.md)
+- [API 文档](http://your-ip:9000/docs)
+- [GitHub Issues](https://github.com/podcctv/iperf3-test-tools/issues)

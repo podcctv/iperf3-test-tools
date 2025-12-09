@@ -3268,6 +3268,10 @@ def _schedules_html() -> str:
   <style>
     body {{ background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); min-height: 100vh; }}
     .glass-card {{ background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(148, 163, 184, 0.1); }}
+    .custom-scrollbar::-webkit-scrollbar {{ width: 6px; height: 6px; }}
+    .custom-scrollbar::-webkit-scrollbar-track {{ background: rgba(15, 23, 42, 0.3); border-radius: 3px; }}
+    .custom-scrollbar::-webkit-scrollbar-thumb {{ background: rgba(148, 163, 184, 0.3); border-radius: 3px; }}
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {{ background: rgba(148, 163, 184, 0.5); }}
   </style>
 </head>
 <body class="text-slate-100">
@@ -3448,6 +3452,7 @@ def _schedules_html() -> str:
                 </div>
               </div>
               <canvas id="chart-${{schedule.id}}" height="80"></canvas>
+              <div id="stats-${{schedule.id}}"></div>
             </div>
             
             <!-- History Table (Collapsible) -->
@@ -3591,6 +3596,16 @@ def _schedules_html() -> str:
         return (r.test_result.summary.bits_per_second / 1000000).toFixed(2);
       }});
       
+      // 计算统计数据
+      const uploadValues = uploadData.map(v => parseFloat(v) || 0);
+      const downloadValues = downloadData.map(v => parseFloat(v) || 0);
+      const uploadMax = Math.max(...uploadValues);
+      const uploadAvg = uploadValues.reduce((a,b) => a+b, 0) / uploadValues.length;
+      const uploadCurrent = uploadValues[uploadValues.length - 1] || 0;
+      const downloadMax = Math.max(...downloadValues);
+      const downloadAvg = downloadValues.reduce((a,b) => a+b, 0) / downloadValues.length;
+      const downloadCurrent = downloadValues[downloadValues.length - 1] || 0;
+      
       // 创建图表
       const ctx = canvas.getContext('2d');
       charts[scheduleId] = new Chart(ctx, {{
@@ -3601,59 +3616,123 @@ def _schedules_html() -> str:
             {{
               label: '上传 (Mbps)',
               data: uploadData,
-              backgroundColor: 'rgba(59, 130, 246, 0.1)',
+              backgroundColor: 'rgba(59, 130, 246, 0.3)',
               borderColor: 'rgba(59, 130, 246, 1)',
-              borderWidth: 2,
+              borderWidth: 1.5,
               fill: true,
-              tension: 0.4,
-              pointRadius: 3,
-              pointHoverRadius: 5,
+              tension: 0.1,
+              pointRadius: 0,
+              pointHoverRadius: 4,
             }},
             {{
               label: '下载 (Mbps)',
               data: downloadData,
-              backgroundColor: 'rgba(16, 185, 129, 0.1)',
+              backgroundColor: 'rgba(16, 185, 129, 0.3)',
               borderColor: 'rgba(16, 185, 129, 1)',
-              borderWidth: 2,
+              borderWidth: 1.5,
               fill: true,
-              tension: 0.4,
-              pointRadius: 3,
-              pointHoverRadius: 5,
+              tension: 0.1,
+              pointRadius: 0,
+              pointHoverRadius: 4,
             }}
           ]
         }},
         options: {{
           responsive: true,
           maintainAspectRatio: true,
+          interaction: {{
+            mode: 'index',
+            intersect: false,
+          }},
           plugins: {{
             legend: {{
-              labels: {{ color: '#cbd5e1' }}
+              display: true,
+              position: 'top',
+              labels: {{ 
+                color: '#cbd5e1',
+                usePointStyle: true,
+                padding: 15,
+                font: {{ size: 11 }}
+              }}
             }},
             tooltip: {{
+              backgroundColor: 'rgba(15, 23, 42, 0.9)',
+              titleColor: '#cbd5e1',
+              bodyColor: '#94a3b8',
+              borderColor: 'rgba(148, 163, 184, 0.2)',
+              borderWidth: 1,
+              padding: 12,
+              displayColors: true,
               callbacks: {{
                 afterLabel: function(context) {{
                   const result = results[context.dataIndex];
                   if (!result.test_result?.summary) return '';
                   const s = result.test_result.summary;
                   return [
-                    `延迟: ${{s.latencyMs?.toFixed(2) || 'N/A'}} ms`,
-                    `抖动: ${{s.jitterMs?.toFixed(2) || 'N/A'}} ms`,
-                    `丢包: ${{s.lostPercent?.toFixed(2) || 'N/A'}} %`
+                    `延迟: ${{s.latency_ms?.toFixed(2) || 'N/A'}} ms`,
+                    `丢包: ${{s.lost_percent?.toFixed(2) || 'N/A'}} %`
                   ];
                 }}
               }}
             }}
           }},
           scales: {{
-            x: {{ ticks: {{ color: '#94a3b8' }} }},
+            x: {{ 
+              grid: {{
+                display: true,
+                color: 'rgba(148, 163, 184, 0.15)',
+                drawBorder: false,
+                lineWidth: 0.5,
+              }},
+              ticks: {{ 
+                color: '#94a3b8',
+                font: {{ size: 9 }},
+                maxRotation: 0,
+                autoSkip: true,
+                maxTicksLimit: 24,
+              }}
+            }},
             y: {{ 
-              ticks: {{ color: '#94a3b8' }},
+              grid: {{
+                display: true,
+                color: 'rgba(148, 163, 184, 0.15)',
+                drawBorder: false,
+                lineWidth: 0.5,
+              }},
+              ticks: {{ 
+                color: '#94a3b8',
+                font: {{ size: 9 }}
+              }},
               beginAtZero: true,
-              title: {{ display: true, text: 'Mbps', color: '#cbd5e1' }}
+              title: {{ 
+                display: true, 
+                text: 'Mbps', 
+                color: '#cbd5e1',
+                font: {{ size: 10, weight: 'bold' }}
+              }}
             }}
           }}
         }}
       }});
+      
+      // 显示统计信息
+      const statsEl = document.getElementById(`stats-${{scheduleId}}`);
+      if (statsEl) {{
+        statsEl.innerHTML = `
+          <div class="text-xs text-slate-400 mt-2 flex gap-6">
+            <div>
+              <span class="text-sky-400">Max 上传:</span> ${{uploadMax.toFixed(2)}}Mb; 
+              <span class="text-sky-400">Average 上传:</span> ${{uploadAvg.toFixed(2)}}Mb; 
+              <span class="text-sky-400">Current 上传:</span> ${{uploadCurrent.toFixed(2)}}Mb;
+            </div>
+            <div>
+              <span class="text-emerald-400">Max 下载:</span> ${{downloadMax.toFixed(2)}}Mb; 
+              <span class="text-emerald-400">Average 下载:</span> ${{downloadAvg.toFixed(2)}}Mb; 
+              <span class="text-emerald-400">Current 下载:</span> ${{downloadCurrent.toFixed(2)}}Mb;
+            </div>
+          </div>
+        `;
+      }}
       
       // 更新日期显示
       document.getElementById(`date-${{scheduleId}}`).textContent = date;
