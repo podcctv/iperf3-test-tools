@@ -99,6 +99,27 @@ def _ensure_test_result_columns() -> None:
         connection.commit()
 
 
+def _ensure_schedule_columns() -> None:
+    dialect = engine.dialect.name
+    with engine.connect() as connection:
+        if dialect == "sqlite":
+            columns = connection.exec_driver_sql("PRAGMA table_info(test_schedules)").fetchall()
+            column_names = {col[1] for col in columns}
+            if "direction" not in column_names:
+                connection.exec_driver_sql("ALTER TABLE test_schedules ADD COLUMN direction VARCHAR DEFAULT 'upload'")
+        elif dialect == "postgresql":
+            result = connection.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='test_schedules'"
+                )
+            )
+            column_names = {row[0] for row in result}
+            if "direction" not in column_names:
+                connection.execute(text("ALTER TABLE test_schedules ADD COLUMN direction VARCHAR DEFAULT 'upload'"))
+        connection.commit()
+
+
 def _init_database_with_retry(max_attempts: int = 5, delay_seconds: float = 2.0) -> None:
     """Initialize database schema with simple retry to handle cold starts."""
 
@@ -109,6 +130,7 @@ def _init_database_with_retry(max_attempts: int = 5, delay_seconds: float = 2.0)
             Base.metadata.create_all(bind=engine)
             _ensure_iperf_port_column()
             _ensure_test_result_columns()
+            _ensure_schedule_columns()
             return
         except Exception:  # pragma: no cover - best-effort bootstrap
             logger.exception(
@@ -368,6 +390,8 @@ def _summarize_metrics(raw: dict | None) -> dict | None:
 
     return {
         "bits_per_second": bits_per_second,
+        "upload_bits_per_second": (sum_sent or {}).get("bits_per_second"),
+        "download_bits_per_second": (sum_received or {}).get("bits_per_second"),
         "jitter_ms": jitter_ms,
         "lost_percent": lost_percent,
         "latency_ms": latency_ms,
@@ -1477,6 +1501,10 @@ def _login_html() -> str:
         authHint = document.getElementById('auth-hint');
         originalLoginLabel = loginButton?.textContent || 'Login';
 
+
+        // Close whitelist display listener (safe binding)
+        const closeWhitelist = document.getElementById('close-whitelist-display');
+        if (closeWhitelist) {
             closeWhitelist.addEventListener('click', () => {
                 document.getElementById('whitelist-display').classList.add('hidden');
             });
@@ -3582,6 +3610,12 @@ def _schedules_html() -> str:
       
       <h3 id="modal-title" class="text-xl font-bold text-white mb-6">新建定时任务</h3>
       
+      <!-- Tabs -->
+      <div class="flex border-b border-slate-700 mb-6">
+        <button id="tab-uni" onclick="switchScheduleTab('uni')" class="px-4 py-2 text-sm font-medium text-sky-400 border-b-2 border-sky-400 transition hover:text-sky-300">单向测试</button>
+        <button id="tab-bidir" onclick="switchScheduleTab('bidir')" class="px-4 py-2 text-sm font-medium text-slate-400 border-b-2 border-transparent transition hover:text-slate-300">双向测试</button>
+      </div>
+      
       <div class="space-y-4">
         <div>
           <label class="text-sm font-medium text-slate-200">任务名称</label>
@@ -3599,14 +3633,23 @@ def _schedules_html() -> str:
           </div>
         </div>
         
-        <div class="grid grid-cols-3 gap-4">
+        <div class="grid grid-cols-2 gap-4">
           <div>
             <label class="text-sm font-medium text-slate-200">协议</label>
             <select id="schedule-protocol" class="w-full mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none">
-              <option value="tcp">TCP</option>
-              <option value="udp">UDP</option>
+              <!-- Options populated by JS -->
             </select>
           </div>
+          <div id="direction-wrapper">
+             <label class="text-sm font-medium text-slate-200">方向</label>
+             <select id="schedule-direction" class="w-full mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none">
+                <option value="upload">上行 (Client→Server)</option>
+                <option value="download">下行 (Server→Client)</option>
+             </select>
+          </div>
+        </div>
+        
+        <div class="grid grid-cols-3 gap-4">
           <div>
             <label class="text-sm font-medium text-slate-200">时长(秒)</label>
             <input id="schedule-duration" type="number" value="10" min="1" class="w-full mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none">
@@ -3615,12 +3658,14 @@ def _schedules_html() -> str:
             <label class="text-sm font-medium text-slate-200">并行数</label>
             <input id="schedule-parallel" type="number" value="1" min="1" class="w-full mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none">
           </div>
+          <div>
+            <label class="text-sm font-medium text-slate-200">执行间隔(分钟)</label>
+            <input id="schedule-interval" type="number" value="30" min="1" class="w-full mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none">
+          </div>
         </div>
         
         <div>
-          <label class="text-sm font-medium text-slate-200">执行间隔(分钟)</label>
-          <input id="schedule-interval" type="number" value="30" min="1" class="w-full mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none">
-          <p class="text-xs text-slate-500 mt-1">建议: 30分钟 = 每天48次测试</p>
+           <p class="text-xs text-slate-500">建议: 30分钟 = 每天48次测试</p>
         </div>
         
         <div>
@@ -3836,8 +3881,24 @@ def _schedules_html() -> str:
           const s = r.test_result?.summary || {{}};
           const protocol = r.test_result?.protocol || 'tcp';
           
-          // Convert bits_per_second to Mbps
-          const speedMbps = s.bits_per_second ? (s.bits_per_second / 1000000).toFixed(2) : '-';
+          // Determine upload/download speeds
+          let up = '-';
+          let down = '-';
+          
+          if (s.upload_bits_per_second) {{
+              up = (s.upload_bits_per_second / 1000000).toFixed(2);
+          }}
+          if (s.download_bits_per_second) {{
+              down = (s.download_bits_per_second / 1000000).toFixed(2);
+          }}
+          
+          // Fallback compatibility
+          if (up === '-' && down === '-' && s.bits_per_second) {{
+              const bps = (s.bits_per_second / 1000000).toFixed(2);
+              const isReverse = r.test_result.params?.reverse || r.test_result.raw_result?.start?.test_start?.reverse;
+              if (isReverse) down = bps;
+              else up = bps;
+          }}
           
           // TCP 不显示丢包，UDP 才有丢包数据
           const lostPercent = protocol === 'udp' 
@@ -3847,8 +3908,8 @@ def _schedules_html() -> str:
           return `
             <tr>
               <td class="py-2">${{time}}</td>
-              <td class="py-2 text-sky-400">${{speedMbps}}</td>
-              <td class="py-2 text-emerald-400">${{speedMbps}}</td>
+              <td class="py-2 text-sky-400">${{up}}</td>
+              <td class="py-2 text-emerald-400">${{down}}</td>
               <td class="py-1">${{s.latency_ms?.toFixed(2) || '-'}}</td>
               <td class="py-1">${{lostPercent}}</td>
               <td class="py-1 ${{statusColor}} text-xs" title="${{r.error_message || ''}}">
@@ -3879,18 +3940,29 @@ def _schedules_html() -> str:
       }});
       
       const uploadData = results.map(r => {{
-        if (!r.test_result?.summary?.bits_per_second) return 0;
-        // Check if reverse mode (Download)
+        const s = r.test_result?.summary;
+        if (!s) return 0;
+        
+        if (s.upload_bits_per_second) return (s.upload_bits_per_second / 1000000).toFixed(2);
+        
+        // Fallback
+        const bps = s.bits_per_second || 0;
         const isReverse = r.test_result.params?.reverse || r.test_result.raw_result?.start?.test_start?.reverse;
         if (isReverse) return 0;
-        return (r.test_result.summary.bits_per_second / 1000000).toFixed(2);
+        return (bps / 1000000).toFixed(2);
       }});
       
       const downloadData = results.map(r => {{
-        if (!r.test_result?.summary?.bits_per_second) return 0;
+        const s = r.test_result?.summary;
+        if (!s) return 0;
+        
+        if (s.download_bits_per_second) return (s.download_bits_per_second / 1000000).toFixed(2);
+        
+        // Fallback
+        const bps = s.bits_per_second || 0;
         const isReverse = r.test_result.params?.reverse || r.test_result.raw_result?.start?.test_start?.reverse;
         if (!isReverse) return 0;
-        return (r.test_result.summary.bits_per_second / 1000000).toFixed(2);
+        return (bps / 1000000).toFixed(2);
       }});
       
       // 计算统计数据
@@ -4044,11 +4116,52 @@ def _schedules_html() -> str:
       loadChartData(scheduleId, newDate);
     }}
 
+    let currentTab = 'uni'; // 'uni' | 'bidir'
+
+    function switchScheduleTab(tab) {{
+        currentTab = tab;
+        const uniBtn = document.getElementById('tab-uni');
+        const bidirBtn = document.getElementById('tab-bidir');
+        const protoSelect = document.getElementById('schedule-protocol');
+        const dirWrapper = document.getElementById('direction-wrapper');
+        
+        // Update Tabs
+        if (tab === 'uni') {{
+            uniBtn.classList.replace('text-slate-400', 'text-sky-400');
+            uniBtn.classList.replace('border-transparent', 'border-sky-400');
+            bidirBtn.classList.replace('text-sky-400', 'text-slate-400');
+            bidirBtn.classList.replace('border-sky-400', 'border-transparent');
+            
+            // Update Protocol Options (Keep selection if possible)
+            const currentProto = protoSelect.value;
+            protoSelect.innerHTML = '<option value="tcp">TCP</option><option value="udp">UDP</option>';
+            if (['tcp', 'udp'].includes(currentProto)) protoSelect.value = currentProto;
+            
+            dirWrapper.classList.remove('hidden');
+        }} else {{
+            bidirBtn.classList.replace('text-slate-400', 'text-sky-400');
+            bidirBtn.classList.replace('border-transparent', 'border-sky-400');
+            uniBtn.classList.replace('text-sky-400', 'text-slate-400');
+            uniBtn.classList.replace('border-sky-400', 'border-transparent');
+            
+            const currentProto = protoSelect.value;
+            protoSelect.innerHTML = '<option value="tcp">TCP</option><option value="udp">UDP</option><option value="tcp_udp">TCP + UDP</option>';
+            protoSelect.value = currentProto || 'tcp';
+            
+            dirWrapper.classList.add('hidden');
+        }}
+    }}
+
     // Modal操作
     function openModal(scheduleId = null) {{
       editingScheduleId = scheduleId;
       const modal = document.getElementById('schedule-modal');
       const title = document.getElementById('modal-title');
+      
+      // Default reset
+      switchScheduleTab('uni');
+      document.getElementById('schedule-direction').value = 'upload';
+      document.getElementById('schedule-protocol').value = 'tcp';
       
       if (scheduleId) {{
         const schedule = schedules.find(s => s.id === scheduleId);
@@ -4056,11 +4169,22 @@ def _schedules_html() -> str:
         document.getElementById('schedule-name').value = schedule.name;
         document.getElementById('schedule-src').value = schedule.src_node_id;
         document.getElementById('schedule-dst').value = schedule.dst_node_id;
-        document.getElementById('schedule-protocol').value = schedule.protocol;
         document.getElementById('schedule-duration').value = schedule.duration;
         document.getElementById('schedule-parallel').value = schedule.parallel;
         document.getElementById('schedule-interval').value = Math.floor(schedule.interval_seconds / 60);
         document.getElementById('schedule-notes').value = schedule.notes || '';
+        
+        // Restore Tab state
+        const direction = schedule.direction || 'upload';
+        if (direction === 'bidirectional') {{
+            switchScheduleTab('bidir');
+        }} else {{
+            switchScheduleTab('uni');
+            document.getElementById('schedule-direction').value = direction;
+        }}
+        // Restore protocol AFTER switching tab (so options exist)
+        document.getElementById('schedule-protocol').value = schedule.protocol;
+        
       }} else {{
         title.textContent = '新建定时任务';
         document.getElementById('schedule-name').value = '';
@@ -4068,6 +4192,7 @@ def _schedules_html() -> str:
         document.getElementById('schedule-parallel').value = 1;
         document.getElementById('schedule-interval').value = 30;
         document.getElementById('schedule-notes').value = '';
+        switchScheduleTab('uni');
       }}
       
       modal.classList.remove('hidden');
@@ -4081,6 +4206,14 @@ def _schedules_html() -> str:
 
     // 保存定时任务
     async function saveSchedule() {{
+      // Determine direction based on tab
+      let direction = 'upload';
+      if (currentTab === 'bidir') {{
+          direction = 'bidirectional';
+      }} else {{
+          direction = document.getElementById('schedule-direction').value;
+      }}
+
       const data = {{
         name: document.getElementById('schedule-name').value,
         src_node_id: parseInt(document.getElementById('schedule-src').value),
@@ -4091,6 +4224,7 @@ def _schedules_html() -> str:
         port: 62001,
         interval_seconds: parseInt(document.getElementById('schedule-interval').value) * 60,
         enabled: true,
+        direction: direction,
         notes: document.getElementById('schedule-notes').value || null,
       }};
       
@@ -5212,48 +5346,76 @@ async def _execute_schedule_task(schedule_id: int):
             dst_status = await health_monitor.check_node(dst_node)
             current_port = dst_status.detected_iperf_port or dst_status.iperf_port
             
-            # 构造测试参数
-            # Always use detected port to handle dynamic port changes (e.g., after agent reinstall)
-            test_params = {
-                "target": dst_node.ip,
-                "port": current_port,  # Always use detected port, ignore schedule.port
-                "duration": schedule.duration,
-                "protocol": schedule.protocol,
-                "parallel": schedule.parallel,
-            }
-            
-            # 调用agent执行测试
-            # 注意: 这里 _call_agent_test 是 async 的
-            raw_data = await _call_agent_test(src_node, test_params, schedule.duration)
-            summary = _summarize_metrics(raw_data)
-            
-            # 保存测试结果
-            test_result = TestResult(
-                src_node_id=schedule.src_node_id,
-                dst_node_id=schedule.dst_node_id,
-                protocol=schedule.protocol,
-                params=test_params,
-                raw_result=raw_data,
-                summary=summary,
-                created_at=datetime.now(timezone.utc),
-            )
-            db.add(test_result)
-            db.flush()
-            
-            # 保存schedule结果
-            schedule_result = ScheduleResult(
-                schedule_id=schedule_id,
-                test_result_id=test_result.id,
-                executed_at=datetime.now(timezone.utc),
-                status="success",
-            )
-            db.add(schedule_result)
-            db.commit()
-            
-            logger.info(f"Schedule {schedule_id} executed successfully")
-            
+            # Determine protocols to run
+            protocols = []
+            if schedule.protocol == "tcp_udp":
+                protocols = ["tcp", "udp"]
+            else:
+                protocols = [schedule.protocol]
+
+            # Determine direction params
+            direction = getattr(schedule, "direction", "upload")
+            is_reverse = (direction == "download")
+            is_bidir = (direction == "bidirectional")
+
+            for proto in protocols:
+                try:
+                    # 构造测试参数
+                    # Always use detected port to handle dynamic port changes (e.g., after agent reinstall)
+                    test_params = {
+                        "target": dst_node.ip,
+                        "port": current_port,
+                        "duration": schedule.duration,
+                        "protocol": proto,
+                        "parallel": schedule.parallel,
+                        "reverse": is_reverse,
+                        "bidir": is_bidir,
+                    }
+                    
+                    # 调用agent执行测试
+                    raw_data = await _call_agent_test(src_node, test_params, schedule.duration)
+                    summary = _summarize_metrics(raw_data)
+                    
+                    # 保存测试结果
+                    test_result = TestResult(
+                        src_node_id=schedule.src_node_id,
+                        dst_node_id=schedule.dst_node_id,
+                        protocol=proto,
+                        params=test_params,
+                        raw_result=raw_data,
+                        summary=summary,
+                        created_at=datetime.now(timezone.utc),
+                    )
+                    db.add(test_result)
+                    db.flush()
+                    
+                    # 保存schedule结果
+                    schedule_result = ScheduleResult(
+                        schedule_id=schedule_id,
+                        test_result_id=test_result.id,
+                        executed_at=datetime.now(timezone.utc),
+                        status="success",
+                    )
+                    db.add(schedule_result)
+                    db.commit()
+                    
+                    logger.info(f"Schedule {schedule_id} ({proto}) executed successfully")
+
+                except Exception as inner_e:
+                    logger.error(f"Schedule {schedule_id} ({proto}) execution failed: {inner_e}")
+                    # Keep going for next protocol if any
+                    schedule_result = ScheduleResult(
+                        schedule_id=schedule_id,
+                        test_result_id=None,
+                        executed_at=datetime.now(timezone.utc),
+                        status="failed",
+                        error_message=f"{proto}: {str(inner_e)}",
+                    )
+                    db.add(schedule_result)
+                    db.commit()
+
         except Exception as e:
-            logger.error(f"Schedule {schedule_id} execution failed: {e}")
+            logger.error(f"Schedule {schedule_id} setup failed: {e}")
             
             # 保存失败记录
             schedule_result = ScheduleResult(
@@ -5314,6 +5476,7 @@ def create_schedule(schedule: TestScheduleCreate, db: Session = Depends(get_db))
         port=schedule.port,
         interval_seconds=schedule.interval_seconds,
         enabled=schedule.enabled,
+        direction=schedule.direction,
         notes=schedule.notes,
     )
     

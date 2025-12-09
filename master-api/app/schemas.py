@@ -117,6 +117,7 @@ class TestScheduleBase(BaseModel):
     port: int = Field(default=DEFAULT_IPERF_PORT, ge=1, le=65535)
     interval_seconds: int = Field(default=3600, gt=0)
     enabled: bool = True
+    direction: str = "upload"  # upload, download, bidirectional
     notes: Optional[str] = None
 
 
@@ -134,6 +135,7 @@ class TestScheduleUpdate(BaseModel):
     port: Optional[int] = Field(default=None, ge=1, le=65535)
     interval_seconds: Optional[int] = Field(default=None, gt=0)
     enabled: Optional[bool] = None
+    direction: Optional[str] = None
     notes: Optional[str] = None
 
 

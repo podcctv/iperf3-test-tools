@@ -49,6 +49,7 @@ class TestSchedule(Base):
     parallel = Column(Integer, default=1)
     port = Column(Integer, default=DEFAULT_IPERF_PORT)
     interval_seconds = Column(Integer, nullable=False)
+    direction = Column(String, default="upload")  # upload, download, bidirectional
     enabled = Column(Boolean, default=True)
     last_run_at = Column(DateTime(timezone=True), nullable=True)
     next_run_at = Column(DateTime(timezone=True), nullable=True)
