@@ -1287,6 +1287,185 @@ def _login_html() -> str:
     let changePasswordAlert, currentPasswordInput, newPasswordInput, confirmPasswordInput, changePasswordBtn;
 
     // Initialize all elements when DOM is ready
+    let loginButton, passwordInput, loginStatus, loginStatusDot, loginStatusLabel, loginHint, authHint;
+    let configAlert, importConfigsBtn, exportConfigsBtn, configFileInput;
+    let changePasswordAlert, currentPasswordInput, newPasswordInput, confirmPasswordInput, changePasswordBtn;
+    let originalLoginLabel;
+    
+    // Settings Modal Functions
+    function toggleSettingsModal(show) {
+      const modal = document.getElementById('settings-modal');
+      if (modal) {
+        if (show) {
+          modal.classList.remove('hidden');
+          modal.classList.add('flex');
+          // Default to password tab if no active tab or just opening
+          if (!document.querySelector('#password-panel:not(.hidden)') && 
+              !document.querySelector('#config-panel:not(.hidden)') &&
+              !document.querySelector('#whitelist-panel:not(.hidden)')) {
+            setActiveSettingsTab('password');
+          }
+        } else {
+          modal.classList.add('hidden');
+          modal.classList.remove('flex');
+        }
+      }
+    }
+
+    function setActiveSettingsTab(tabName) {
+      // Buttons
+      const passwordTab = document.getElementById('password-tab');
+      const configTab = document.getElementById('config-tab');
+      const whitelistTab = document.getElementById('whitelist-tab');
+      
+      // Panels
+      const passwordPanel = document.getElementById('password-panel');
+      const configPanel = document.getElementById('config-panel');
+      const whitelistPanel = document.getElementById('whitelist-panel');
+      
+      // Reset all buttons style
+      [passwordTab, configTab, whitelistTab].forEach(btn => {
+        if (btn) {
+            btn.className = 'rounded-full px-4 py-2 text-sm font-semibold text-slate-300 transition hover:text-white';
+        }
+      });
+      
+      // Reset all panels visibility
+      [passwordPanel, configPanel, whitelistPanel].forEach(panel => {
+        if (panel) panel.classList.add('hidden');
+      });
+      
+      // Activate selected
+      const activeBtnClass = 'rounded-full bg-gradient-to-r from-indigo-500/80 to-purple-500/80 px-4 py-2 text-sm font-semibold text-slate-50 shadow-lg shadow-indigo-500/15 ring-1 ring-indigo-400/40 transition hover:brightness-110';
+      
+      if (tabName === 'password' && passwordTab && passwordPanel) {
+        passwordTab.className = activeBtnClass;
+        passwordPanel.classList.remove('hidden');
+      } else if (tabName === 'config' && configTab && configPanel) {
+        configTab.className = activeBtnClass;
+        configPanel.classList.remove('hidden');
+      } else if (tabName === 'whitelist' && whitelistTab && whitelistPanel) { // Support for whitelist tab
+        whitelistTab.className = activeBtnClass;
+        whitelistPanel.classList.remove('hidden');
+        // Initial fetch of stats when opening tab
+        checkWhitelistStatus();
+      }
+    }
+
+    // IP Whitelist Functions
+    async function viewWhitelist() {
+      const display = document.getElementById('whitelist-display');
+      const list = document.getElementById('whitelist-list');
+      const btn = document.getElementById('view-whitelist-btn');
+      
+      if (!display.classList.contains('hidden')) {
+          display.classList.add('hidden');
+          return;
+      }
+      
+      try {
+        btn.disabled = true;
+        const res = await apiFetch('/admin/whitelist');
+        const data = await res.json();
+        
+        list.innerHTML = '';
+        if (data.whitelist && data.whitelist.length > 0) {
+            data.whitelist.forEach(ip => {
+                const item = document.createElement('div');
+                item.className = 'flex items-center justify-between rounded bg-slate-800/40 px-3 py-2 text-xs text-slate-300';
+                item.innerHTML = `<span>${ip}</span><button onclick="removeWhitelistIp('${ip}')" class="text-rose-400 hover:text-rose-300">🗑️</button>`;
+                list.appendChild(item);
+            });
+        } else {
+            list.innerHTML = '<div class="text-center text-slate-500 py-2">白名单为空</div>';
+        }
+        
+        display.classList.remove('hidden');
+      } catch (e) {
+        alert('获取白名单失败: ' + e.message);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+    
+    async function removeWhitelistIp(ip) {
+        if (!confirm(`确定要从白名单中移除 IP ${ip} 吗?`)) return;
+        try {
+            const res = await apiFetch(`/admin/whitelist/remove?ip=${encodeURIComponent(ip)}`, { method: 'DELETE' });
+            if (res.ok) {
+                viewWhitelist(); // Refresh list
+                checkWhitelistStatus(); // Refresh stats
+            } else {
+                alert('移除失败');
+            }
+        } catch (e) {
+            alert('移除失败: ' + e.message);
+        }
+    }
+
+    async function syncWhitelist() {
+        const btn = document.getElementById('sync-whitelist-btn');
+        const resultDiv = document.getElementById('whitelist-sync-result');
+        const contentDiv = document.getElementById('sync-result-content');
+        
+        try {
+            btn.disabled = true;
+            btn.innerHTML = '<span>🔄</span><span>同步中...</span>';
+            
+            const res = await apiFetch('/admin/sync_whitelist', { method: 'POST' });
+            const data = await res.json();
+            
+            resultDiv.classList.remove('hidden');
+            let html = '<ul class="space-y-1">';
+            
+            if (data.results) {
+                for (const [node, status] of Object.entries(data.results)) {
+                    const statusColor = status === 'success' ? 'text-emerald-400' : 'text-rose-400';
+                    html += `<li class="flex justify-between"><span>${node}</span><span class="${statusColor}">${status}</span></li>`;
+                }
+            }
+            html += '</ul>';
+            contentDiv.innerHTML = html;
+             checkWhitelistStatus(); // Refresh stats
+            
+        } catch (e) {
+            alert('同步请求失败: ' + e.message);
+        } finally {
+             btn.disabled = false;
+             btn.innerHTML = '<span>🔄</span><span>同步到所有 Agent</span>';
+        }
+    }
+
+    async function checkWhitelistStatus() {
+        try {
+            // Fetch stats from Master's whitelist list
+            const resStats = await apiFetch('/admin/whitelist'); 
+            const data = await resStats.json();
+            
+            if (data.whitelist) {
+                 const totalEl = document.getElementById('whitelist-total');
+                 if (totalEl) totalEl.textContent = data.whitelist.length;
+                 const cidrEl = document.getElementById('whitelist-cidr-count');
+                 const cidrCount = data.whitelist.filter(ip => ip.includes('/')).length;
+                 if (cidrEl) cidrEl.textContent = cidrCount;
+            }
+            
+            // For sync status
+            const resSync = await apiFetch('/admin/whitelist/status');
+            const dataSync = await resSync.json();
+            // We could update UI with sync status if there were elements for it, currently just fetching to verify API works
+            
+        } catch (e) {
+            console.error('Failed to update whitelist stats', e);
+        }
+    }
+
+    document.getElementById('close-whitelist-display')?.addEventListener('click', () => {
+        document.getElementById('whitelist-display').classList.add('hidden');
+    });
+
+    // Event listeners binding specific for whitelist buttons
+    // We bind these here because these elements might be inside the modal which is statically defined in HTML
     document.addEventListener('DOMContentLoaded', () => {
         console.log('DOM fully loaded. Initializing elements...');
         
@@ -4048,7 +4227,14 @@ async def schedules_page(request: Request):
     if not auth_manager().is_authenticated(request):
         return HTMLResponse(content="<script>window.location.href='/web';</script>")
     
-    return HTMLResponse(content=_schedules_html())
+    html = _schedules_html()
+    # Inject apiFetch helper for schedules page scripts
+    js_inject = """
+    <script>
+    const apiFetch = (url, options = {}) => fetch(url, { credentials: 'include', ...options });
+    </script>
+    """
+    return HTMLResponse(content=html.replace("<head>", "<head>" + js_inject))
 
 
 @app.get("/auth/status")
