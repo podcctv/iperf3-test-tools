@@ -4375,7 +4375,7 @@ def _schedules_html() -> str:
         }},
         options: {{
           responsive: true,
-          maintainAspectRatio: true,
+          maintainAspectRatio: false,
           interaction: {{
             mode: 'index',
             intersect: false,
@@ -5189,11 +5189,11 @@ async def daily_traffic_stats(db: Session = Depends(get_db)):
     Get daily traffic statistics per node.
     Traffic is calculated from midnight (00:00) local time.
     """
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
     
-    # Get today's midnight in UTC (assuming server uses UTC)
-    # For timezone-aware reset, we'd need to handle tz_offset parameter
-    now = datetime.utcnow()
+    # Use UTC+8 (China/Hong Kong time) for daily reset
+    utc_plus_8 = timezone(timedelta(hours=8))
+    now = datetime.now(utc_plus_8)
     today_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
     
     # Get all nodes
