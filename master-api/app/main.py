@@ -3646,7 +3646,7 @@ def _schedules_html() -> str:
 </body>
 </html>
 '''
-    """
+
 
 
 @app.get("/web", response_class=HTMLResponse)
