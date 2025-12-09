@@ -3451,9 +3451,9 @@ def _schedules_html() -> str:
             <!-- History Table -->
             <div class="glass-card rounded-xl p-4 mt-4">
                <h4 class="text-sm font-semibold text-slate-200 mb-3">最近执行记录 (History)</h4>
-               <div class="overflow-x-auto">
+               <div class="overflow-x-auto max-h-60 overflow-y-auto custom-scrollbar">
                  <table class="w-full text-left text-xs">
-                   <thead class="text-slate-400 border-b border-slate-700">
+                   <thead class="text-slate-400 border-b border-slate-700 sticky top-0 bg-slate-900/90 backdrop-blur z-10">
                      <tr>
                        <th class="pb-2">时间</th>
                        <th class="pb-2">上传 (Mbps)</th>
@@ -3544,13 +3544,28 @@ def _schedules_html() -> str:
               <td class="py-2">${{time}}</td>
               <td class="py-2 text-sky-400">${{s.sendMbps?.toFixed(2) || '-'}}</td>
               <td class="py-2 text-emerald-400">${{s.receiveMbps?.toFixed(2) || '-'}}</td>
-              <td class="py-2">${{s.latencyMs?.toFixed(2) || '-'}}</td>
-              <td class="py-2">${{s.lostPercent?.toFixed(2) || '-'}}</td>
-              <td class="py-2 ${{statusColor}} text-xs">${{r.status}}</td>
+              <td class="py-1">${{s.latencyMs?.toFixed(2) || '-'}}</td>
+              <td class="py-1">${{s.lostPercent?.toFixed(2) || '-'}}</td>
+              <td class="py-1 ${{statusColor}} text-xs" title="${{r.error_message || ''}}">
+                ${{r.status}}
+                ${{r.status === 'failed' ? '<span class="ml-1 cursor-help">ⓘ</span>' : ''}}
+              </td>
             </tr>
           `;
       }}).join('');
     }}
+
+@app.get("/debug/failures")
+def debug_failures(db: Session = Depends(get_db)):
+    """Debug endpoint to list recent failures"""
+    results = db.scalars(
+        select(ScheduleResult)
+        .where(ScheduleResult.status == "failed")
+        .order_by(text("executed_at DESC"))
+        .limit(10)
+    ).all()
+    return [{"id": r.id, "schedule_id": r.schedule_id, "time": r.executed_at, "error": r.error_message} for r in results]
+
 
     // 渲染Chart.js图表
     function renderChart(scheduleId, results, date) {{
