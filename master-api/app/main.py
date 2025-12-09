@@ -11,7 +11,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 import httpx
-from fastapi import Body, Depends, FastAPI, HTTPException, Query, Request, Response
+from fastapi import BackgroundTasks, Body, Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse
 from sqlalchemy import or_, select, text
 from sqlalchemy.orm import Session
