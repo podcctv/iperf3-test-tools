@@ -525,10 +525,32 @@ class NodeHealthMonitor:
     async def _run(self) -> None:
         while True:
             try:
-                await self.refresh()
+                statuses = await self.refresh()
+                await self._sync_ports(statuses)
             except Exception:
                 logger.exception("Failed to refresh node health")
             await asyncio.sleep(self.interval_seconds)
+
+    async def _sync_ports(self, statuses: List[NodeWithStatus]) -> None:
+        """Sync detected iperf ports to database if different."""
+        updates = {}
+        for s in statuses:
+             if s.detected_iperf_port and s.detected_iperf_port != s.iperf_port:
+                 updates[s.id] = s.detected_iperf_port
+        
+        if updates:
+            db = SessionLocal()
+            try:
+                for nid, port in updates.items():
+                    node = db.get(Node, nid)
+                    if node:
+                        node.iperf_port = port
+                        logger.info(f"Auto-updating iperf port for node {node.name}: {port}")
+                db.commit()
+            except Exception as e:
+                logger.error(f"Failed to sync ports: {e}")
+            finally:
+                db.close()
 
     async def refresh(self, nodes: List[Node] | None = None) -> List[NodeWithStatus]:
         async with self._lock:
@@ -3399,10 +3421,15 @@ def _schedules_html() -> str:
                 </div>
               </div>
               <div class="flex items-center gap-3">
+                <div class="hidden md:block text-xs text-right mr-2 space-y-1">
+                   <div class="text-slate-400">Next Run</div>
+                   <div class="font-mono text-emerald-400" data-countdown="${{schedule.next_run_at || ''}}">Calculating...</div>
+                </div>
                 ${{statusBadge}}
                 <button onclick="toggleSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:border-sky-500 transition">
                   ${{schedule.enabled ? '暂停' : '启用'}}
                 </button>
+                <button onclick="runSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:border-emerald-500 transition">立即运行</button>
                 <button onclick="editSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:border-sky-500 transition">编辑</button>
                 <button onclick="deleteSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-rose-700 bg-rose-900/20 text-xs font-semibold text-rose-300 hover:bg-rose-900/40 transition">删除</button>
               </div>
@@ -3429,16 +3456,23 @@ def _schedules_html() -> str:
         schedules.forEach(schedule => {{
           loadChartData(schedule.id);
         }});
+        updateCountdowns();
+        if (window.countdownInterval) clearInterval(window.countdownInterval);
+        window.countdownInterval = setInterval(updateCountdowns, 1000);
       }}, 100);
     }}
 
     // 加载图表数据
     async function loadChartData(scheduleId, date = null) {{
-      const dateStr = date || new Date().toISOString().split('T')[0];
-      const res = await apiFetch(`/schedules/${{scheduleId}}/results?date=${{dateStr}}`);
+      if (!date) {{
+         const d = new Date();
+         date = `${{d.getFullYear()}}-${{String(d.getMonth()+1).padStart(2,'0')}}-${{String(d.getDate()).padStart(2,'0')}}`;
+      }}
+      const tzOffset = new Date().getTimezoneOffset();
+      const res = await apiFetch(`/schedules/${{scheduleId}}/results?date=${{date}}&tz_offset=${{tzOffset}}`);
       const data = await res.json();
       
-      renderChart(scheduleId, data.results, dateStr);
+      renderChart(scheduleId, data.results, date);
     }}
 
     // 渲染Chart.js图表
@@ -3625,6 +3659,40 @@ def _schedules_html() -> str:
       await apiFetch(`/schedules/${{scheduleId}}`, {{ method: 'DELETE' }});
       await loadSchedules();
     }}
+
+    // 立即执行
+    async function runSchedule(scheduleId) {
+      if (!confirm('确定要立即执行此任务吗?')) return;
+      try {
+        await apiFetch(`/schedules/${scheduleId}/execute`, { method: 'POST' });
+        alert('任务已触发, 请稍后刷新查看结果');
+      } catch (err) {
+        alert('执行失败: ' + err.message);
+      }
+    }
+
+    function updateCountdowns() {
+      const now = new Date();
+      document.querySelectorAll('[data-countdown]').forEach(el => {
+        const nextRun = el.dataset.countdown;
+        if (!nextRun) {
+          el.textContent = '';
+          return;
+        }
+        const target = new Date(nextRun + (nextRun.endsWith('Z') ? '' : 'Z'));
+        const diff = target - now;
+        
+        if (diff <= 0) {
+          el.textContent = 'Running...';
+          return;
+        }
+        
+        const h = Math.floor(diff / 3600000);
+        const m = Math.floor((diff % 3600000) / 60000);
+        const s = Math.floor((diff % 60000) / 1000);
+        el.textContent = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+      });
+    }
 
     // 事件绑定
     document.getElementById('create-schedule-btn').addEventListener('click', () => openModal());
@@ -4386,10 +4454,26 @@ def toggle_schedule(schedule_id: int, db: Session = Depends(get_db)):
     return {"enabled": db_schedule.enabled, "schedule_id": schedule_id}
 
 
+@app.post("/schedules/{schedule_id}/execute")
+async def execute_schedule(
+    schedule_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """手动立即执行定时任务"""
+    schedule = db.get(TestSchedule, schedule_id)
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    
+    background_tasks.add_task(_execute_schedule_task, schedule_id)
+    return {"status": "triggered", "schedule_id": schedule_id}
+
+
 @app.get("/schedules/{schedule_id}/results")
 def get_schedule_results(
     schedule_id: int,
     date: str = Query(None, description="Date in YYYY-MM-DD format"),
+    tz_offset: int = Query(0, description="Timezone offset in minutes (JS getTimezoneOffset)"),
     db: Session = Depends(get_db)
 ):
     """获取定时任务的测试结果"""
@@ -4406,17 +4490,25 @@ def get_schedule_results(
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid date format, use YYYY-MM-DD")
     else:
+        # 默认为 UTC 当前日期，后续会结合 offset 修正
         target_date = dt.now(timezone.utc).date()
     
-    # 查询当天的结果
-    start_time = dt.combine(target_date, dt.min.time()).replace(tzinfo=timezone.utc)
-    end_time = dt.combine(target_date, dt.max.time()).replace(tzinfo=timezone.utc)
+    # 计算查询的时间范围 (根据客户端时区)
+    # Start (Local) = YYYY-MM-DD 00:00:00
+    # UTC = Local + offset (minutes) (JS definition: UTC - Local)
+    # Local = UTC - offset
+    
+    start_local = dt.combine(target_date, dt.min.time()).replace(tzinfo=timezone.utc)
+    end_local = dt.combine(target_date, dt.max.time()).replace(tzinfo=timezone.utc)
+    
+    start_utc = start_local + timedelta(minutes=tz_offset)
+    end_utc = end_local + timedelta(minutes=tz_offset)
     
     results = db.scalars(
         select(ScheduleResult)
         .where(ScheduleResult.schedule_id == schedule_id)
-        .where(ScheduleResult.executed_at >= start_time)
-        .where(ScheduleResult.executed_at <= end_time)
+        .where(ScheduleResult.executed_at >= start_utc)
+        .where(ScheduleResult.executed_at <= end_utc)
         .order_by(ScheduleResult.executed_at)
     ).all()
     
@@ -4445,6 +4537,7 @@ def get_schedule_results(
     return {
         "schedule_id": schedule_id,
         "date": target_date.isoformat(),
+        "tz_offset": tz_offset,
         "results": output,
     }
 

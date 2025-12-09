@@ -474,10 +474,6 @@ def _probe_netflix() -> dict[str, Any]:
         tier=tier,
         region=region,
     )
-        detail_parts,
-        tier=tier,
-        region=region,
-    )
 
 
 def _probe_youtube_premium() -> dict[str, Any]:
