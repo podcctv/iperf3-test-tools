@@ -857,7 +857,7 @@ def _login_html() -> str:
                   <label class="form-label" for="password-input">Password</label>
                   <input id="password-input" class="form-input" type="password" placeholder="Enter dashboard password" autocomplete="current-password" required />
                 </div>
-                <button id="login-btn" type="button" class="btn-primary" onclick="login()">
+                <button id="login-btn" type="button" class="btn-primary">
                   Login
                 </button>
               </form>
@@ -2276,14 +2276,6 @@ def _login_html() -> str:
             const lossValue = entry.metrics?.lossStats?.avg ?? entry.metrics?.lostPercent;
             if (lossValue !== undefined && lossValue !== null) {
               badgeRow.appendChild(createMiniStat('丢包', formatMetric(lossValue, 2), '%', 'text-rose-200', entry.metrics?.lossStats));
-            }
-            const jitterValue = entry.metrics?.jitterStats?.avg ?? entry.metrics?.jitterMs;
-            if (jitterValue !== undefined && jitterValue !== null) {
-              badgeRow.appendChild(createMiniStat('抖动', formatMetric(jitterValue, 2), 'ms', 'text-amber-200'));
-            }
-            const lossValue = entry.metrics?.lossStats?.avg ?? entry.metrics?.lostPercent;
-            if (lossValue !== undefined && lossValue !== null) {
-              badgeRow.appendChild(createMiniStat('丢包', formatMetric(lossValue, 2), '%', 'text-rose-200'));
             }
             const retransValue = entry.metrics?.retransStats?.avg;
             if (retransValue !== undefined && retransValue !== null) {
