@@ -3797,7 +3797,7 @@ def _schedules_html() -> str:
                .then(d => {{
                    const el = document.getElementById(elemId);
                    if (el && d.isp) el.textContent = d.isp;
-               }}).catch(()=>{});
+               }}).catch(()=>void 0);
          }};
          
          if (src) fetchIsp(src.ip, `sched-src-isp-${{s.id}}`);
@@ -4512,7 +4512,7 @@ def _schedules_html() -> str:
                               el.title = d.country_code || '';
                           }}
                       }})
-                      .catch(() => {{}});
+                      .catch(() => void 0);
                 }});
             }}
         }}
