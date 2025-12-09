@@ -7,6 +7,9 @@ import ipaddress
 from datetime import datetime, timezone
 from typing import Dict, List
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.interval import IntervalTrigger
+
 import httpx
 from fastapi import Body, Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse
@@ -18,7 +21,7 @@ from .config import settings
 from .constants import DEFAULT_IPERF_PORT
 from .database import SessionLocal, engine, get_db
 from .agent_store import AgentConfigStore
-from .models import Base, Node, TestResult, TestSchedule
+from .models import Base, Node, TestResult, TestSchedule, ScheduleResult
 from .remote_agent import fetch_agent_logs, redeploy_agent, remove_agent_container, RemoteCommandError
 from .schemas import (
     AgentActionResult,
@@ -44,6 +47,13 @@ from .state_store import StateStore
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+# ============================================================================
+# Scheduler Setup
+# ============================================================================
+
+scheduler = AsyncIOScheduler()
+scheduler.start()
 
 
 def _log_dashboard_password() -> None:
@@ -564,6 +574,7 @@ backbone_monitor = BackboneLatencyMonitor(ZHEJIANG_TARGETS, interval_seconds=60)
 async def _on_startup() -> None:
     await health_monitor.start()
     await backbone_monitor.start()
+    _load_schedules_on_startup()
     _log_dashboard_password()
 
 
@@ -1308,6 +1319,15 @@ def _login_html() -> str:
       { key: 'hbo', label: 'HBO', color: 'text-purple-300', bg: 'border-purple-500/40 bg-purple-500/10', indicator: 'bg-purple-400' },
       { key: 'openai', label: 'OpenAI', color: 'text-emerald-300', bg: 'border-emerald-500/40 bg-emerald-500/10', indicator: 'bg-emerald-400' },
       { key: 'gemini', label: 'Gemini', color: 'text-sky-200', bg: 'border-sky-400/40 bg-sky-400/10', indicator: 'bg-sky-300' },
+      // New services
+      { key: 'tiktok', label: 'TikTok', color: 'text-pink-300', bg: 'border-pink-500/40 bg-pink-500/10', indicator: 'bg-pink-400' },
+      { key: 'twitch', label: 'Twitch', color: 'text-violet-300', bg: 'border-violet-500/40 bg-violet-500/10', indicator: 'bg-violet-400' },
+      { key: 'bilibili', label: 'Bilibili', color: 'text-cyan-300', bg: 'border-cyan-500/40 bg-cyan-500/10', indicator: 'bg-cyan-400' },
+      { key: 'paramount_plus', label: 'Paramount+', color: 'text-blue-300', bg: 'border-blue-500/40 bg-blue-500/10', indicator: 'bg-blue-400' },
+      { key: 'spotify', label: 'Spotify', color: 'text-green-300', bg: 'border-green-500/40 bg-green-500/10', indicator: 'bg-green-400' },
+      { key: 'apple_music', label: 'Apple Music', color: 'text-rose-200', bg: 'border-rose-400/40 bg-rose-400/10', indicator: 'bg-rose-300' },
+      { key: 'telegram', label: 'Telegram', color: 'text-blue-200', bg: 'border-blue-400/40 bg-blue-400/10', indicator: 'bg-blue-300' },
+      { key: 'whatsapp', label: 'WhatsApp', color: 'text-teal-300', bg: 'border-teal-500/40 bg-teal-500/10', indicator: 'bg-teal-400' },
     ];
     let streamingStatusCache = {};
     let isStreamingTestRunning = false;
@@ -3218,281 +3238,414 @@ def _login_html() -> str:
     """
 
 
-def _schedule_html() -> str:
-    return """
-<!DOCTYPE html>
+def _schedules_html() -> str:
+    return f'''<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>定时测试计划</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@radix-ui/themes@3.1.1/dist/css/themes.css" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>定时任务 - iperf3 Master</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            slate: {
-              950: '#020617',
-            },
-          },
-        },
-      },
-    };
-  </script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
-    body {
-      font-family: 'Inter', system-ui, -apple-system, sans-serif;
-      background:
-        radial-gradient(circle at 12% 20%, rgba(56, 189, 248, 0.08), transparent 32%),
-        radial-gradient(circle at 88% 12%, rgba(16, 185, 129, 0.08), transparent 40%),
-        linear-gradient(135deg, rgba(15, 23, 42, 0.94), rgba(2, 6, 23, 0.96));
-      background-attachment: fixed;
-      color: #e2e8f0;
-      margin: 0;
-      padding: 0;
-    }
-    .glass-card {
-      border: 1px solid rgba(148, 163, 184, 0.2);
-      background: linear-gradient(160deg, rgba(15, 23, 42, 0.92), rgba(22, 33, 61, 0.82));
-      box-shadow: 0 26px 80px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.04);
-      backdrop-filter: blur(14px);
-    }
-    .panel-card {
-      border: 1px solid rgba(148, 163, 184, 0.2);
-      background: linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(12, 20, 38, 0.82));
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.04);
-      backdrop-filter: blur(12px);
-    }
-    .gradient-bar { background: linear-gradient(120deg, #22c55e 0%, #0ea5e9 35%, #a855f7 100%); height: 4px; border-radius: 999px; }
-    .hidden { display: none; }
+    body {{ background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); min-height: 100vh; }}
+    .glass-card {{ background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(148, 163, 184, 0.1); }}
   </style>
 </head>
-<body>
-  <div class="radix-themes min-h-screen" data-theme="dark">
-    <div class="relative mx-auto max-w-5xl px-6 py-10 lg:px-10">
-      <div class="absolute inset-0 -z-10 overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900/90 via-slate-950 to-slate-950 shadow-[0_30px_120px_rgba(0,0,0,0.55)]"></div>
-      <div class="relative z-10 space-y-6">
-        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+<body class="text-slate-100">
+  <div class="container mx-auto px-4 py-8 max-w-7xl">
+    <!-- Header -->
+    <div class="mb-8 flex items-center justify-between">
+      <div>
+        <h1 class="text-3xl font-bold text-white">定时任务管理</h1>
+        <p class="text-slate-400 mt-1">Schedule Management & Monitoring</p>
+      </div>
+      <div class="flex gap-3">
+        <a href="/web" class="px-4 py-2 rounded-lg border border-slate-700 bg-slate-800/60 text-sm font-semibold text-slate-100 hover:border-sky-500 transition">
+          ← 返回主页
+        </a>
+        <button id="create-schedule-btn" class="px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-sky-500 text-sm font-semibold text-white shadow-lg hover:scale-105 transition">
+          + 新建任务
+        </button>
+        <button id="refresh-btn" class="px-4 py-2 rounded-lg border border-slate-700 bg-slate-800/60 text-sm font-semibold text-slate-100 hover:border-sky-500 transition">
+          🔄 刷新
+        </button>
+      </div>
+    </div>
+
+    <!-- Schedules List -->
+    <div id="schedules-container" class="space-y-6">
+      <div class="text-center text-slate-400 py-12">加载中...</div>
+    </div>
+  </div>
+
+  <!-- Create/Edit Modal -->
+  <div id="schedule-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/80 px-4 backdrop-blur">
+    <div class="glass-card relative w-full max-w-2xl rounded-2xl p-6 shadow-2xl">
+      <button id="close-modal" class="absolute right-4 top-4 rounded-full border border-slate-700 bg-slate-800 p-2 text-slate-300 hover:bg-slate-700">✕</button>
+      
+      <h3 id="modal-title" class="text-xl font-bold text-white mb-6">新建定时任务</h3>
+      
+      <div class="space-y-4">
+        <div>
+          <label class="text-sm font-medium text-slate-200">任务名称</label>
+          <input id="schedule-name" type="text" placeholder="例如: 北京→上海链路监控" class="w-full mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none">
+        </div>
+        
+        <div class="grid grid-cols-2 gap-4">
           <div>
-            <p class="text-sm uppercase tracking-[0.25em] text-sky-300/80">iperf3 控制中心</p>
-            <h1 class="text-3xl font-bold text-white">定时测试计划</h1>
-            <p class="text-sm text-slate-400">集中管理计划任务，循环执行链路测试。</p>
+            <label class="text-sm font-medium text-slate-200">源节点</label>
+            <select id="schedule-src" class="w-full mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none"></select>
           </div>
-          <div class="flex gap-2">
-            <a href="/web" class="rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200">返回控制台</a>
-            <button id="logout-btn" class="rounded-lg border border-rose-500/40 bg-rose-500/15 px-4 py-2 text-sm font-semibold text-rose-100 shadow-sm transition hover:bg-rose-500/25">退出登录</button>
+          <div>
+            <label class="text-sm font-medium text-slate-200">目标节点</label>
+            <select id="schedule-dst" class="w-full mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none"></select>
           </div>
         </div>
-
-        <div class="panel-card rounded-2xl p-5 space-y-4">
-          <div class="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h3 class="text-lg font-semibold text-white">新增计划</h3>
-              <p class="text-sm text-slate-400">保存后即按设定间隔周期执行。</p>
-            </div>
-            <div class="flex gap-2">
-              <button id="refresh-schedules" class="rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200">刷新列表</button>
-            </div>
+        
+        <div class="grid grid-cols-3 gap-4">
+          <div>
+            <label class="text-sm font-medium text-slate-200">协议</label>
+            <select id="schedule-protocol" class="w-full mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none">
+              <option value="tcp">TCP</option>
+              <option value="udp">UDP</option>
+            </select>
           </div>
-          <div id="schedule-alert" class="hidden rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100"></div>
-          <div class="grid gap-3 md:grid-cols-2">
-            <div class="space-y-2">
-              <label class="text-sm font-medium text-slate-200">计划名称</label>
-              <input id="schedule-name" placeholder="夜间基线" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
-            </div>
-            <div class="space-y-2">
-              <label class="text-sm font-medium text-slate-200">协议</label>
-              <select id="schedule-protocol" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60"><option value="tcp">TCP</option><option value="udp">UDP</option></select>
-            </div>
-            <div class="space-y-2">
-              <label class="text-sm font-medium text-slate-200">源节点</label>
-              <select id="schedule-src" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60"></select>
-            </div>
-            <div class="space-y-2">
-              <label class="text-sm font-medium text-slate-200">目标节点</label>
-              <select id="schedule-dst" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60"></select>
-            </div>
-            <div class="space-y-2">
-              <label class="text-sm font-medium text-slate-200">时长（秒）</label>
-              <input id="schedule-duration" type="number" value="10" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
-            </div>
-            <div class="space-y-2">
-              <label class="text-sm font-medium text-slate-200">并行数</label>
-              <input id="schedule-parallel" type="number" value="1" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
-            </div>
-            <div class="space-y-2">
-              <label class="text-sm font-medium text-slate-200">端口</label>
-              <input id="schedule-port" type="number" value="62001" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
-            </div>
-            <div class="space-y-2">
-              <label class="text-sm font-medium text-slate-200">间隔（分钟）</label>
-              <input id="schedule-interval" type="number" value="60" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
-            </div>
-            <div class="space-y-2 md:col-span-2">
-              <label class="text-sm font-medium text-slate-200">备注（可选）</label>
-              <input id="schedule-notes" placeholder="例如：日报带宽基线" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
-            </div>
+          <div>
+            <label class="text-sm font-medium text-slate-200">时长(秒)</label>
+            <input id="schedule-duration" type="number" value="10" min="1" class="w-full mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none">
           </div>
-          <button id="save-schedule" class="w-full rounded-xl bg-gradient-to-r from-emerald-500 to-sky-500 px-4 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-500/20 transition hover:scale-[1.01] hover:shadow-xl">保存计划</button>
+          <div>
+            <label class="text-sm font-medium text-slate-200">并行数</label>
+            <input id="schedule-parallel" type="number" value="1" min="1" class="w-full mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none">
+          </div>
         </div>
-
-        <div class="panel-card rounded-2xl p-5 space-y-4">
-          <div class="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h3 class="text-lg font-semibold text-white">计划列表</h3>
-              <p class="text-sm text-slate-400">展示已保存的定时测试。</p>
-            </div>
-          </div>
-          <div id="schedules-list" class="text-sm text-slate-400 space-y-3">暂无计划。</div>
+        
+        <div>
+          <label class="text-sm font-medium text-slate-200">执行间隔(分钟)</label>
+          <input id="schedule-interval" type="number" value="30" min="1" class="w-full mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none">
+          <p class="text-xs text-slate-500 mt-1">建议: 30分钟 = 每天48次测试</p>
         </div>
+        
+        <div>
+          <label class="text-sm font-medium text-slate-200">备注(可选)</label>
+          <textarea id="schedule-notes" rows="2" placeholder="任务说明..." class="w-full mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none"></textarea>
+        </div>
+      </div>
+      
+      <div class="mt-6 flex justify-end gap-3">
+        <button id="cancel-modal" class="px-4 py-2 rounded-lg border border-slate-700 bg-slate-800 text-sm font-semibold text-slate-100 hover:border-slate-500">取消</button>
+        <button id="save-schedule" class="px-6 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-sky-500 text-sm font-semibold text-white shadow-lg hover:scale-105 transition">保存</button>
       </div>
     </div>
   </div>
 
-    <script>
-    const apiFetch = (url, options = {}) => fetch(url, { credentials: 'include', ...options });
-    const scheduleAlert = document.getElementById('schedule-alert');
-    const schedulesList = document.getElementById('schedules-list');
-    const scheduleSrcSelect = document.getElementById('schedule-src');
-    const scheduleDstSelect = document.getElementById('schedule-dst');
-    const scheduleProtocol = document.getElementById('schedule-protocol');
-    const scheduleDuration = document.getElementById('schedule-duration');
-    const scheduleParallel = document.getElementById('schedule-parallel');
-    const schedulePort = document.getElementById('schedule-port');
-    const scheduleInterval = document.getElementById('schedule-interval');
-    const scheduleNotes = document.getElementById('schedule-notes');
-    const scheduleName = document.getElementById('schedule-name');
-    const logoutBtn = document.getElementById('logout-btn');
-    const saveScheduleBtn = document.getElementById('save-schedule');
-    const refreshSchedulesBtn = document.getElementById('refresh-schedules');
-    let nodeCache = [];
+  <script>
+    const apiFetch = (url, options = {{}}) => fetch(url, {{ credentials: 'include', ...options }});
+    let nodes = [];
+    let schedules = [];
+    let editingScheduleId = null;
+    let charts = {{}};
 
-    const styles = {
-      rowCard: 'relative overflow-hidden rounded-2xl border border-slate-800/80 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-slate-950/80 p-4 shadow-[0_25px_80px_rgba(0,0,0,0.45)] ring-1 ring-white/5 space-y-3',
-      inline: 'flex flex-wrap items-center gap-3',
-      pillInfo: 'inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-sky-500/20 via-sky-500/15 to-indigo-500/20 px-3 py-2 text-xs font-semibold text-sky-50 ring-1 ring-sky-400/40 shadow-[0_12px_30px_rgba(14,165,233,0.18)] transition hover:scale-[1.01] hover:ring-sky-300/60',
-      pillDanger: 'inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-rose-500/20 via-rose-500/15 to-orange-500/20 px-3 py-2 text-xs font-semibold text-rose-50 ring-1 ring-rose-400/40 shadow-[0_12px_30px_rgba(244,63,94,0.18)] transition hover:scale-[1.01] hover:ring-rose-300/60',
-      textMuted: 'text-slate-300/90 text-sm drop-shadow-sm',
-      textMutedSm: 'text-slate-500 text-xs',
-    };
+    // 加载节点列表
+    async function loadNodes() {{
+      const res = await apiFetch('/nodes');
+      nodes = await res.json();
+      updateNodeSelects();
+    }}
 
-    function setAlert(el, message) { el.textContent = message; el.classList.remove('hidden'); }
-    function clearAlert(el) { el.textContent = ''; el.classList.add('hidden'); }
+    function updateNodeSelects() {{
+      const srcSelect = document.getElementById('schedule-src');
+      const dstSelect = document.getElementById('schedule-dst');
+      
+      const options = nodes.map(n => `<option value="${{n.id}}">${{n.name}} (${{n.ip}})</option>`).join('');
+      srcSelect.innerHTML = options;
+      dstSelect.innerHTML = options;
+    }}
 
-    async function logout() {
-      await apiFetch('/auth/logout', { method: 'POST' });
-      window.location.href = '/web';
-    }
-
-    async function checkAuth() {
-      const res = await apiFetch('/auth/status');
-      const data = await res.json();
-      if (!data.authenticated) {
-        window.location.href = '/web';
-      }
-    }
-
-    async function refreshNodes() {
-      const res = await apiFetch('/nodes/status');
-      const nodes = await res.json();
-      nodeCache = nodes;
-      scheduleSrcSelect.innerHTML = '';
-      scheduleDstSelect.innerHTML = '';
-
-      nodes.forEach((node) => {
-        const optionA = document.createElement('option');
-        optionA.value = node.id;
-        optionA.textContent = `${node.name} (${node.ip} | iperf ${node.detected_iperf_port || node.iperf_port})`;
-        scheduleSrcSelect.appendChild(optionA);
-        scheduleDstSelect.appendChild(optionA.cloneNode(true));
-      });
-    }
-
-    async function refreshSchedules() {
+    // 加载定时任务列表
+    async function loadSchedules() {{
       const res = await apiFetch('/schedules');
-      const schedules = await res.json();
-      if (!schedules.length) {
-        schedulesList.textContent = '暂无计划。';
+      schedules = await res.json();
+      renderSchedules();
+    }}
+
+    // 渲染定时任务列表
+    function renderSchedules() {{
+      const container = document.getElementById('schedules-container');
+      
+      if (schedules.length === 0) {{
+        container.innerHTML = '<div class="text-center text-slate-400 py-12">暂无定时任务,点击"新建任务"开始</div>';
         return;
-      }
-      schedulesList.innerHTML = '';
-      schedules.forEach((schedule) => {
-        const row = document.createElement('div');
-        row.className = styles.rowCard;
-        const intervalMinutes = Math.round(schedule.interval_seconds / 60);
-        row.innerHTML = `
-          <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p class="font-semibold text-white">${schedule.name}</p>
-              <p class="${styles.textMuted}">${schedule.protocol.toUpperCase()} · ${schedule.src_node_id} → ${schedule.dst_node_id} · 每 ${intervalMinutes} 分钟 · 端口 ${schedule.port} · 时长 ${schedule.duration}s · 并行 ${schedule.parallel}${schedule.notes ? ' · ' + schedule.notes : ''}</p>
+      }}
+      
+      container.innerHTML = schedules.map(schedule => {{
+        const srcNode = nodes.find(n => n.id === schedule.src_node_id);
+        const dstNode = nodes.find(n => n.id === schedule.dst_node_id);
+        const statusBadge = schedule.enabled 
+          ? '<span class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-semibold"><span class="h-2 w-2 rounded-full bg-emerald-400"></span>运行中</span>'
+          : '<span class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-slate-700 text-slate-400 text-xs font-semibold"><span class="h-2 w-2 rounded-full bg-slate-500"></span>已暂停</span>';
+        
+        return `
+          <div class="glass-card rounded-2xl p-6 space-y-4">
+            <!-- Schedule Header -->
+            <div class="flex items-start justify-between">
+              <div class="flex-1">
+                <h3 class="text-lg font-bold text-white">${{schedule.name}}</h3>
+                <div class="mt-2 flex items-center gap-4 text-sm text-slate-300">
+                  <span>${{srcNode?.name || 'Unknown'}} → ${{dstNode?.name || 'Unknown'}}</span>
+                  <span class="text-slate-500">|</span>
+                  <span>${{schedule.protocol.toUpperCase()}}</span>
+                  <span class="text-slate-500">|</span>
+                  <span>${{schedule.duration}}秒</span>
+                  <span class="text-slate-500">|</span>
+                  <span>每${{Math.floor(schedule.interval_seconds / 60)}}分钟</span>
+                </div>
+              </div>
+              <div class="flex items-center gap-3">
+                ${{statusBadge}}
+                <button onclick="toggleSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:border-sky-500 transition">
+                  ${{schedule.enabled ? '暂停' : '启用'}}
+                </button>
+                <button onclick="editSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:border-sky-500 transition">编辑</button>
+                <button onclick="deleteSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-rose-700 bg-rose-900/20 text-xs font-semibold text-rose-300 hover:bg-rose-900/40 transition">删除</button>
+              </div>
             </div>
-            <div class="${styles.inline}">
-              <button class="${styles.pillDanger}" onclick="deleteSchedule(${schedule.id})">删除</button>
+            
+            <!-- Chart Container -->
+            <div class="glass-card rounded-xl p-4">
+              <div class="flex items-center justify-between mb-4">
+                <h4 class="text-sm font-semibold text-slate-200">24小时带宽监控</h4>
+                <div class="flex items-center gap-2">
+                  <button onclick="changeDate(${{schedule.id}}, -1)" class="px-2 py-1 rounded border border-slate-700 bg-slate-800 text-xs text-slate-300 hover:border-sky-500">◀ 前一天</button>
+                  <span id="date-${{schedule.id}}" class="text-xs text-slate-400">今天</span>
+                  <button onclick="changeDate(${{schedule.id}}, 1)" class="px-2 py-1 rounded border border-slate-700 bg-slate-800 text-xs text-slate-300 hover:border-sky-500">后一天 ▶</button>
+                </div>
+              </div>
+              <canvas id="chart-${{schedule.id}}" height="80"></canvas>
             </div>
           </div>
         `;
-        schedulesList.appendChild(row);
-      });
-    }
+      }}).join('');
+      
+      // 渲染图表
+      setTimeout(() => {{
+        schedules.forEach(schedule => {{
+          loadChartData(schedule.id);
+        }});
+      }}, 100);
+    }}
 
-    async function saveSchedule() {
-      clearAlert(scheduleAlert);
-      const payload = {
-        name: scheduleName.value,
-        src_node_id: Number(scheduleSrcSelect.value),
-        dst_node_id: Number(scheduleDstSelect.value),
-        protocol: scheduleProtocol.value,
-        duration: Number(scheduleDuration.value || 10),
-        parallel: Number(scheduleParallel.value || 1),
-        port: Number(schedulePort.value || DEFAULT_IPERF_PORT),
-        interval_seconds: Number(scheduleInterval.value || 60) * 60,
-        notes: scheduleNotes.value
-      };
+    // 加载图表数据
+    async function loadChartData(scheduleId, date = null) {{
+      const dateStr = date || new Date().toISOString().split('T')[0];
+      const res = await apiFetch(`/schedules/${{scheduleId}}/results?date=${{dateStr}}`);
+      const data = await res.json();
+      
+      renderChart(scheduleId, data.results, dateStr);
+    }}
 
-      const res = await apiFetch('/schedules', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+    // 渲染Chart.js图表
+    function renderChart(scheduleId, results, date) {{
+      const canvas = document.getElementById(`chart-${{scheduleId}}`);
+      if (!canvas) return;
+      
+      // 销毁旧图表
+      if (charts[scheduleId]) {{
+        charts[scheduleId].destroy();
+      }}
+      
+      // 准备数据
+      const labels = results.map(r => {{
+        const time = new Date(r.executed_at);
+        return time.toLocaleTimeString('zh-CN', {{ hour: '2-digit', minute: '2-digit' }});
+      }});
+      
+      const uploadData = results.map(r => {{
+        if (!r.test_result?.summary) return 0;
+        return (r.test_result.summary.sendMbps || 0).toFixed(2);
+      }});
+      
+      const downloadData = results.map(r => {{
+        if (!r.test_result?.summary) return 0;
+        return (r.test_result.summary.receiveMbps || 0).toFixed(2);
+      }});
+      
+      // 创建图表
+      const ctx = canvas.getContext('2d');
+      charts[scheduleId] = new Chart(ctx, {{
+        type: 'bar',
+        data: {{
+          labels: labels,
+          datasets: [
+            {{
+              label: '上传 (Mbps)',
+              data: uploadData,
+              backgroundColor: 'rgba(59, 130, 246, 0.6)',
+              borderColor: 'rgba(59, 130, 246, 1)',
+              borderWidth: 1,
+            }},
+            {{
+              label: '下载 (Mbps)',
+              data: downloadData,
+              backgroundColor: 'rgba(16, 185, 129, 0.6)',
+              borderColor: 'rgba(16, 185, 129, 1)',
+              borderWidth: 1,
+            }}
+          ]
+        }},
+        options: {{
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: {{
+            legend: {{
+              labels: {{ color: '#cbd5e1' }}
+            }},
+            tooltip: {{
+              callbacks: {{
+                afterLabel: function(context) {{
+                  const result = results[context.dataIndex];
+                  if (!result.test_result?.summary) return '';
+                  const s = result.test_result.summary;
+                  return [
+                    `延迟: ${{s.latencyMs?.toFixed(2) || 'N/A'}} ms`,
+                    `抖动: ${{s.jitterMs?.toFixed(2) || 'N/A'}} ms`,
+                    `丢包: ${{s.lostPercent?.toFixed(2) || 'N/A'}} %`
+                  ];
+                }}
+              }}
+            }}
+          }},
+          scales: {{
+            x: {{ ticks: {{ color: '#94a3b8' }} }},
+            y: {{ 
+              ticks: {{ color: '#94a3b8' }},
+              beginAtZero: true,
+              title: {{ display: true, text: 'Mbps', color: '#cbd5e1' }}
+            }}
+          }}
+        }}
+      }});
+      
+      // 更新日期显示
+      document.getElementById(`date-${{scheduleId}}`).textContent = date;
+    }}
 
-      if (!res.ok) {
-        const msg = await res.text();
-        setAlert(scheduleAlert, msg || '保存计划失败。');
-        return;
-      }
+    // 切换日期
+    function changeDate(scheduleId, offset) {{
+      const dateEl = document.getElementById(`date-${{scheduleId}}`);
+      const currentDate = new Date(dateEl.textContent === '今天' ? new Date() : dateEl.textContent);
+      currentDate.setDate(currentDate.getDate() + offset);
+      const newDate = currentDate.toISOString().split('T')[0];
+      loadChartData(scheduleId, newDate);
+    }}
 
-      scheduleName.value = '';
-      scheduleNotes.value = '';
-      await refreshSchedules();
-    }
+    // Modal操作
+    function openModal(scheduleId = null) {{
+      editingScheduleId = scheduleId;
+      const modal = document.getElementById('schedule-modal');
+      const title = document.getElementById('modal-title');
+      
+      if (scheduleId) {{
+        const schedule = schedules.find(s => s.id === scheduleId);
+        title.textContent = '编辑定时任务';
+        document.getElementById('schedule-name').value = schedule.name;
+        document.getElementById('schedule-src').value = schedule.src_node_id;
+        document.getElementById('schedule-dst').value = schedule.dst_node_id;
+        document.getElementById('schedule-protocol').value = schedule.protocol;
+        document.getElementById('schedule-duration').value = schedule.duration;
+        document.getElementById('schedule-parallel').value = schedule.parallel;
+        document.getElementById('schedule-interval').value = Math.floor(schedule.interval_seconds / 60);
+        document.getElementById('schedule-notes').value = schedule.notes || '';
+      }} else {{
+        title.textContent = '新建定时任务';
+        document.getElementById('schedule-name').value = '';
+        document.getElementById('schedule-duration').value = 10;
+        document.getElementById('schedule-parallel').value = 1;
+        document.getElementById('schedule-interval').value = 30;
+        document.getElementById('schedule-notes').value = '';
+      }}
+      
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }}
 
-    async function deleteSchedule(scheduleId) {
-      const res = await apiFetch(`/schedules/${scheduleId}`, { method: 'DELETE' });
-      if (!res.ok) {
-        setAlert(scheduleAlert, '删除计划失败。');
-        return;
-      }
-      await refreshSchedules();
-    }
+    function closeModal() {{
+      document.getElementById('schedule-modal').classList.add('hidden');
+      editingScheduleId = null;
+    }}
 
-    logoutBtn.addEventListener('click', logout);
-    saveScheduleBtn.addEventListener('click', saveSchedule);
-    refreshSchedulesBtn.addEventListener('click', refreshSchedules);
-    loginForm?.addEventListener('submit', (e) => {
-      e.preventDefault();
-      login();
-    });
+    // 保存定时任务
+    async function saveSchedule() {{
+      const data = {{
+        name: document.getElementById('schedule-name').value,
+        src_node_id: parseInt(document.getElementById('schedule-src').value),
+        dst_node_id: parseInt(document.getElementById('schedule-dst').value),
+        protocol: document.getElementById('schedule-protocol').value,
+        duration: parseInt(document.getElementById('schedule-duration').value),
+        parallel: parseInt(document.getElementById('schedule-parallel').value),
+        port: 62001,
+        interval_seconds: parseInt(document.getElementById('schedule-interval').value) * 60,
+        enabled: true,
+        notes: document.getElementById('schedule-notes').value || null,
+      }};
+      
+      try {{
+        if (editingScheduleId) {{
+          await apiFetch(`/schedules/${{editingScheduleId}}`, {{
+            method: 'PUT',
+            headers: {{ 'Content-Type': 'application/json' }},
+            body: JSON.stringify(data),
+          }});
+        }} else {{
+          await apiFetch('/schedules', {{
+            method: 'POST',
+            headers: {{ 'Content-Type': 'application/json' }},
+            body: JSON.stringify(data),
+          }});
+        }}
+        
+        closeModal();
+        await loadSchedules();
+      }} catch (err) {{
+        alert('保存失败: ' + err.message);
+      }}
+    }}
 
-    checkAuth();
-    refreshNodes();
-    refreshSchedules();
+    // 切换启用/禁用
+    async function toggleSchedule(scheduleId) {{
+      await apiFetch(`/schedules/${{scheduleId}}/toggle`, {{ method: 'POST' }});
+      await loadSchedules();
+    }}
+
+    // 编辑
+    function editSchedule(scheduleId) {{
+      openModal(scheduleId);
+    }}
+
+    // 删除
+    async function deleteSchedule(scheduleId) {{
+      if (!confirm('确定要删除这个定时任务吗?')) return;
+      await apiFetch(`/schedules/${{scheduleId}}`, {{ method: 'DELETE' }});
+      await loadSchedules();
+    }}
+
+    // 事件绑定
+    document.getElementById('create-schedule-btn').addEventListener('click', () => openModal());
+    document.getElementById('close-modal').addEventListener('click', closeModal);
+    document.getElementById('cancel-modal').addEventListener('click', closeModal);
+    document.getElementById('save-schedule').addEventListener('click', saveSchedule);
+    document.getElementById('refresh-btn').addEventListener('click', loadSchedules);
+
+    // 初始化
+    (async () => {{
+      await loadNodes();
+      await loadSchedules();
+    }})();
   </script>
-
 </body>
 </html>
-
+'''
     """
 
 
@@ -3503,11 +3656,13 @@ def dashboard() -> HTMLResponse:
     return HTMLResponse(content=_login_html())
 
 
-@app.get("/web/schedules", response_class=HTMLResponse)
-def schedules_page() -> HTMLResponse:
-    """单独的定时测试管理页面。"""
-
-    return HTMLResponse(content=_schedule_html())
+@app.get("/web/schedules")
+async def schedules_page(request: Request):
+    """定时任务管理页面"""
+    if not auth_manager().check_session(request):
+        return HTMLResponse(content="<script>window.location.href='/web';</script>")
+    
+    return HTMLResponse(content=_schedules_html())
 
 
 @app.get("/auth/status")
@@ -3979,46 +4134,323 @@ def delete_test(test_id: int, db: Session = Depends(get_db)):
     return {"status": "deleted"}
 
 
-def _get_schedule_or_404(schedule_id: int, db: Session) -> TestSchedule:
-    schedule = db.get(TestSchedule, schedule_id)
-    if not schedule:
-        raise HTTPException(status_code=404, detail="schedule not found")
-    return schedule
+def _add_schedule_to_scheduler(schedule: TestSchedule):
+    """添加任务到调度器"""
+    job_id = f"schedule_{schedule.id}"
+    
+    # 移除旧任务(如果存在)
+    if scheduler.get_job(job_id):
+        scheduler.remove_job(job_id)
+    
+    # 添加新任务
+    scheduler.add_job(
+        func=_execute_schedule_task,
+        trigger=IntervalTrigger(seconds=schedule.interval_seconds),
+        id=job_id,
+        args=[schedule.id],
+        replace_existing=True,
+    )
+    logger.info(f"Added schedule {schedule.id} to scheduler with interval {schedule.interval_seconds}s")
+
+
+def _remove_schedule_from_scheduler(schedule_id: int):
+    """从调度器移除任务"""
+    job_id = f"schedule_{schedule_id}"
+    if scheduler.get_job(job_id):
+        scheduler.remove_job(job_id)
+        logger.info(f"Removed schedule {schedule_id} from scheduler")
+
+
+async def _execute_schedule_task(schedule_id: int):
+    """执行定时任务"""
+    
+    db = SessionLocal()
+    try:
+        schedule = db.get(TestSchedule, schedule_id)
+        if not schedule or not schedule.enabled:
+            return
+        
+        logger.info(f"Executing schedule {schedule_id}: {schedule.name}")
+        
+        # 更新执行时间
+        schedule.last_run_at = datetime.now(timezone.utc)
+        from datetime import timedelta
+        schedule.next_run_at = schedule.last_run_at + timedelta(seconds=schedule.interval_seconds)
+        
+        # 执行测试
+        try:
+            src_node = db.get(Node, schedule.src_node_id)
+            dst_node = db.get(Node, schedule.dst_node_id)
+            
+            if not src_node or not dst_node:
+                raise Exception("Source or destination node not found")
+            
+            # 构造测试参数
+            test_params = {
+                "target": dst_node.ip,
+                "port": schedule.port or dst_node.iperf_port,
+                "duration": schedule.duration,
+                "protocol": schedule.protocol,
+                "parallel": schedule.parallel,
+            }
+            
+            # 调用agent执行测试
+            # 注意: 这里 _call_agent_test 是 async 的
+            raw_data = await _call_agent_test(src_node, test_params, schedule.duration)
+            summary = _summarize_metrics(raw_data)
+            
+            # 保存测试结果
+            test_result = TestResult(
+                src_node_id=schedule.src_node_id,
+                dst_node_id=schedule.dst_node_id,
+                protocol=schedule.protocol,
+                params=test_params,
+                raw_result=raw_data,
+                summary=summary,
+                created_at=datetime.now(timezone.utc),
+            )
+            db.add(test_result)
+            db.flush()
+            
+            # 保存schedule结果
+            schedule_result = ScheduleResult(
+                schedule_id=schedule_id,
+                test_result_id=test_result.id,
+                executed_at=datetime.now(timezone.utc),
+                status="success",
+            )
+            db.add(schedule_result)
+            db.commit()
+            
+            logger.info(f"Schedule {schedule_id} executed successfully")
+            
+        except Exception as e:
+            logger.error(f"Schedule {schedule_id} execution failed: {e}")
+            
+            # 保存失败记录
+            schedule_result = ScheduleResult(
+                schedule_id=schedule_id,
+                test_result_id=None,
+                executed_at=datetime.now(timezone.utc),
+                status="failed",
+                error_message=str(e),
+            )
+            db.add(schedule_result)
+            db.commit()
+            
+    finally:
+        db.close()
+
+
+def _load_schedules_on_startup():
+    """应用启动时加载所有启用的定时任务"""
+    db = SessionLocal()
+    try:
+        schedules = db.scalars(
+            select(TestSchedule).where(TestSchedule.enabled == True)
+        ).all()
+        
+        for schedule in schedules:
+            _add_schedule_to_scheduler(schedule)
+            logger.info(f"Loaded schedule {schedule.id}: {schedule.name}")
+    finally:
+        db.close()
 
 
 @app.post("/schedules", response_model=TestScheduleRead)
 def create_schedule(schedule: TestScheduleCreate, db: Session = Depends(get_db)):
-    obj = TestSchedule(**schedule.model_dump())
-    db.add(obj)
+    """创建定时任务"""
+    # 验证节点存在
+    src_node = db.get(Node, schedule.src_node_id)
+    dst_node = db.get(Node, schedule.dst_node_id)
+    if not src_node or not dst_node:
+        raise HTTPException(status_code=404, detail="Source or destination node not found")
+    
+    # 创建schedule
+    db_schedule = TestSchedule(
+        name=schedule.name,
+        src_node_id=schedule.src_node_id,
+        dst_node_id=schedule.dst_node_id,
+        protocol=schedule.protocol,
+        duration=schedule.duration,
+        parallel=schedule.parallel,
+        port=schedule.port,
+        interval_seconds=schedule.interval_seconds,
+        enabled=schedule.enabled,
+        notes=schedule.notes,
+    )
+    
+    # 计算下次执行时间
+    if schedule.enabled:
+        from datetime import timedelta
+        db_schedule.next_run_at = datetime.now(timezone.utc) + timedelta(seconds=schedule.interval_seconds)
+    
+    db.add(db_schedule)
     db.commit()
-    db.refresh(obj)
+    db.refresh(db_schedule)
+    
+    # 如果启用,添加到调度器
+    if schedule.enabled:
+        _add_schedule_to_scheduler(db_schedule)
+    
     _persist_state(db)
-    return obj
+    return db_schedule
 
 
 @app.get("/schedules", response_model=List[TestScheduleRead])
 def list_schedules(db: Session = Depends(get_db)):
-    return db.scalars(select(TestSchedule)).all()
+    """获取所有定时任务"""
+    schedules = db.scalars(select(TestSchedule)).all()
+    return schedules
+
+
+@app.get("/schedules/{schedule_id}", response_model=TestScheduleRead)
+def get_schedule(schedule_id: int, db: Session = Depends(get_db)):
+    """获取单个定时任务"""
+    schedule = db.get(TestSchedule, schedule_id)
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    return schedule
 
 
 @app.put("/schedules/{schedule_id}", response_model=TestScheduleRead)
-def update_schedule(schedule_id: int, payload: TestScheduleUpdate, db: Session = Depends(get_db)):
-    schedule = _get_schedule_or_404(schedule_id, db)
-    for key, value in payload.model_dump(exclude_unset=True).items():
-        setattr(schedule, key, value)
+def update_schedule(
+    schedule_id: int,
+    schedule_update: TestScheduleUpdate,
+    db: Session = Depends(get_db)
+):
+    """更新定时任务"""
+    db_schedule = db.get(TestSchedule, schedule_id)
+    if not db_schedule:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    
+    # 更新字段
+    update_data = schedule_update.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_schedule, key, value)
+    
     db.commit()
-    db.refresh(schedule)
+    db.refresh(db_schedule)
+    
+    # 重新调度
+    _remove_schedule_from_scheduler(schedule_id)
+    if db_schedule.enabled:
+        _add_schedule_to_scheduler(db_schedule)
+    
     _persist_state(db)
-    return schedule
+    return db_schedule
 
 
 @app.delete("/schedules/{schedule_id}")
 def delete_schedule(schedule_id: int, db: Session = Depends(get_db)):
-    schedule = _get_schedule_or_404(schedule_id, db)
-    db.delete(schedule)
+    """删除定时任务"""
+    db_schedule = db.get(TestSchedule, schedule_id)
+    if not db_schedule:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    
+    # 从调度器移除
+    _remove_schedule_from_scheduler(schedule_id)
+    
+    # 删除相关结果
+    # 注意: SQLAlchemy session.delete 不会级联删除 schedule_results, 需手动或配置 cascade
+    # 这里手动删除
+    db.execute(
+        text("DELETE FROM schedule_results WHERE schedule_id = :sid"),
+        {"sid": schedule_id}
+    )
+    
+    db.delete(db_schedule)
     db.commit()
     _persist_state(db)
-    return {"status": "deleted"}
+    
+    return {"status": "deleted", "schedule_id": schedule_id}
+
+
+@app.post("/schedules/{schedule_id}/toggle")
+def toggle_schedule(schedule_id: int, db: Session = Depends(get_db)):
+    """启用/禁用定时任务"""
+    db_schedule = db.get(TestSchedule, schedule_id)
+    if not db_schedule:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    
+    db_schedule.enabled = not db_schedule.enabled
+    
+    if db_schedule.enabled:
+        from datetime import timedelta
+        db_schedule.next_run_at = datetime.now(timezone.utc) + timedelta(seconds=db_schedule.interval_seconds)
+        _add_schedule_to_scheduler(db_schedule)
+    else:
+        db_schedule.next_run_at = None
+        _remove_schedule_from_scheduler(schedule_id)
+    
+    db.commit()
+    db.refresh(db_schedule)
+    _persist_state(db)
+    
+    return {"enabled": db_schedule.enabled, "schedule_id": schedule_id}
+
+
+@app.get("/schedules/{schedule_id}/results")
+def get_schedule_results(
+    schedule_id: int,
+    date: str = Query(None, description="Date in YYYY-MM-DD format"),
+    db: Session = Depends(get_db)
+):
+    """获取定时任务的测试结果"""
+    from datetime import datetime as dt, timedelta
+    
+    db_schedule = db.get(TestSchedule, schedule_id)
+    if not db_schedule:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    
+    # 解析日期
+    if date:
+        try:
+            target_date = dt.strptime(date, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format, use YYYY-MM-DD")
+    else:
+        target_date = dt.now(timezone.utc).date()
+    
+    # 查询当天的结果
+    start_time = dt.combine(target_date, dt.min.time()).replace(tzinfo=timezone.utc)
+    end_time = dt.combine(target_date, dt.max.time()).replace(tzinfo=timezone.utc)
+    
+    results = db.scalars(
+        select(ScheduleResult)
+        .where(ScheduleResult.schedule_id == schedule_id)
+        .where(ScheduleResult.executed_at >= start_time)
+        .where(ScheduleResult.executed_at <= end_time)
+        .order_by(ScheduleResult.executed_at)
+    ).all()
+    
+    # 关联test_result数据
+    output = []
+    for result in results:
+        test_data = None
+        if result.test_result_id:
+            test = db.get(TestResult, result.test_result_id)
+            if test:
+                test_data = {
+                    "id": test.id,
+                    "protocol": test.protocol,
+                    "summary": test.summary,
+                    "created_at": test.created_at.isoformat() if test.created_at else None,
+                }
+        
+        output.append({
+            "id": result.id,
+            "executed_at": result.executed_at.isoformat(),
+            "status": result.status,
+            "error_message": result.error_message,
+            "test_result": test_data,
+        })
+    
+    return {
+        "schedule_id": schedule_id,
+        "date": target_date.isoformat(),
+        "results": output,
+    }
 
 
 def _normalized_agent_payload(data: dict) -> dict:

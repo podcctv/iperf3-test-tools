@@ -192,3 +192,19 @@ class PasswordChangeRequest(BaseModel):
     current_password: str | None = None
     new_password: str
     force: bool = False
+
+
+class ScheduleResultRead(BaseModel):
+    id: int
+    schedule_id: int
+    test_result_id: int | None
+    executed_at: datetime
+    status: str
+    error_message: str | None = None
+    
+    class Config:
+        from_attributes = True
+
+
+class ScheduleResultWithTest(ScheduleResultRead):
+    test_result: TestRead | None = None

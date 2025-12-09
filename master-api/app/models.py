@@ -56,3 +56,17 @@ class TestSchedule(Base):
 
     src_node = relationship("Node", foreign_keys=[src_node_id])
     dst_node = relationship("Node", foreign_keys=[dst_node_id])
+
+
+class ScheduleResult(Base):
+    __tablename__ = "schedule_results"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    schedule_id = Column(Integer, ForeignKey("test_schedules.id"))
+    test_result_id = Column(Integer, ForeignKey("test_results.id"), nullable=True)
+    executed_at = Column(DateTime(timezone=True), server_default=func.now())
+    status = Column(String, default="success")
+    error_message = Column(String, nullable=True)
+    
+    schedule = relationship("TestSchedule", foreign_keys=[schedule_id])
+    test_result = relationship("TestResult", foreign_keys=[test_result_id])
