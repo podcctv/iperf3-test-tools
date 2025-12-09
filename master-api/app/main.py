@@ -1477,12 +1477,32 @@ def _login_html() -> str:
         authHint = document.getElementById('auth-hint');
         originalLoginLabel = loginButton?.textContent || 'Login';
 
-        // Close whitelist display listener (safe binding)
-        const closeWhitelist = document.getElementById('close-whitelist-display');
-        if (closeWhitelist) {
             closeWhitelist.addEventListener('click', () => {
                 document.getElementById('whitelist-display').classList.add('hidden');
             });
+        }
+
+        // Bind Settings Modal Tabs manually to ensure they work
+        const whitelistTabBtn = document.getElementById('whitelist-tab');
+        if (whitelistTabBtn) {
+             whitelistTabBtn.addEventListener('click', (e) => {
+                 e.preventDefault();
+                 setActiveSettingsTab('whitelist');
+             });
+        }
+        const configTabBtn = document.getElementById('config-tab');
+        if (configTabBtn) {
+             configTabBtn.addEventListener('click', (e) => {
+                 e.preventDefault();
+                 setActiveSettingsTab('config');
+             });
+        }
+        const passwordTabBtn = document.getElementById('password-tab');
+        if (passwordTabBtn) {
+             passwordTabBtn.addEventListener('click', (e) => {
+                 e.preventDefault();
+                 setActiveSettingsTab('password');
+             });
         }
         
         // Config elements
@@ -3860,11 +3880,16 @@ def _schedules_html() -> str:
       
       const uploadData = results.map(r => {{
         if (!r.test_result?.summary?.bits_per_second) return 0;
+        // Check if reverse mode (Download)
+        const isReverse = r.test_result.params?.reverse || r.test_result.raw_result?.start?.test_start?.reverse;
+        if (isReverse) return 0;
         return (r.test_result.summary.bits_per_second / 1000000).toFixed(2);
       }});
       
       const downloadData = results.map(r => {{
         if (!r.test_result?.summary?.bits_per_second) return 0;
+        const isReverse = r.test_result.params?.reverse || r.test_result.raw_result?.start?.test_start?.reverse;
+        if (!isReverse) return 0;
         return (r.test_result.summary.bits_per_second / 1000000).toFixed(2);
       }});
       
@@ -4864,21 +4889,34 @@ async def get_daily_traffic_stats(db: Session = Depends(get_db)):
         # Calculate total bytes
         total_bytes = 0
         for result in results:
-            if result.summary and isinstance(result.summary, dict):
-                bits_per_second = result.summary.get("bits_per_second")
-                if bits_per_second and result.raw_result:
-                    # Get duration from test result
-                    duration = 10  # default
-                    if isinstance(result.raw_result, dict):
-                        iperf_result = result.raw_result.get("iperf_result", {})
-                        end_data = iperf_result.get("end", {})
-                        sum_data = end_data.get("sum_received") or end_data.get("sum", {})
-                        if sum_data and "seconds" in sum_data:
-                            duration = sum_data["seconds"]
+            if result.raw_result and isinstance(result.raw_result, dict):
+                try:
+                    # Extract iperf result
+                    iperf_data = result.raw_result.get("iperf_result", {})
+                    end_data = iperf_data.get("end", {})
                     
-                    # Calculate bytes: (bits_per_second * duration) / 8
-                    bytes_transferred = (bits_per_second * duration) / 8
-                    total_bytes += bytes_transferred
+                    # Sum sent and received bytes
+                    # sum_sent: bytes sent by sender
+                    # sum_received: bytes received by receiver
+                    # Regardless of direction (normal/reverse), these represent the payload
+                    bytes_sent = 0
+                    bytes_recvd = 0
+                    
+                    if "sum_sent" in end_data:
+                        bytes_sent = end_data["sum_sent"].get("bytes", 0)
+                    elif "sum" in end_data: # Fallback for some versions
+                         bytes_sent = end_data["sum"].get("bytes", 0)
+                         
+                    if "sum_received" in end_data:
+                        bytes_recvd = end_data["sum_received"].get("bytes", 0)
+                    elif "sum" in end_data:
+                         bytes_recvd = end_data["sum"].get("bytes", 0)
+                    
+                    # Add to total (Consumption includes both directions if applicable, or just the main payload)
+                    # For unidirectional, one is usually 0 or small control traffic
+                    total_bytes += (bytes_sent + bytes_recvd)
+                except Exception:
+                    continue
         
         node_stats.append({
             "node_id": node.id,
