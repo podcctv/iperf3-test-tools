@@ -3661,38 +3661,39 @@ def _schedules_html() -> str:
     }}
 
     // 立即执行
-    async function runSchedule(scheduleId) {
+    // 立即执行
+    async function runSchedule(scheduleId) {{
       if (!confirm('确定要立即执行此任务吗?')) return;
-      try {
-        await apiFetch(`/schedules/${scheduleId}/execute`, { method: 'POST' });
+      try {{
+        await apiFetch(`/schedules/${{scheduleId}}/execute`, {{ method: 'POST' }});
         alert('任务已触发, 请稍后刷新查看结果');
-      } catch (err) {
+      }} catch (err) {{
         alert('执行失败: ' + err.message);
-      }
-    }
+      }}
+    }}
 
-    function updateCountdowns() {
+    function updateCountdowns() {{
       const now = new Date();
-      document.querySelectorAll('[data-countdown]').forEach(el => {
+      document.querySelectorAll('[data-countdown]').forEach(el => {{
         const nextRun = el.dataset.countdown;
-        if (!nextRun) {
+        if (!nextRun) {{
           el.textContent = '';
           return;
-        }
+        }}
         const target = new Date(nextRun + (nextRun.endsWith('Z') ? '' : 'Z'));
         const diff = target - now;
         
-        if (diff <= 0) {
+        if (diff <= 0) {{
           el.textContent = 'Running...';
           return;
-        }
+        }}
         
         const h = Math.floor(diff / 3600000);
         const m = Math.floor((diff % 3600000) / 60000);
         const s = Math.floor((diff % 60000) / 1000);
-        el.textContent = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-      });
-    }
+        el.textContent = `${{h.toString().padStart(2, '0')}}:${{m.toString().padStart(2, '0')}}:${{s.toString().padStart(2, '0')}}`;
+      }});
+    }}
 
     // 事件绑定
     document.getElementById('create-schedule-btn').addEventListener('click', () => openModal());
