@@ -6,8 +6,11 @@ import hashlib
 import hmac
 import logging
 import os
+import json
+import base64
+import time
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any
 
 from fastapi import Request, Response
 
@@ -32,10 +35,68 @@ class DashboardAuthManager:
         if password is None:
             return ""
         return password.strip()
+    
+    def _base64url_encode(self, data: bytes) -> str:
+        return base64.urlsafe_b64encode(data).rstrip(b'=').decode('utf-8')
 
-    def _dashboard_token(self, password: str) -> str:
-        secret = settings.dashboard_secret.encode()
-        return hmac.new(secret, password.encode(), hashlib.sha256).hexdigest()
+    def _base64url_decode(self, data: str) -> bytes:
+        padding = 4 - (len(data) % 4)
+        if padding != 4:
+            data += '=' * padding
+        return base64.urlsafe_b64decode(data)
+
+    def create_access_token(self, data: Dict[str, Any], expires_delta: int = 86400) -> str:
+        """Create a JWT token using stdlib only."""
+        header = {"alg": "HS256", "typ": "JWT"}
+        payload = data.copy()
+        payload["exp"] = int(time.time()) + expires_delta
+        
+        encoded_header = self._base64url_encode(json.dumps(header).encode())
+        encoded_payload = self._base64url_encode(json.dumps(payload).encode())
+        
+        signing_input = f"{encoded_header}.{encoded_payload}"
+        signature = hmac.new(
+            settings.dashboard_secret.encode(),
+            signing_input.encode(),
+            hashlib.sha256
+        ).digest()
+        
+        encoded_signature = self._base64url_encode(signature)
+        return f"{signing_input}.{encoded_signature}"
+
+    def verify_token(self, token: str) -> Optional[Dict[str, Any]]:
+        """Verify JWT token and return payload if valid."""
+        try:
+            if not token:
+                return None
+                
+            parts = token.split('.')
+            if len(parts) != 3:
+                return None
+                
+            header_b64, payload_b64, sig_b64 = parts
+            signing_input = f"{header_b64}.{payload_b64}"
+            
+            # Verify signature
+            expected_sig = hmac.new(
+                settings.dashboard_secret.encode(),
+                signing_input.encode(),
+                hashlib.sha256
+            ).digest()
+            
+            if not hmac.compare_digest(self._base64url_encode(expected_sig), sig_b64):
+                return None
+                
+            # Decode and check expiry
+            payload_json = self._base64url_decode(payload_b64).decode()
+            payload = json.loads(payload_json)
+            
+            if "exp" in payload and payload["exp"] < time.time():
+                return None
+                
+            return payload
+        except Exception:
+            return None
 
     def _load_password(self) -> str | None:
         env_password = os.getenv("DASHBOARD_PASSWORD")
@@ -63,10 +124,6 @@ class DashboardAuthManager:
 
     def _ensure_password_file(self) -> None:
         if self._password:
-            # If we defined one via env or file, ensure it is saved?
-            # actually if it came from env, we might want to respect it but not necessarily overwrite file 
-            # unless we want persistence. existing logic did this.
-            # But let's check if file exists.
              if not settings.dashboard_password_file.exists():
                 self._save_password(self._password)
              return
@@ -108,14 +165,16 @@ class DashboardAuthManager:
         return normalized_new
 
     def is_authenticated(self, request: Request) -> bool:
-        stored = request.cookies.get(settings.dashboard_cookie_name)
-        return stored == self._dashboard_token(self.current_password())
+        token = request.cookies.get(settings.dashboard_cookie_name)
+        payload = self.verify_token(token)
+        return payload is not None and payload.get("sub") == "dashboard"
 
     def set_auth_cookie(self, response: Response, password: Optional[str] = None) -> None:
-        normalized = self._normalize(password or self.current_password())
+        # We don't need password here anymore, just issue a token
+        token = self.create_access_token({"sub": "dashboard"})
         response.set_cookie(
             settings.dashboard_cookie_name,
-            self._dashboard_token(normalized),
+            token,
             httponly=True,
             samesite="lax",
             max_age=60 * 60 * 24,

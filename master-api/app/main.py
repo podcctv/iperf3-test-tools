@@ -1713,72 +1713,98 @@ def _login_html() -> str:
     }
 
     async function login() {
+      console.log('Starting login process...');
       clearAlert(loginAlert);
-      // Remove any existing animation classes
-      document.querySelector('.login-card').classList.remove('animate-shake', 'animate-success');
+      
+      // Reset animations
+      const card = document.querySelector('.login-card');
+      card.classList.remove('animate-shake', 'animate-success');
       
       const password = (passwordInput?.value || '').trim();
       if (!password) {
+        console.warn('Login aborted: empty password');
         setAlert(loginAlert, '请输入密码 (Password Required)');
         passwordInput?.focus();
-        document.querySelector('.login-card').classList.add('animate-shake');
-        setTimeout(() => document.querySelector('.login-card').classList.remove('animate-shake'), 400);
+        card.classList.add('animate-shake');
+        setTimeout(() => card.classList.remove('animate-shake'), 400);
         return;
       }
 
       setLoginButtonLoading(true);
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout
+
       try {
+        console.log('Sending login request to /auth/login...');
         const res = await apiFetch('/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password })
+          body: JSON.stringify({ password }),
+          signal: controller.signal
         });
+        clearTimeout(timeoutId);
+
+        console.log(`Login response status: ${res.status}`);
 
         if (res.ok) {
+           console.log('Login success. Verifying session...');
            loginAlert.className = 'alert alert-success';
            setAlert(loginAlert, '登录成功 (Success)');
-           document.querySelector('.login-card').classList.add('animate-success');
+           card.classList.add('animate-success');
            
-           // Short delay to show success message before refresh/redirect
+           // Allow a moment for the cookie to be processed/saved by the browser
            setTimeout(async () => {
              const authed = await checkAuth(true);
+             console.log(`Session check result: ${authed}`);
              if (!authed) {
+                console.error('Login successful but session check failed.');
                 loginAlert.className = 'alert alert-error';
-                setAlert(loginAlert, '会话建立失败 (Session Failed)');
-                document.querySelector('.login-card').classList.remove('animate-success');
-                document.querySelector('.login-card').classList.add('animate-shake');
+                setAlert(loginAlert, '会话建立失败 (Session Failed) - Cookie Blocked?');
+                card.classList.remove('animate-success');
+                card.classList.add('animate-shake');
              }
-           }, 600);
+           }, 800);
            return;
         }
 
-        // Handle specific error codes
+        // Handle HTTP errors
+        card.classList.add('animate-shake');
+        setTimeout(() => card.classList.remove('animate-shake'), 400);
+        
         loginAlert.className = 'alert alert-error';
-        document.querySelector('.login-card').classList.add('animate-shake');
-        setTimeout(() => document.querySelector('.login-card').classList.remove('animate-shake'), 400);
-
         let message = '登录失败 (Login Failed)';
         
         if (res.status === 401) {
+            console.warn('Login failed: 401 Unauthorized');
             message = '登录失败：密码错误 (Invalid Password)';
+        } else if (res.status === 408 || res.status === 504) {
+             console.error('Login failed: Timeout');
+             message = '登录超时 (Request Timeout)';
         } else {
             try {
                 const data = await res.json();
+                console.warn('Login failed with details:', data);
                 if (data?.detail === 'empty_password') message = '密码不能为空';
                 else if (data?.detail === 'invalid_password') message = '登录失败：密码错误 (Invalid Password)';
                 else if (data?.detail) message = `登录失败：${data.detail}`;
-            } catch (_) {
+            } catch (e) {
+                console.error('Failed to parse error response:', e);
                 message = `登录失败 (HTTP ${res.status})`;
             }
         }
         setAlert(loginAlert, message);
 
       } catch (err) {
-        console.error('Login network error:', err);
+        clearTimeout(timeoutId);
+        console.error('Login network exception:', err);
+        
+        card.classList.add('animate-shake');
+        setTimeout(() => card.classList.remove('animate-shake'), 400);
+        
         loginAlert.className = 'alert alert-error';
-        setAlert(loginAlert, '登陆失败：后端无响应 (Backend Unresponsive)');
-        document.querySelector('.login-card').classList.add('animate-shake');
-        setTimeout(() => document.querySelector('.login-card').classList.remove('animate-shake'), 400);
+        const errorMsg = err.name === 'AbortError' ? '请求超时 (Timeout)' : '无法连接服务器 (Network Error)';
+        setAlert(loginAlert, errorMsg);
       } finally {
         setLoginButtonLoading(false);
       }
