@@ -1497,14 +1497,7 @@ def update_whitelist() -> Any:
         return jsonify({"status": "error", "error": str(e)}), 500
 
 
-@app.route("/whitelist", methods=["GET"])
-def get_whitelist() -> Any:
-    """Get current whitelist (for debugging)"""
-    return jsonify({
-        "status": "ok",
-        "allowed_ips": whitelist.get_all(),
-        "count": len(whitelist.get_all())
-    })
+
 
 
 @app.route("/whitelist/stats", methods=["GET"])
