@@ -4343,9 +4343,10 @@ async def _execute_schedule_task(schedule_id: int):
             current_port = dst_status.detected_iperf_port or dst_status.iperf_port
             
             # 构造测试参数
+            # Always use detected port to handle dynamic port changes (e.g., after agent reinstall)
             test_params = {
                 "target": dst_node.ip,
-                "port": schedule.port or current_port,  # Use detected port instead of stale DB value
+                "port": current_port,  # Always use detected port, ignore schedule.port
                 "duration": schedule.duration,
                 "protocol": schedule.protocol,
                 "parallel": schedule.parallel,
