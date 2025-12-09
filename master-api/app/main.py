@@ -633,21 +633,10 @@ def _login_html() -> str:
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>iperf3 主控面板</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/themes/dark.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@radix-ui/themes@3.1.1/dist/css/themes.css" />
+  <script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/shoelace.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            slate: {
-              950: '#020617',
-            },
-          },
-        },
-      },
-    };
-  </script>
   <style>
     body {
       font-family: 'Inter', system-ui, -apple-system, sans-serif;
@@ -659,126 +648,180 @@ def _login_html() -> str:
       margin: 0;
       padding: 0;
     }
-    .glass-card {
-      border: 1px solid rgba(148, 163, 184, 0.2);
-      background: linear-gradient(160deg, rgba(15, 23, 42, 0.92), rgba(22, 33, 61, 0.82));
-      box-shadow: 0 26px 80px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.04);
-      backdrop-filter: blur(14px);
-    }
     .panel-card {
       border: 1px solid rgba(148, 163, 184, 0.2);
       background: linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(12, 20, 38, 0.82));
       box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.04);
       backdrop-filter: blur(12px);
     }
-    .gradient-bar { background: linear-gradient(120deg, #22c55e 0%, #0ea5e9 35%, #a855f7 100%); height: 4px; border-radius: 999px; }
-    .neon-ring {
+    .page-frame {
+      position: relative;
+      min-height: 100vh;
+      padding: 3rem 1.5rem;
+    }
+    .page-frame::before {
+      content: '';
       position: absolute;
-      inset: -4px;
-      border-radius: 24px;
-      padding: 2px;
-      background: linear-gradient(120deg, rgba(14, 165, 233, 0.6), rgba(16, 185, 129, 0.6), rgba(168, 85, 247, 0.6));
-      filter: blur(18px);
-      opacity: 0.45;
+      inset: 1.5rem;
+      border-radius: 28px;
+      background: linear-gradient(135deg, rgba(8, 47, 73, 0.45), rgba(76, 29, 149, 0.35));
+      filter: blur(35px);
       z-index: 0;
     }
-    .login-glow {
-      background: radial-gradient(circle at 20% 30%, rgba(14, 165, 233, 0.15), transparent 35%),
-        radial-gradient(circle at 80% 20%, rgba(168, 85, 247, 0.18), transparent 40%),
-        linear-gradient(160deg, rgba(12, 16, 32, 0.95), rgba(7, 12, 24, 0.92));
-      box-shadow: 0 25px 90px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.04);
-      border: 1px solid rgba(148, 163, 184, 0.24);
+    .page-content {
+      position: relative;
+      z-index: 1;
+      max-width: 1100px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 2rem;
     }
-    .login-grid {
+    .page-header {
+      text-align: center;
       display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
-      gap: 1.2rem;
-      position: absolute;
-      inset: 0;
-      opacity: 0.08;
-      pointer-events: none;
+      gap: 0.75rem;
     }
-    .grid-cell {
-      border: 1px solid rgba(148, 163, 184, 0.05);
-      border-radius: 18px;
-      background: linear-gradient(145deg, rgba(255, 255, 255, 0.03), rgba(14, 165, 233, 0.02));
+    .eyebrow {
+      letter-spacing: 0.32em;
+      text-transform: uppercase;
+      color: #7dd3fc;
+      font-size: 0.75rem;
+      opacity: 0.8;
+    }
+    .page-title {
+      font-size: clamp(2rem, 3vw, 2.5rem);
+      font-weight: 700;
+      margin: 0;
+      color: #f8fafc;
+    }
+    .page-subtitle {
+      margin: 0 auto;
+      max-width: 720px;
+      color: #94a3b8;
+      line-height: 1.6;
+      font-size: 0.95rem;
+    }
+    .card-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    sl-card.login-card::part(base) {
+      border-radius: 22px;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      background: linear-gradient(160deg, rgba(15, 23, 42, 0.94), rgba(22, 33, 61, 0.86));
+      box-shadow: 0 26px 80px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      backdrop-filter: blur(14px);
+    }
+    .login-header {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    @media (min-width: 720px) {
+      .login-header { flex-direction: row; align-items: center; justify-content: space-between; }
+    }
+    .status-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      border-radius: 999px;
+      padding: 0.4rem 0.85rem;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      font-size: 0.85rem;
+      color: #e2e8f0;
+    }
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      display: inline-block;
+      background: #fbbf24;
+      box-shadow: 0 0 0 4px rgba(251, 191, 36, 0.15);
+    }
+    .status-chip.info { border-color: rgba(56, 189, 248, 0.45); background: rgba(56, 189, 248, 0.12); color: #e0f2fe; }
+    .status-dot.info { background: #38bdf8; box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.18); }
+    .status-chip.success { border-color: rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.12); color: #d1fae5; }
+    .status-dot.success { background: #34d399; box-shadow: 0 0 0 4px rgba(52, 211, 153, 0.18); }
+    .status-chip.danger { border-color: rgba(248, 113, 113, 0.4); background: rgba(248, 113, 113, 0.12); color: #fecdd3; }
+    .status-dot.danger { background: #fb7185; box-shadow: 0 0 0 4px rgba(251, 113, 133, 0.18); }
+    .status-chip.warning { border-color: rgba(251, 191, 36, 0.45); background: rgba(251, 191, 36, 0.14); color: #fef9c3; }
+    .status-dot.warning { background: #fbbf24; box-shadow: 0 0 0 4px rgba(251, 191, 36, 0.18); }
+    .login-form {
+      display: grid;
+      gap: 1rem;
+    }
+    .form-hint {
+      color: #94a3b8;
+      font-size: 0.9rem;
+      margin: 0;
+    }
+    .default-password {
+      color: #cbd5e1;
+      font-size: 0.9rem;
+      margin: 0;
+      background: rgba(14, 165, 233, 0.08);
+      border: 1px dashed rgba(56, 189, 248, 0.35);
+      border-radius: 12px;
+      padding: 0.75rem 0.9rem;
+    }
+    .default-password code {
+      color: #22d3ee;
+      font-weight: 600;
+    }
+    .alert {
+      border-radius: 14px;
+      border: 1px solid rgba(248, 113, 113, 0.4);
+      background: rgba(248, 113, 113, 0.12);
+      color: #fecdd3;
+      padding: 0.85rem 1rem;
+      font-size: 0.9rem;
     }
     .hidden { display: none; }
+    .app-card { margin-top: 1rem; }
   </style>
 </head>
 <body>
   <div class="radix-themes min-h-screen" data-theme="dark">
-    <div class="relative flex min-h-screen items-center justify-center px-6 py-12 lg:px-10">
-      <div class="absolute inset-0 -z-10 overflow-hidden rounded-[28px] bg-gradient-to-br from-slate-900/90 via-slate-950 to-slate-950 shadow-[0_30px_120px_rgba(0,0,0,0.55)]"></div>
-      <div class="relative z-10 w-full max-w-4xl space-y-8">
-        <div class="text-center space-y-3">
-          <p class="text-sm uppercase tracking-[0.35em] text-sky-300/80">iperf3 控制中心</p>
-          <h1 class="text-3xl font-bold text-white sm:text-4xl">主控面板</h1>
-          <p class="mx-auto max-w-2xl text-sm leading-relaxed text-slate-400">集中管理节点、发起测试并查看最新结果，稳定的远程运维体验从这里开始。</p>
+    <div class="page-frame">
+      <div class="page-content">
+        <div class="page-header">
+          <p class="eyebrow">iperf3 控制中心</p>
+          <h1 class="page-title">主控面板</h1>
+          <p class="page-subtitle">集中管理节点、发起测试并查看最新结果，稳定的远程运维体验从这里开始。</p>
         </div>
 
-        <div class="glass-card relative overflow-hidden rounded-3xl p-8 ring-1 ring-slate-800/60">
-          <div class="neon-ring"></div>
-          <div class="login-grid">
-            <div class="grid-cell"></div>
-            <div class="grid-cell"></div>
-            <div class="grid-cell"></div>
-            <div class="grid-cell"></div>
-            <div class="grid-cell"></div>
-            <div class="grid-cell"></div>
-            <div class="grid-cell"></div>
-            <div class="grid-cell"></div>
-            <div class="grid-cell"></div>
-            <div class="grid-cell"></div>
-            <div class="grid-cell"></div>
-            <div class="grid-cell"></div>
-            <div class="grid-cell"></div>
-            <div class="grid-cell"></div>
-            <div class="grid-cell"></div>
-          </div>
-          <div class="absolute inset-0 pointer-events-none bg-gradient-to-br from-emerald-500/5 via-sky-500/5 to-fuchsia-500/5"></div>
-          <div class="gradient-bar mb-6"></div>
-          <div id="login-card" class="space-y-6">
-            <div class="flex flex-col items-center justify-between gap-4 text-center sm:flex-row sm:text-left">
-              <div>
-                <p class="text-sm uppercase tracking-[0.3em] text-sky-300/70">Access Gateway</p>
-                <h2 class="text-3xl font-semibold text-white">解锁控制台</h2>
-                <p id="login-hint" class="text-sm text-slate-400">输入共享密码以进入运维面板。</p>
+        <div class="card-stack">
+          <sl-card class="login-card" id="login-card">
+            <div class="login-header" slot="header">
+              <div class="space-y-1">
+                <p class="eyebrow" style="letter-spacing: 0.28em; font-size: 0.8rem;">Access Gateway</p>
+                <h2 style="margin: 0; font-size: 1.6rem; color: #f8fafc;">解锁控制台</h2>
+                <p id="login-hint" class="form-hint">输入共享密码以进入运维面板。</p>
               </div>
-              <div id="login-status" class="inline-flex items-center gap-2 rounded-full bg-slate-800/70 px-3 py-2 text-xs font-medium text-slate-200 ring-1 ring-slate-700 shadow-inner shadow-black/40">
-                <span id="login-status-dot" class="h-2 w-2 rounded-full bg-amber-400 animate-pulse"></span>
+              <div id="login-status" class="status-chip">
+                <span id="login-status-dot" class="status-dot"></span>
                 <span id="login-status-label">等待解锁</span>
               </div>
             </div>
-            <div id="login-alert" class="hidden rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100"></div>
-            <form id="login-form" class="relative login-glow rounded-2xl p-6 shadow-[0_25px_100px_rgba(0,0,0,0.55)] ring-1 ring-slate-800/70 overflow-hidden">
-              <div class="absolute inset-0 pointer-events-none">
-                <div class="absolute -left-6 -top-10 h-24 w-24 rounded-full bg-sky-500/25 blur-3xl"></div>
-                <div class="absolute -right-8 bottom-0 h-28 w-28 rounded-full bg-emerald-400/20 blur-3xl"></div>
+            <div id="login-alert" class="alert hidden"></div>
+            <form id="login-form" class="login-form" autocomplete="on">
+              <div class="space-y-2">
+                <label class="form-hint" for="password-input" style="color:#cbd5e1; font-weight:600;">控制台密码</label>
+                <sl-input id="password-input" type="password" placeholder="默认密码 iperf-pass" toggle-password></sl-input>
+                <p class="default-password">默认密码 <code>iperf-pass</code>（可通过环境变量 <code>DASHBOARD_PASSWORD</code> 覆盖）。</p>
               </div>
-              <div class="relative grid gap-4 md:grid-cols-[2fr_1fr] md:items-end">
-                <div class="space-y-3">
-                  <div class="flex items-center justify-between text-xs text-slate-400">
-                    <label class="text-sm font-medium text-slate-200" for="password">控制台密码</label>
-                    <span class="rounded-full bg-slate-800/70 px-2 py-1 text-[11px] font-semibold text-slate-300 ring-1 ring-slate-700">快速解锁</span>
-                  </div>
-                  <input id="password" autocomplete="current-password" type="password" placeholder="请输入控制台密码"
-                    class="w-full rounded-xl border border-slate-800 bg-slate-950/70 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 transition focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
-                  <p class="text-xs text-slate-500">支持回车快捷键，登录状态会实时提示。</p>
-                </div>
-                <div class="relative flex justify-center md:justify-end">
-                  <button id="login-btn" type="submit" class="w-full rounded-xl bg-gradient-to-r from-sky-500 via-cyan-400 to-emerald-400 px-5 py-3 text-sm font-semibold text-slate-950 shadow-lg shadow-emerald-500/20 transition hover:scale-[1.01] hover:shadow-xl">
-                    <span class="inline-flex items-center justify-center gap-2">
-                      <span class="h-2 w-2 rounded-full bg-white/80 shadow-[0_0_12px_rgba(255,255,255,0.8)]"></span>
-                      解锁
-                    </span>
-                  </button>
-                </div>
+              <div class="form-hint" style="color:#cbd5e1;">支持单一共享密码用于登录与 API 认证，可在完成解锁后随时更新。</div>
+              <div style="display:flex; justify-content:flex-end;">
+                <sl-button id="login-btn" type="submit" variant="primary" size="large" pill>立即解锁</sl-button>
               </div>
             </form>
-          </div>
+          </sl-card>
 
-          <div id="app-card" class="hidden space-y-8">
+          <div id="app-card" class="hidden space-y-8 app-card">
             <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <p class="text-sm uppercase tracking-[0.25em] text-sky-300/80">控制面板</p>
@@ -1062,12 +1105,13 @@ def _login_html() -> str:
     const appCard = document.getElementById('app-card');
     const loginAlert = document.getElementById('login-alert');
     const loginButton = document.getElementById('login-btn');
-    const passwordInput = document.getElementById('password');
+    const passwordInput = document.getElementById('password-input');
     const loginStatus = document.getElementById('login-status');
     const loginStatusDot = document.getElementById('login-status-dot');
     const loginStatusLabel = document.getElementById('login-status-label');
     const loginHint = document.getElementById('login-hint');
     const authHint = document.getElementById('auth-hint');
+    const originalLoginLabel = loginButton?.textContent || '';
     const configAlert = document.getElementById('config-alert');
     const importConfigsBtn = document.getElementById('import-configs');
     const exportConfigsBtn = document.getElementById('export-configs');
@@ -1171,34 +1215,34 @@ def _login_html() -> str:
       const presets = {
         idle: {
           text: '等待解锁',
-          dot: 'bg-amber-400 animate-pulse',
-          className: 'bg-slate-800/70 text-slate-200 ring-slate-700',
+          dot: 'warning',
+          className: 'warning',
           hint: '输入共享密码以进入运维面板。',
         },
         unlocking: {
           text: '正在解锁...',
-          dot: 'bg-sky-300 animate-pulse',
-          className: 'bg-sky-900/60 text-sky-100 ring-sky-500/60',
+          dot: 'info',
+          className: 'info',
           hint: '正在验证密码，请稍候。',
         },
         unlocked: {
           text: '已解锁',
-          dot: 'bg-emerald-400',
-          className: 'bg-emerald-900/60 text-emerald-100 ring-emerald-500/50',
+          dot: 'success',
+          className: 'success',
           hint: '已通过认证，可管理节点与测速任务。',
         },
         error: {
           text: '验证失败',
-          dot: 'bg-rose-400',
-          className: 'bg-rose-900/50 text-rose-100 ring-rose-500/50',
+          dot: 'danger',
+          className: 'danger',
           hint: '验证未通过，请重新输入。',
         },
       };
 
       const next = presets[state] || presets.idle;
-      loginStatus.className = `inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-medium ring-1 shadow-inner shadow-black/40 ${next.className}`;
+      loginStatus.className = `status-chip ${next.className}`;
       if (loginStatusDot) {
-        loginStatusDot.className = `h-2 w-2 rounded-full ${next.dot}`;
+        loginStatusDot.className = `status-dot ${next.dot}`;
       }
       if (loginStatusLabel) {
         loginStatusLabel.textContent = message || next.text;
@@ -1206,6 +1250,22 @@ def _login_html() -> str:
       if (loginHint) {
         loginHint.textContent = message || next.hint;
       }
+    }
+
+    function setLoginButtonLoading(isLoading) {
+      if (!loginButton) return;
+
+      loginButton.disabled = isLoading;
+      if ('loading' in loginButton) {
+        loginButton.loading = isLoading;
+        loginButton.textContent = isLoading ? '解锁中...' : (originalLoginLabel || '立即解锁');
+      } else {
+        loginButton.innerHTML = isLoading
+          ? '<span class="inline-flex items-center justify-center gap-2"><span class="h-2 w-2 rounded-full bg-sky-200 animate-ping"></span>解锁中...</span>'
+          : (originalLoginLabel || '<span class="inline-flex items-center justify-center gap-2"><span class="h-2 w-2 rounded-full bg-white/80 shadow-[0_0_12px_rgba(255,255,255,0.8)]"></span>解锁</span>');
+      }
+      loginButton.classList.toggle('cursor-not-allowed', isLoading);
+      loginButton.classList.toggle('opacity-80', isLoading);
     }
 
     passwordInput?.focus();
@@ -1626,12 +1686,7 @@ def _login_html() -> str:
         return;
       }
 
-      const originalContent = loginButton?.innerHTML;
-      if (loginButton) {
-        loginButton.disabled = true;
-        loginButton.innerHTML = '<span class="inline-flex items-center justify-center gap-2"><span class="h-2 w-2 rounded-full bg-sky-200 animate-ping"></span>解锁中...</span>';
-        loginButton.classList.add('cursor-not-allowed', 'opacity-80');
-      }
+      setLoginButtonLoading(true);
       try {
         const res = await apiFetch('/auth/login', {
           method: 'POST',
@@ -1671,11 +1726,7 @@ def _login_html() -> str:
         setAlert(loginAlert, '无法连接到服务，请稍后再试。');
         setLoginState('error', '无法连接到服务。');
       } finally {
-        if (loginButton) {
-          loginButton.disabled = false;
-          loginButton.innerHTML = originalContent || '<span class="inline-flex items-center justify-center gap-2"><span class="h-2 w-2 rounded-full bg-white/80 shadow-[0_0_12px_rgba(255,255,255,0.8)]"></span>解锁</span>';
-          loginButton.classList.remove('cursor-not-allowed', 'opacity-80');
-        }
+        setLoginButtonLoading(false);
       }
     }
 
