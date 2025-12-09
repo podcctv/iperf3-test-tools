@@ -1278,15 +1278,15 @@ def _login_html() -> str:
           
           <!-- Whitelist Actions -->
           <div class="flex flex-wrap items-center gap-3">
-            <button id="view-whitelist-btn" class="rounded-xl border border-slate-700 bg-slate-800/60 px-5 py-2.5 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200 inline-flex items-center gap-2">
+            <button id="view-whitelist-btn" onclick="viewWhitelist()" class="rounded-xl border border-slate-700 bg-slate-800/60 px-5 py-2.5 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200 inline-flex items-center gap-2">
               <span>👁️</span>
               <span>查看白名单</span>
             </button>
-            <button id="sync-whitelist-btn" class="rounded-xl border border-emerald-500/40 bg-emerald-500/15 px-5 py-2.5 text-sm font-semibold text-emerald-100 shadow-sm transition hover:bg-emerald-500/25 inline-flex items-center gap-2">
+            <button id="sync-whitelist-btn" onclick="syncWhitelist()" class="rounded-xl border border-emerald-500/40 bg-emerald-500/15 px-5 py-2.5 text-sm font-semibold text-emerald-100 shadow-sm transition hover:bg-emerald-500/25 inline-flex items-center gap-2">
               <span>🔄</span>
               <span>同步到所有 Agent</span>
             </button>
-            <button id="check-whitelist-status-btn" class="rounded-xl border border-blue-500/40 bg-blue-500/15 px-5 py-2.5 text-sm font-semibold text-blue-100 shadow-sm transition hover:bg-blue-500/25 inline-flex items-center gap-2">
+            <button id="check-whitelist-status-btn" onclick="checkWhitelistStatus()" class="rounded-xl border border-blue-500/40 bg-blue-500/15 px-5 py-2.5 text-sm font-semibold text-blue-100 shadow-sm transition hover:bg-blue-500/25 inline-flex items-center gap-2">
               <span>📊</span>
               <span>检查同步状态</span>
             </button>
