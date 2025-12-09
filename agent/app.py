@@ -1453,8 +1453,8 @@ def get_whitelist() -> Any:
     """Get current whitelist."""
     return jsonify({
         "status": "ok",
-        "allowed_ips": list(whitelist._allowed_ips),
-        "updated_at": whitelist._last_updated.isoformat() if whitelist._last_updated else None
+        "allowed_ips": whitelist.get_all(),
+        "updated_at": None
     })
 
 
