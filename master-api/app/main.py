@@ -1205,6 +1205,7 @@ def _login_html() -> str:
         checkAuth();
     });
 
+    // Other element references (not in DOMContentLoaded because they're not used in login flow)
     const nodeName = document.getElementById('node-name');
     const nodeIp = document.getElementById('node-ip');
     const nodePort = document.getElementById('node-port');
@@ -1348,9 +1349,6 @@ def _login_html() -> str:
       }
     }
 
-    passwordInput?.focus();
-    // Removed setLoginState call as we removed the badge
-    // setLoginState('idle');
 
     function toggleProtocolOptions() {
       const proto = (protocolSelect?.value || 'tcp').toLowerCase();

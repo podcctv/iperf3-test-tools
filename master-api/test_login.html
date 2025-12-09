@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Login Test</title>
+</head>
+<body>
+    <h1>Login Test</h1>
+    <input id="password-input" type="password" placeholder="Password">
+    <button id="login-btn" type="button" onclick="login()">Login</button>
+    <div id="login-alert"></div>
+
+    <script>
+        console.log('Script loading...');
+        
+        // Global variables
+        let passwordInput, loginButton, loginAlert;
+        
+        // Initialize when DOM is ready
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('DOM loaded');
+            passwordInput = document.getElementById('password-input');
+            loginButton = document.getElementById('login-btn');
+            loginAlert = document.getElementById('login-alert');
+            console.log('Elements:', { passwordInput, loginButton, loginAlert });
+        });
+        
+        // Global login function
+        function login() {
+            console.log('Login function called!');
+            const password = passwordInput?.value || '';
+            loginAlert.textContent = `You entered: ${password}`;
+            console.log('Password:', password);
+        }
+        
+        console.log('Script loaded');
+    </script>
+</body>
+</html>
