@@ -2669,19 +2669,60 @@ def _login_html() -> str:
         }
       }
 
-      // Fetch ISP info
+      // Fetch ISP info (with localStorage caching)
+      const ISP_CACHE_KEY = 'isp_cache';
+      const ISP_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours in ms
+      
+      function getIspCache() {
+        try {
+          const cached = localStorage.getItem(ISP_CACHE_KEY);
+          if (cached) {
+            const data = JSON.parse(cached);
+            // Check if cache is still valid
+            if (data.expires > Date.now()) {
+              return data.ips;
+            }
+          }
+        } catch (e) {}
+        return {};
+      }
+      
+      function saveIspCache(ips) {
+        try {
+          localStorage.setItem(ISP_CACHE_KEY, JSON.stringify({
+            ips: ips,
+            expires: Date.now() + ISP_CACHE_TTL
+          }));
+        } catch (e) {}
+      }
+      
+      const ispCache = getIspCache();
+      
       nodes.forEach(node => {
           if (!ipPrivacyState[node.id]) {
-             fetch(`/geo?ip=${node.ip}`)
-               .then(r => r.json())
-               .then(d => {
-                   const el = document.getElementById(`isp-${node.id}`);
-                   if (el && d.isp) {
-                       el.textContent = d.isp;
-                       el.title = d.country_code || '';
-                   }
-               })
-               .catch(() => {});
+             // Check cache first
+             if (ispCache[node.ip]) {
+               const el = document.getElementById(`isp-${node.id}`);
+               if (el) {
+                 el.textContent = ispCache[node.ip].isp;
+                 el.title = ispCache[node.ip].country_code || '';
+               }
+             } else {
+               // Fetch from API and cache
+               fetch(`/geo?ip=${node.ip}`)
+                 .then(r => r.json())
+                 .then(d => {
+                     const el = document.getElementById(`isp-${node.id}`);
+                     if (el && d.isp) {
+                         el.textContent = d.isp;
+                         el.title = d.country_code || '';
+                         // Save to cache
+                         ispCache[node.ip] = { isp: d.isp, country_code: d.country_code };
+                         saveIspCache(ispCache);
+                     }
+                 })
+                 .catch(() => {});
+             }
           }
       });
 
@@ -4409,6 +4450,13 @@ def _schedules_html() -> str:
           }}
         }}
       }});
+      
+      // Force resize after creation to fix width issues
+      setTimeout(() => {{
+        if (charts[scheduleId]) {{
+          charts[scheduleId].resize();
+        }}
+      }}, 100);
       
       // 显示统计信息
       const statsEl = document.getElementById(`stats-${{scheduleId}}`);
