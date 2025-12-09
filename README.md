@@ -23,7 +23,7 @@ A lightweight **master/agent** distributed network testing toolkit with one-clic
 curl -fsSL https://github.com/podcctv/iperf3-test-tools/blob/main/update_iperf3_master.sh | bash
 
 # 或者使用 wget
-wget -qO- (https://github.com/podcctv/iperf3-test-tools/blob/main/update_iperf3_master.sh | bash
+wget -qO- https://github.com/podcctv/iperf3-test-tools/blob/main/update_iperf3_master.sh | bash
 ```
 
 安装完成后访问：`http://your-ip:9100/web`（默认密码：`iperf-pass`）
