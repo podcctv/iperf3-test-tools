@@ -3539,13 +3539,16 @@ def _schedules_html() -> str:
           const statusColor = r.status === 'success' ? 'text-emerald-400' : 'text-rose-400';
           const s = r.test_result?.summary || {{}};
           
+          // Convert bits_per_second to Mbps
+          const speedMbps = s.bits_per_second ? (s.bits_per_second / 1000000).toFixed(2) : '-';
+          
           return `
             <tr>
               <td class="py-2">${{time}}</td>
-              <td class="py-2 text-sky-400">${{s.sendMbps?.toFixed(2) || '-'}}</td>
-              <td class="py-2 text-emerald-400">${{s.receiveMbps?.toFixed(2) || '-'}}</td>
-              <td class="py-1">${{s.latencyMs?.toFixed(2) || '-'}}</td>
-              <td class="py-1">${{s.lostPercent?.toFixed(2) || '-'}}</td>
+              <td class="py-2 text-sky-400">${{speedMbps}}</td>
+              <td class="py-2 text-emerald-400">${{speedMbps}}</td>
+              <td class="py-1">${{s.latency_ms?.toFixed(2) || '-'}}</td>
+              <td class="py-1">${{s.lost_percent?.toFixed(2) || '-'}}</td>
               <td class="py-1 ${{statusColor}} text-xs" title="${{r.error_message || ''}}">
                 ${{r.status}}
                 ${{r.status === 'failed' ? '<span class="ml-1 cursor-help">ⓘ</span>' : ''}}
@@ -3574,13 +3577,13 @@ def _schedules_html() -> str:
       }});
       
       const uploadData = results.map(r => {{
-        if (!r.test_result?.summary) return 0;
-        return (r.test_result.summary.sendMbps || 0).toFixed(2);
+        if (!r.test_result?.summary?.bits_per_second) return 0;
+        return (r.test_result.summary.bits_per_second / 1000000).toFixed(2);
       }});
       
       const downloadData = results.map(r => {{
-        if (!r.test_result?.summary) return 0;
-        return (r.test_result.summary.receiveMbps || 0).toFixed(2);
+        if (!r.test_result?.summary?.bits_per_second) return 0;
+        return (r.test_result.summary.bits_per_second / 1000000).toFixed(2);
       }});
       
       // 创建图表
