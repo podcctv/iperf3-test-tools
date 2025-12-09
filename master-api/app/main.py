@@ -816,6 +816,28 @@ def _login_html() -> str:
       color: #86efac;
     }
     .hidden { display: none !important; }
+
+    /* Animations */
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-8px); }
+      75% { transform: translateX(8px); }
+    }
+    .animate-shake {
+      animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both;
+      border-color: rgba(239, 68, 68, 0.5);
+      box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.1);
+    }
+    
+    @keyframes success-pulse {
+      0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); border-color: rgba(34, 197, 94, 0.4); }
+      50% { transform: scale(1.02); box-shadow: 0 0 0 10px rgba(34, 197, 94, 0); border-color: rgba(34, 197, 94, 0.8); }
+      100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); border-color: rgba(34, 197, 94, 0.4); }
+    }
+    .animate-success {
+      animation: success-pulse 0.6s ease-out;
+      border-color: rgba(34, 197, 94, 0.6);
+    }
   </style>
 </head>
 <body>
@@ -1692,12 +1714,15 @@ def _login_html() -> str:
 
     async function login() {
       clearAlert(loginAlert);
-      setLoginState('unlocking');
+      // Remove any existing animation classes
+      document.querySelector('.login-card').classList.remove('animate-shake', 'animate-success');
+      
       const password = (passwordInput?.value || '').trim();
       if (!password) {
-        setAlert(loginAlert, '请输入控制台密码。');
-        setLoginState('idle');
+        setAlert(loginAlert, '请输入密码 (Password Required)');
         passwordInput?.focus();
+        document.querySelector('.login-card').classList.add('animate-shake');
+        setTimeout(() => document.querySelector('.login-card').classList.remove('animate-shake'), 400);
         return;
       }
 
@@ -1709,37 +1734,51 @@ def _login_html() -> str:
           body: JSON.stringify({ password })
         });
 
-        if (!res.ok) {
-          let message = '密码错误或未配置。';
-          try {
-            const data = await res.json();
-            if (data?.detail === 'empty_password') {
-              message = '请输入控制台密码。';
-            } else if (data?.detail === 'invalid_password') {
-              message = '密码错误，请确认与后台环境变量或数据目录中的密码一致。';
-            } else if (data?.detail) {
-              message = `登录失败：${data.detail}`;
-            }
-          } catch (_) {
-            try {
-              const rawText = await res.text();
-              if (rawText) message = `登录失败：${rawText}`;
-            } catch (_) {}
-          }
-          setAlert(loginAlert, message);
-          setLoginState('error', message);
-          return;
+        if (res.ok) {
+           loginAlert.className = 'alert alert-success';
+           setAlert(loginAlert, '登录成功 (Success)');
+           document.querySelector('.login-card').classList.add('animate-success');
+           
+           // Short delay to show success message before refresh/redirect
+           setTimeout(async () => {
+             const authed = await checkAuth(true);
+             if (!authed) {
+                loginAlert.className = 'alert alert-error';
+                setAlert(loginAlert, '会话建立失败 (Session Failed)');
+                document.querySelector('.login-card').classList.remove('animate-success');
+                document.querySelector('.login-card').classList.add('animate-shake');
+             }
+           }, 600);
+           return;
         }
 
-        const authed = await checkAuth(true);
-        if (!authed) {
-          setAlert(loginAlert, '登录状态无法建立，请检查浏览器是否允许保存 Cookie。');
-          setLoginState('error', '未能建立登录状态。');
+        // Handle specific error codes
+        loginAlert.className = 'alert alert-error';
+        document.querySelector('.login-card').classList.add('animate-shake');
+        setTimeout(() => document.querySelector('.login-card').classList.remove('animate-shake'), 400);
+
+        let message = '登录失败 (Login Failed)';
+        
+        if (res.status === 401) {
+            message = '登录失败：密码错误 (Invalid Password)';
+        } else {
+            try {
+                const data = await res.json();
+                if (data?.detail === 'empty_password') message = '密码不能为空';
+                else if (data?.detail === 'invalid_password') message = '登录失败：密码错误 (Invalid Password)';
+                else if (data?.detail) message = `登录失败：${data.detail}`;
+            } catch (_) {
+                message = `登录失败 (HTTP ${res.status})`;
+            }
         }
+        setAlert(loginAlert, message);
+
       } catch (err) {
-        console.error('Login failed:', err);
-        setAlert(loginAlert, '无法连接到服务，请稍后再试。');
-        setLoginState('error', '无法连接到服务。');
+        console.error('Login network error:', err);
+        loginAlert.className = 'alert alert-error';
+        setAlert(loginAlert, '登陆失败：后端无响应 (Backend Unresponsive)');
+        document.querySelector('.login-card').classList.add('animate-shake');
+        setTimeout(() => document.querySelector('.login-card').classList.remove('animate-shake'), 400);
       } finally {
         setLoginButtonLoading(false);
       }
