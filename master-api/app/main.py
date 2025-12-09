@@ -1138,53 +1138,72 @@ def _login_html() -> str:
   </div>
 
     <script>
+    console.log('Script loading...');
     const apiFetch = (url, options = {}) => fetch(url, { credentials: 'include', ...options });
     
-    // Defer element lookup until needed or DOM ready to avoid null references
+    // Declare all elements in global scope (will be initialized in DOMContentLoaded)
     let loginForm, loginCard, appCard, loginAlert, loginButton, passwordInput;
     let loginStatus, loginStatusDot, loginStatusLabel, loginHint, authHint;
+    let originalLoginLabel, configAlert, importConfigsBtn, exportConfigsBtn, configFileInput;
+    let changePasswordAlert, currentPasswordInput, newPasswordInput, confirmPasswordInput, changePasswordBtn;
 
+    // Initialize all elements when DOM is ready
     document.addEventListener('DOMContentLoaded', () => {
         console.log('DOM fully loaded. Initializing elements...');
+        
+        // Login elements
         loginForm = document.getElementById('login-form');
         loginCard = document.getElementById('login-card');
         appCard = document.getElementById('app-card');
         loginAlert = document.getElementById('login-alert');
         loginButton = document.getElementById('login-btn');
         passwordInput = document.getElementById('password-input');
+        loginStatus = document.getElementById('login-status');
+        loginStatusDot = document.getElementById('login-status-dot');
+        loginStatusLabel = document.getElementById('login-status-label');
+        loginHint = document.getElementById('login-hint');
+        authHint = document.getElementById('auth-hint');
+        originalLoginLabel = loginButton?.textContent || 'Login';
         
-        // Listeners
-        loginButton?.addEventListener('click', (e) => {
-            e.preventDefault();
-            console.log('Login button clicked via listener');
-            login();
-        });
-        passwordInput?.addEventListener('keyup', (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault(); 
+        // Config elements
+        configAlert = document.getElementById('config-alert');
+        importConfigsBtn = document.getElementById('import-configs');
+        exportConfigsBtn = document.getElementById('export-configs');
+        configFileInput = document.getElementById('config-file-input');
+        
+        // Password change elements
+        changePasswordAlert = document.getElementById('change-password-alert');
+        currentPasswordInput = document.getElementById('current-password');
+        newPasswordInput = document.getElementById('new-password');
+        confirmPasswordInput = document.getElementById('confirm-password');
+        changePasswordBtn = document.getElementById('change-password-btn');
+        
+        console.log('Elements initialized. Login button:', loginButton);
+        console.log('Password input:', passwordInput);
+        
+        // Attach event listeners
+        if (loginButton) {
+            loginButton.addEventListener('click', (e) => {
+                e.preventDefault();
+                console.log('Login button clicked via addEventListener');
                 login();
-            }
-        });
+            });
+        }
+        
+        if (passwordInput) {
+            passwordInput.addEventListener('keyup', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    console.log('Enter key pressed in password field');
+                    login();
+                }
+            });
+            passwordInput.focus();
+        }
         
         // Run initial checks
         checkAuth();
-        ensureAutoRefresh();
     });
-
-    // Keep other globals that might be used by other functions
-    const originalLoginLabel = 'Login'; // Fallback
-    const configAlert = document.getElementById('config-alert');
-    // ... rest of globals ...
-    const originalLoginLabel = loginButton?.textContent || '';
-    const configAlert = document.getElementById('config-alert');
-    const importConfigsBtn = document.getElementById('import-configs');
-    const exportConfigsBtn = document.getElementById('export-configs');
-    const configFileInput = document.getElementById('config-file-input');
-    const changePasswordAlert = document.getElementById('change-password-alert');
-    const currentPasswordInput = document.getElementById('current-password');
-    const newPasswordInput = document.getElementById('new-password');
-    const confirmPasswordInput = document.getElementById('confirm-password');
-    const changePasswordBtn = document.getElementById('change-password-btn');
 
     const nodeName = document.getElementById('node-name');
     const nodeIp = document.getElementById('node-ip');
