@@ -3659,7 +3659,7 @@ def dashboard() -> HTMLResponse:
 @app.get("/web/schedules")
 async def schedules_page(request: Request):
     """定时任务管理页面"""
-    if not auth_manager().check_session(request):
+    if not auth_manager().is_authenticated(request):
         return HTMLResponse(content="<script>window.location.href='/web';</script>")
     
     return HTMLResponse(content=_schedules_html())
@@ -3676,7 +3676,7 @@ def login(response: Response, payload: dict = Body(...)) -> dict:
     if raw_password is None or not str(raw_password).strip():
         raise HTTPException(status_code=400, detail="empty_password")
 
-    if not dashboard_auth.verify_password(raw_password):
+    if not auth_manager().verify_password(raw_password):
         raise HTTPException(status_code=401, detail="invalid_password")
 
     _set_auth_cookie(response, str(raw_password))

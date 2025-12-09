@@ -73,6 +73,12 @@ SCRIPT_SERVICE_MAP = {
     "Spotify": {"key": "spotify", "name": "Spotify"},
     "OpenAI": {"key": "openai", "name": "OpenAI/ChatGPT"},
     "Gemini": {"key": "gemini", "name": "Google Gemini"},
+    "Twitch": {"key": "twitch", "name": "Twitch"},
+    "ParamountPlus": {"key": "paramount_plus", "name": "Paramount+"},
+    "Bilibili": {"key": "bilibili", "name": "Bilibili"},
+    "AppleMusic": {"key": "apple_music", "name": "Apple Music"},
+    "Telegram": {"key": "telegram", "name": "Telegram"},
+    "WhatsApp": {"key": "whatsapp", "name": "WhatsApp"},
 }
 
 STREAMING_UA = (
@@ -744,6 +750,137 @@ def _probe_hbo() -> dict[str, Any]:
     return _service_result("hbo", "HBO", False, None, detail_parts)
 
 
+
+def _probe_twitch() -> dict[str, Any]:
+    dns_info = _dns_detail("www.twitch.tv")
+    try:
+        resp = requests.get(
+            "https://www.twitch.tv",
+            headers={"User-Agent": STREAMING_UA},
+            timeout=10,
+        )
+    except requests.RequestException as exc:
+        return _service_result("twitch", "Twitch", False, None, [dns_info, f"请求失败: {exc}"[:150]])
+
+    status = resp.status_code
+    unlocked = status == 200
+    detail = "已解锁" if unlocked else "未解锁"
+    return _service_result("twitch", "Twitch", unlocked, status, [dns_info, f"HTTP {status}", detail])
+
+
+def _probe_paramount_plus() -> dict[str, Any]:
+    dns_info = _dns_detail("www.paramountplus.com")
+    try:
+        resp = requests.get(
+            "https://www.paramountplus.com",
+            headers={"User-Agent": STREAMING_UA},
+            timeout=10,
+            allow_redirects=True,
+        )
+    except requests.RequestException as exc:
+        return _service_result("paramount_plus", "Paramount+", False, None, [dns_info, f"请求失败: {exc}"[:150]])
+
+    status = resp.status_code
+    region = None
+    if "not available in your country" in resp.text:
+        unlocked = False
+        detail = "地区限制"
+    else:
+        # Try to guess region from URL or headers
+        region_match = re.search(r"/([a-z]{2})/", resp.url)
+        if region_match:
+            region = region_match.group(1).upper()
+        unlocked = status < 400
+        detail = "已解锁" if unlocked else "未解锁"
+
+    detail_parts = [dns_info, f"HTTP {status}", detail, f"Region: {region}" if region else None]
+    return _service_result("paramount_plus", "Paramount+", unlocked, status, detail_parts, region=region)
+
+
+def _probe_bilibili() -> dict[str, Any]:
+    dns_info = _dns_detail("www.bilibili.com")
+    try:
+        # Check streaming availability (Taiwan/HK/Macau only endpoint behavior)
+        resp = requests.get(
+            "https://api.bilibili.com/x/web-interface/nav",
+            headers={"User-Agent": STREAMING_UA},
+            timeout=10,
+        )
+    except requests.RequestException as exc:
+        return _service_result("bilibili", "Bilibili", False, None, [dns_info, f"请求失败: {exc}"[:150]])
+
+    status = resp.status_code
+    unlocked = status == 200
+    try:
+        data = resp.json()
+        if data.get("code") == 0:
+            unlocked = True
+            detail = "已解锁"
+        else:
+            unlocked = False
+            detail = f"API Error: {data.get('message')}"
+    except Exception:
+        detail = "响应解析失败"
+
+    return _service_result("bilibili", "Bilibili", unlocked, status, [dns_info, f"HTTP {status}", detail])
+
+
+def _probe_apple_music() -> dict[str, Any]:
+    dns_info = _dns_detail("music.apple.com")
+    try:
+        resp = requests.get(
+            "https://music.apple.com",
+            headers={"User-Agent": STREAMING_UA},
+            timeout=10,
+            allow_redirects=True,
+        )
+    except requests.RequestException as exc:
+        return _service_result("apple_music", "Apple Music", False, None, [dns_info, f"请求失败: {exc}"[:150]])
+
+    status = resp.status_code
+    unlocked = status == 200
+    # Extract region from URL, e.g., https://music.apple.com/us/browse
+    match = re.search(r"music\.apple\.com/([a-z]{2})", resp.url)
+    region = match.group(1).upper() if match else None
+    
+    detail = f"Region: {region}" if region else "已解锁"
+    return _service_result("apple_music", "Apple Music", unlocked, status, [dns_info, f"HTTP {status}", detail], region=region)
+
+
+def _probe_telegram() -> dict[str, Any]:
+    dns_info = _dns_detail("web.telegram.org")
+    try:
+        resp = requests.get(
+            "https://web.telegram.org/k/",
+            headers={"User-Agent": STREAMING_UA},
+            timeout=10,
+        )
+    except requests.RequestException as exc:
+        return _service_result("telegram", "Telegram", False, None, [dns_info, f"请求失败: {exc}"[:150]])
+
+    status = resp.status_code
+    unlocked = status == 200
+    detail = "已解锁" if unlocked else "未解锁 (可能受阻)"
+    return _service_result("telegram", "Telegram", unlocked, status, [dns_info, f"HTTP {status}", detail])
+
+
+def _probe_whatsapp() -> dict[str, Any]:
+    dns_info = _dns_detail("web.whatsapp.com")
+    try:
+        resp = requests.get(
+            "https://web.whatsapp.com",
+            headers={"User-Agent": STREAMING_UA},
+            timeout=10,
+        )
+    except requests.RequestException as exc:
+        return _service_result("whatsapp", "WhatsApp", False, None, [dns_info, f"请求失败: {exc}"[:150]])
+
+    status = resp.status_code
+    unlocked = status == 200
+    detail = "已解锁" if unlocked else "未解锁 (可能受阻)"
+    return _service_result("whatsapp", "WhatsApp", unlocked, status, [dns_info, f"HTTP {status}", detail])
+
+
 def _run_streaming_suite() -> tuple[list[dict[str, Any]], int]:
     start = time.time()
     checks = [
@@ -756,6 +893,12 @@ def _run_streaming_suite() -> tuple[list[dict[str, Any]], int]:
         _probe_openai,
         _probe_gemini,
         _probe_hbo,
+        _probe_twitch,
+        _probe_paramount_plus,
+        _probe_bilibili,
+        _probe_apple_music,
+        _probe_telegram,
+        _probe_whatsapp,
     ]
 
     results: list[dict[str, Any]] = []
