@@ -3996,48 +3996,6 @@ def _schedules_html() -> str:
         const dstNode = nodes.find(n => n.id === schedule.dst_node_id);
         const statusBadge = schedule.enabled 
           ? '<span class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-semibold"><span class="h-2 w-2 rounded-full bg-emerald-400"></span>运行中</span>'
-          : '<span class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-slate-700 text-slate-400 text-xs font-semibold"><span class="h-2 w-2 rounded-full bg-slate-500"></span>已暂停</span>';
-        
-        return `
-          <div class="glass-card rounded-2xl p-6 space-y-4">
-            <!-- Schedule Header -->
-            <div class="flex items-start justify-between">
-              <div class="flex-1">
-                <h3 class="text-lg font-bold text-white">${{schedule.name}}</h3>
-                <div class="mt-2 flex items-center gap-4 text-sm text-slate-300">
-                  <span>${{srcNode?.name || 'Unknown'}} ${{
-                    schedule.direction === 'download' ? '←' : 
-                    schedule.direction === 'bidirectional' ? '↔' : '→'
-                  }} ${{dstNode?.name || 'Unknown'}}</span>
-                  <span class="text-slate-500">|</span>
-                  <span>${{schedule.protocol.toUpperCase()}}</span>
-                  <span class="text-slate-500">|</span>
-                  <span>${{schedule.duration}}秒</span>
-                  <span class="text-slate-500">|</span>
-                  <span>每${{Math.floor(schedule.interval_seconds / 60)}}分钟</span>
-                  <!-- Traffic Badge -->
-                  <span class="px-2 py-0.5 rounded-md bg-gradient-to-r from-blue-500/20 to-cyan-500/20 border border-blue-500/30 text-xs font-semibold text-blue-200" id="traffic-badge-${{schedule.id}}">
-                    --
-                  </span>
-                </div>
-              </div>
-              <div class="flex items-center gap-3">
-                <div class="hidden md:block text-xs text-right mr-2 space-y-1">
-                   <div class="text-slate-400">Next Run</div>
-                   <div class="font-mono text-emerald-400" data-countdown="${{schedule.next_run_at || ''}}" data-schedule-id="${{schedule.id}}">Calculating...</div>
-                </div>
-                ${{statusBadge}}
-                <button onclick="toggleSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:border-sky-500 transition">
-                  ${{schedule.enabled ? '暂停' : '启用'}}
-                </button>
-                <button onclick="runSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:emerald-500 transition">立即运行</button>
-                <button onclick="editSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:border-sky-500 transition">编辑</button>
-                <button onclick="deleteSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-rose-700 bg-rose-900/20 text-xs font-semibold text-rose-300 hover:bg-rose-900/40 transition">删除</button>
-              </div>
-            </div>
-            
-            <!-- Nodes Info with ISP & Masking -->
-            <div class="grid grid-cols-2 gap-4 text-xs">
                 <div class="glass-card p-2 rounded-lg bg-slate-900/30 flex flex-col gap-1">
                     <div class="text-slate-400">Source</div>
                     <div class="font-mono text-sky-300">
@@ -4691,7 +4649,7 @@ def _schedules_html() -> str:
                         <div>
                           <h4 class="text-sm font-semibold text-slate-200">${{n.name}}</h4>
                           <div class="text-xs text-slate-500 font-mono">
-                             ${{maskIp(n.ip, true)}}
+                             ${{maskAddress(n.ip, true)}}
                              <span id="vps-isp-${{n.node_id}}" class="ml-2 pl-2 border-l border-slate-700 text-slate-600"></span>
                           </div>
                         </div>
