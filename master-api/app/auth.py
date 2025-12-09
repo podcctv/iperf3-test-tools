@@ -33,11 +33,6 @@ class DashboardAuthManager:
             return ""
         return password.strip()
 
-    @staticmethod
-    def _generate_random_password(length: int = 12) -> str:
-        alphabet = string.ascii_letters + string.digits
-        return "".join(secrets.choice(alphabet) for _ in range(length))
-
     def _dashboard_token(self, password: str) -> str:
         secret = settings.dashboard_secret.encode()
         return hmac.new(secret, password.encode(), hashlib.sha256).hexdigest()
@@ -68,19 +63,18 @@ class DashboardAuthManager:
 
     def _ensure_password_file(self) -> None:
         if self._password:
-            # If we found a password (env or file), just ensure it's synced to file if it was from env? 
-            # The original logic was: if file exists, read it. If not, save current.
-            # But we might have loaded from env.
-            # Let's keep it simple: if file doesn't exist, save what we have.
-            if not settings.dashboard_password_file.exists():
+            # If we defined one via env or file, ensure it is saved?
+            # actually if it came from env, we might want to respect it but not necessarily overwrite file 
+            # unless we want persistence. existing logic did this.
+            # But let's check if file exists.
+             if not settings.dashboard_password_file.exists():
                 self._save_password(self._password)
-            return
+             return
 
-        # No password found in env or file. Generate one.
-        logger.info("No dashboard password found. Generating a secure random password.")
-        new_pass = self._generate_random_password()
-        self._password = new_pass
-        self._save_password(new_pass)
+        # Fallback to default
+        logger.info("No dashboard password found. Using default: %s", DEFAULT_DASHBOARD_PASSWORD)
+        self._password = DEFAULT_DASHBOARD_PASSWORD
+        self._save_password(self._password)
 
     def _log_password(self) -> None:
         logger.warning("Dashboard password initialized: %s", self.current_password())

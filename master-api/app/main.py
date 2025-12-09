@@ -826,13 +826,6 @@ def _login_html() -> str:
         <div class="card-stack">
           <div class="login-container" id="login-card">
             <div class="glass-panel login-card">
-              <div style="display: flex; justify-content: center; margin-bottom: 2rem;">
-                  <div class="status-badge" id="login-status">
-                    <span id="login-status-dot" class="status-dot"></span>
-                    <span id="login-status-label">Please Login</span>
-                  </div>
-              </div>
-
               <h1 class="login-title">iperf web login</h1>
               
               <div id="login-alert" class="alert alert-error hidden"></div>
@@ -1278,22 +1271,20 @@ def _login_html() -> str:
 
     function setLoginButtonLoading(isLoading) {
       if (!loginButton) return;
-
       loginButton.disabled = isLoading;
-      if ('loading' in loginButton) {
-        loginButton.loading = isLoading;
-        loginButton.textContent = isLoading ? '解锁中...' : (originalLoginLabel || '立即解锁');
-      } else {
-        loginButton.innerHTML = isLoading
-          ? '<span class="inline-flex items-center justify-center gap-2"><span class="h-2 w-2 rounded-full bg-sky-200 animate-ping"></span>解锁中...</span>'
-          : (originalLoginLabel || '<span class="inline-flex items-center justify-center gap-2"><span class="h-2 w-2 rounded-full bg-white/80 shadow-[0_0_12px_rgba(255,255,255,0.8)]"></span>解锁</span>');
-      }
+      loginButton.classList.toggle('opacity-70', isLoading);
       loginButton.classList.toggle('cursor-not-allowed', isLoading);
-      loginButton.classList.toggle('opacity-80', isLoading);
+      
+      if (isLoading) {
+        loginButton.innerHTML = '<span class="inline-flex items-center justify-center gap-2">Logging in...</span>';
+      } else {
+        loginButton.textContent = 'Login';
+      }
     }
 
     passwordInput?.focus();
-    setLoginState('idle');
+    // Removed setLoginState call as we removed the badge
+    // setLoginState('idle');
 
     function toggleProtocolOptions() {
       const proto = (protocolSelect?.value || 'tcp').toLowerCase();
