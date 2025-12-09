@@ -1191,7 +1191,17 @@ def _login_html() -> str:
         <button id="config-tab" onclick="setActiveSettingsTab('config')" class="rounded-full px-4 py-2 text-sm font-semibold text-slate-300 transition hover:text-white">
           📦 配置管理
         </button>
-        <button id="whitelist-tab" onclick="setActiveSettingsTab('whitelist')" class="rounded-full px-4 py-2 text-sm font-semibold text-slate-300 transition hover:text-white">
+        <button id="whitelist-tab" onclick="
+          try {
+            console.log('Whitelist tab inline click');
+            document.getElementById('password-panel')?.classList.add('hidden');
+            document.getElementById('config-panel')?.classList.add('hidden');
+            document.getElementById('whitelist-panel')?.classList.remove('hidden');
+            document.getElementById('password-tab').className = 'rounded-full px-4 py-2 text-sm font-semibold text-slate-300 transition hover:text-white';
+            document.getElementById('config-tab').className = 'rounded-full px-4 py-2 text-sm font-semibold text-slate-300 transition hover:text-white';
+            this.className = 'rounded-full bg-gradient-to-r from-indigo-500/80 to-purple-500/80 px-4 py-2 text-sm font-semibold text-slate-50 shadow-lg shadow-indigo-500/15 ring-1 ring-indigo-400/40 transition hover:brightness-110';
+          } catch(e) { console.error('Whitelist tab error:', e); alert('Error: ' + e.message); }
+        " class="rounded-full px-4 py-2 text-sm font-semibold text-slate-300 transition hover:text-white">
           🛡️ IP 白名单
         </button>
       </div>
