@@ -857,7 +857,7 @@ def _login_html() -> str:
       <div class="page-content">
 
         <div class="card-stack">
-          <div class="login-container" id="login-card">
+          <div class="login-container hidden" id="login-card">
             <div class="glass-panel login-card">
               <h1 class="login-title">iperf web login</h1>
               
@@ -1322,12 +1322,8 @@ def _login_html() -> str:
       // New services
       { key: 'tiktok', label: 'TikTok', color: 'text-pink-300', bg: 'border-pink-500/40 bg-pink-500/10', indicator: 'bg-pink-400' },
       { key: 'twitch', label: 'Twitch', color: 'text-violet-300', bg: 'border-violet-500/40 bg-violet-500/10', indicator: 'bg-violet-400' },
-      { key: 'bilibili', label: 'Bilibili', color: 'text-cyan-300', bg: 'border-cyan-500/40 bg-cyan-500/10', indicator: 'bg-cyan-400' },
       { key: 'paramount_plus', label: 'Paramount+', color: 'text-blue-300', bg: 'border-blue-500/40 bg-blue-500/10', indicator: 'bg-blue-400' },
       { key: 'spotify', label: 'Spotify', color: 'text-green-300', bg: 'border-green-500/40 bg-green-500/10', indicator: 'bg-green-400' },
-      { key: 'apple_music', label: 'Apple Music', color: 'text-rose-200', bg: 'border-rose-400/40 bg-rose-400/10', indicator: 'bg-rose-300' },
-      { key: 'telegram', label: 'Telegram', color: 'text-blue-200', bg: 'border-blue-400/40 bg-blue-400/10', indicator: 'bg-blue-300' },
-      { key: 'whatsapp', label: 'WhatsApp', color: 'text-teal-300', bg: 'border-teal-500/40 bg-teal-500/10', indicator: 'bg-teal-400' },
     ];
     let streamingStatusCache = {};
     let isStreamingTestRunning = false;

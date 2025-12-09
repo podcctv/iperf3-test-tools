@@ -390,48 +390,23 @@ def _probe_disney_plus() -> dict[str, Any]:
     )
 
 
+
 def _probe_netflix() -> dict[str, Any]:
     dns_info = _dns_detail("www.netflix.com")
+    
+    # 81280792: "Alive" (Korean Movie) - reasonably global
+    # 70143836: "Breaking Bad" - widely available but region locked in some
+    # 80018294: "Rick and Morty" - often region locked
     title_urls = [
-        "https://www.netflix.com/title/81280792",
-        "https://www.netflix.com/title/70143836",
+        ("81280792", "originals"), # Should cover Originals
+        ("70143836", "licensed"),  # Should cover Licensed
     ]
 
-    availability: list[bool | None] = []
-    region: str | None = None
-    status: int | None = None
-
-    def _parse_react_context(html: str) -> tuple[bool | None, str | None]:
-        match = re.search(r"netflix\\.reactContext\s*=\s*({.*?});", html, re.S)
-        if not match:
-            return None, None
-        try:
-            data = json.loads(match.group(1))
-        except json.JSONDecodeError:
-            return None, None
-
-        models = data.get("models", {}) if isinstance(data, dict) else {}
-        meta = (
-            models.get("nmTitleGQL", {})
-            .get("data", {})
-            .get("metaData", {})
-            if isinstance(models, dict)
-            else {}
-        )
-        geo = (
-            models.get("geo", {})
-            .get("data", {})
-            .get("requestCountry", {})
-            if isinstance(models, dict)
-            else {}
-        )
-        request_country = geo.get("id") or geo.get("requestCountry")
-        if not request_country:
-            region_match = re.search(r'"requestCountry"\s*:\s*"([A-Z]{2})"', html)
-            request_country = region_match.group(1) if region_match else None
-        return meta.get("isAvailable"), request_country
-
-    for url in title_urls:
+    results = {}
+    region = None
+    
+    for title_id, kind in title_urls:
+        url = f"https://www.netflix.com/title/{title_id}"
         try:
             resp = requests.get(
                 url,
@@ -439,31 +414,41 @@ def _probe_netflix() -> dict[str, Any]:
                 timeout=10,
                 allow_redirects=True,
             )
-            status = resp.status_code
-        except requests.RequestException as exc:  # pragma: no cover - network
-            status = None
-            detail_parts = [dns_info, f"请求失败: {exc}"[:150]]
-            return _service_result("netflix", "Netflix", False, status, detail_parts)
+        except requests.RequestException:
+            results[kind] = False
+            continue
 
-        available, detected_region = _parse_react_context(resp.text)
-        if detected_region:
-            region = region or detected_region
-        if available is None and resp.status_code in {401, 403, 404}:
-            availability.append(False)
-        else:
-            availability.append(available)
+        if resp.status_code == 404:
+            results[kind] = False
+            continue
+            
+        # Try to find region
+        if not region:
+            # Look for requestCountry in standard JSON blobs
+            match = re.search(r'"requestCountry"\s*:\s*"([A-Z]{2})"', resp.text)
+            if match:
+                region = match.group(1)
 
-    has_true = any(val is True for val in availability)
-    has_false = any(val is False for val in availability)
-    all_false = has_false and all(val is False for val in availability if val is not None)
+        # Check availability text
+        # "Title Not Available" or similar text usually indicates lock
+        # Redirect to /browse usually means title not found in region
+        
+        is_available = True
+        if "/browse" in resp.url or "/signup" in resp.url:
+            is_available = False
+        elif "Not Available" in resp.text or "Lost in Space" in resp.text: # "Lost in Space" is the 404 page text sometimes
+             is_available = False
+        
+        results[kind] = is_available
 
-    tier: str | None
-    unlocked: bool
-    if has_true:
+    originals = results.get("originals", False)
+    licensed = results.get("licensed", False)
+    
+    if originals and licensed:
         tier = "full"
         unlocked = True
         detail = "全解锁"
-    elif has_false and not all_false:
+    elif originals:
         tier = "originals"
         unlocked = False
         detail = "仅解锁自制剧"
@@ -472,12 +457,23 @@ def _probe_netflix() -> dict[str, Any]:
         unlocked = False
         detail = "未解锁"
 
-    detail_parts = [dns_info, detail, f"Region: {region}" if region else None]
+    detail_parts = [dns_info, detail]
+    if region:
+        detail_parts.append(f"Region: {region}")
+
+    if not any(results.values()) and not region:
+         # If everything failed, check if we got a 403 or network error implicit in results
+         pass
+
     return _service_result(
         "netflix",
         "Netflix",
         unlocked,
-        status,
+        200 if originals or licensed else 403,
+        detail_parts,
+        tier=tier,
+        region=region,
+    )
         detail_parts,
         tier=tier,
         region=region,
