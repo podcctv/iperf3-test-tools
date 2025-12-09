@@ -3555,16 +3555,6 @@ def _schedules_html() -> str:
       }}).join('');
     }}
 
-@app.get("/debug/failures")
-def debug_failures(db: Session = Depends(get_db)):
-    """Debug endpoint to list recent failures"""
-    results = db.scalars(
-        select(ScheduleResult)
-        .where(ScheduleResult.status == "failed")
-        .order_by(text("executed_at DESC"))
-        .limit(10)
-    ).all()
-    return [{"id": r.id, "schedule_id": r.schedule_id, "time": r.executed_at, "error": r.error_message} for r in results]
 
 
     // 渲染Chart.js图表
@@ -4780,3 +4770,15 @@ async def get_agent_logs(name: str, lines: int = 200) -> AgentActionResult:
     except RemoteCommandError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return AgentActionResult(status="ok", message=f"Fetched last {lines} lines", logs=logs)
+
+
+@app.get("/debug/failures")
+def debug_failures(db: Session = Depends(get_db)):
+    """Debug endpoint to list recent failures"""
+    results = db.scalars(
+        select(ScheduleResult)
+        .where(ScheduleResult.status == "failed")
+        .order_by(text("executed_at DESC"))
+        .limit(10)
+    ).all()
+    return [{"id": r.id, "schedule_id": r.schedule_id, "time": r.executed_at, "error": r.error_message} for r in results]
