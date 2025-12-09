@@ -4076,13 +4076,19 @@ async def _call_agent_test(src: Node, payload: dict, duration: int) -> dict:
 
     if response.status_code != 200:
         detail = response.text
+        logger.warning(f"Agent {src.name} ({src.ip}:{src.agent_port}) returned {response.status_code}: {response.text[:500]}")
         try:
             parsed = response.json()
             if isinstance(parsed, dict) and parsed.get("error"):
                 detail = parsed.get("error")
+            else:
+                # If error field is empty, log the full response for debugging
+                logger.error(f"Agent returned empty error. Full response: {response.text}")
+                detail = f"Agent test failed (check master-api logs for details). Response: {response.text}"
         except Exception:
             pass
         raise HTTPException(status_code=502, detail=f"agent returned {response.status_code}: {detail}")
+
 
     try:
         raw_data = response.json()
