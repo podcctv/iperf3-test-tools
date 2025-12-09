@@ -14,31 +14,7 @@ A lightweight **master/agent** distributed network testing toolkit with one-clic
 
 ## 🎯 快速开始 / Quick Start
 
-### 方式一：一键安装脚本（推荐）
-
-**主控节点（Master + Dashboard）：**
-
-```bash
-# 下载并运行一键安装脚本
-curl -fsSL https://raw.githubusercontent.com/podcctv/iperf3-test-tools/main/install_master.sh | bash
-
-# 或者使用 wget
-wget -qO- https://raw.githubusercontent.com/podcctv/iperf3-test-tools/main/install_master.sh | bash
-```
-
-安装完成后访问：`http://your-ip:9100/web`（默认密码：`iperf-pass`）
-
-**测试节点（Agent Only）：**
-
-```bash
-# 下载并运行 Agent 安装脚本
-curl -fsSL https://raw.githubusercontent.com/podcctv/iperf3-test-tools/main/install_agent.sh | bash
-
-# 或者使用 wget
-wget -qO- https://raw.githubusercontent.com/podcctv/iperf3-test-tools/main/install_agent.sh | bash
-```
-
-### 方式二：克隆仓库安装
+###  方式二：克隆仓库安装
 
 ```bash
 # 克隆仓库
@@ -46,11 +22,10 @@ git clone https://github.com/podcctv/iperf3-test-tools.git
 cd iperf3-test-tools
 
 # 安装主控节点
-./install_master.sh
+bash ./update_iperf3_master.sh
 
-# 或安装测试节点
-./install_agent.sh
 ```
+安装完成后访问：`http://your-ip:9100/web`（默认密码：`iperf-pass`）
 
 ## 🔄 一键更新 / One-Click Update
 
