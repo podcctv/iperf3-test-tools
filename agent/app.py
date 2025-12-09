@@ -10,7 +10,10 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 import requests
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, abort
+
+# Import IP whitelist module
+from ip_whitelist import whitelist
 
 app = Flask(__name__)
 
@@ -1158,6 +1161,15 @@ def stop_server() -> Any:
 
 @app.route("/run_test", methods=["POST"])
 def run_test() -> Any:
+    # IP Whitelist verification
+    client_ip = request.headers.get('X-Real-IP') or request.headers.get('X-Forwarded-For') or request.remote_addr
+    if not whitelist.is_allowed(client_ip):
+        app.logger.warning(f"Rejected test request from non-whitelisted IP: {client_ip}")
+        return jsonify({
+            "status": "error", 
+            "error": "IP not whitelisted. Contact administrator to add your IP to the whitelist."
+        }), 403
+    
     data = request.get_json(force=True)
     target = data.get("target")
     if not target:
@@ -1300,6 +1312,55 @@ def streaming_probe() -> Any:
     payload.setdefault("elapsed_ms", int((time.time() - start) * 1000))
     payload["status"] = payload.get("status") or "ok"
     return jsonify(payload)
+
+
+@app.route("/update_whitelist", methods=["POST"])
+def update_whitelist() -> Any:
+    """
+    Update IP whitelist from Master.
+    Only accepts requests from Master IP (configured via MASTER_IP env var).
+    """
+    # Verify request is from Master
+    master_ip = os.getenv("MASTER_IP", "")
+    client_ip = request.headers.get('X-Real-IP') or request.headers.get('X-Forwarded-For') or request.remote_addr
+    
+    if master_ip and client_ip != master_ip:
+        app.logger.warning(f"Rejected whitelist update from non-master IP: {client_ip}")
+        return jsonify({
+            "status": "error",
+            "error": "Only Master can update whitelist"
+        }), 403
+    
+    try:
+        data = request.get_json(force=True)
+        allowed_ips = data.get("allowed_ips", [])
+        
+        if not isinstance(allowed_ips, list):
+            return jsonify({"status": "error", "error": "allowed_ips must be a list"}), 400
+        
+        # Update whitelist
+        whitelist.update(allowed_ips)
+        
+        app.logger.info(f"Whitelist updated with {len(allowed_ips)} IPs from Master")
+        
+        return jsonify({
+            "status": "ok",
+            "message": f"Whitelist updated with {len(allowed_ips)} IPs",
+            "allowed_ips": whitelist.get_all()
+        })
+    except Exception as e:
+        app.logger.error(f"Failed to update whitelist: {e}")
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/whitelist", methods=["GET"])
+def get_whitelist() -> Any:
+    """Get current whitelist (for debugging)"""
+    return jsonify({
+        "status": "ok",
+        "allowed_ips": whitelist.get_all(),
+        "count": len(whitelist.get_all())
+    })
 
 
 if __name__ == "__main__":

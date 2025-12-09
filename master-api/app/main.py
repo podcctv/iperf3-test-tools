@@ -938,6 +938,33 @@ def _login_html() -> str:
                 </div>
                 <div id="nodes-list" class="text-sm text-slate-400 space-y-3">暂无节点。</div>
               </div>
+              
+              <!-- IP Whitelist Management -->
+              <div class="glass-card rounded-2xl p-6">
+                <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+                  <div>
+                    <h3 class="text-lg font-semibold text-white">🔒 IP 白名单管理</h3>
+                    <p class="text-sm text-slate-400">防止未授权 IP 滥用 iperf3 服务</p>
+                  </div>
+                  <button id="sync-whitelist-btn" onclick="syncWhitelist()" class="rounded-lg border border-sky-500/40 bg-sky-500/15 px-4 py-2 text-sm font-semibold text-sky-100 shadow-sm transition hover:bg-sky-500/25">
+                    同步白名单到所有 Agent
+                  </button>
+                </div>
+                
+                <div id="whitelist-status" class="space-y-3">
+                  <div class="flex items-center gap-2 text-sm">
+                    <span class="text-slate-400">状态:</span>
+                    <span id="whitelist-status-text" class="text-emerald-400">● 自动同步已启用</span>
+                  </div>
+                  <div class="flex items-center gap-2 text-sm">
+                    <span class="text-slate-400">说明:</span>
+                    <span class="text-slate-300">添加/删除节点时自动同步白名单，无需手动操作</span>
+                  </div>
+                  <div id="whitelist-sync-result" class="hidden rounded-lg border border-slate-700 bg-slate-900/50 p-3 text-xs">
+                    <!-- Sync results will be displayed here -->
+                  </div>
+                </div>
+              </div>
 
               <div class="panel-card rounded-2xl p-5 space-y-4">
                 <div class="flex flex-wrap items-center justify-between gap-3">
@@ -2053,20 +2080,57 @@ def _login_html() -> str:
       }
     }
 
-    function syncSuitePort() {
+    // Sync whitelist to all agents
+    async function syncWhitelist() {{
+      const btn = document.getElementById('sync-whitelist-btn');
+      const resultDiv = document.getElementById('whitelist-sync-result');
+      const statusText = document.getElementById('whitelist-status-text');
+      
+      btn.disabled = true;
+      btn.textContent = '同步中...';
+      statusText.textContent = '● 正在同步...';
+      statusText.className = 'text-yellow-400';
+      resultDiv.classList.add('hidden');
+      
+      try {{
+        const res = await apiFetch('/admin/sync_whitelist', {{ method: 'POST' }});
+        const data = await res.json();
+        
+        if (data.status === 'ok') {{
+          statusText.textContent = '● 同步成功';
+          statusText.className = 'text-emerald-400';
+          
+          const results = data.results;
+          resultDiv.innerHTML = `
+            <div class="space-y-2">
+              <div class="font-semibold text-emerald-400">✓ 同步完成</div>
+              <div class="text-slate-300">成功: ${{results.success}}/${{results.total_agents}} 个 Agent</div>
+              ${{results.failed > 0 ? `<div class="text-rose-400">失败: ${{results.failed}} 个 Agent<div class="mt-1 text-xs text-slate-400">${{results.errors.join('<br>')}}</div></div>` : ''}}
+            </div>
+          `;
+          resultDiv.classList.remove('hidden');
+          setTimeout(() => {{ resultDiv.classList.add('hidden'); }}, 10000);
+        }} else {{
+          throw new Error(data.error || '同步失败');
+        }}
+      }} catch (err) {{
+        statusText.textContent = '● 同步失败';
+        statusText.className = 'text-rose-400';
+        resultDiv.innerHTML = `<div class="text-rose-400">✗ 同步失败: ${{err.message}}</div>`;
+        resultDiv.classList.remove('hidden');
+      }} finally {{
+        btn.disabled = false;
+        btn.textContent = '同步白名单到所有 Agent';
+        setTimeout(() => {{
+          statusText.textContent = '● 自动同步已启用';
+          statusText.className = 'text-emerald-400';
+        }}, 5000);
+      }}
+    }}
+
+    function syncSuitePort() {{
       const dst = nodeCache.find((n) => n.id === Number(suiteDstSelect?.value));
       if (dst && suitePort) {
-        const detected = dst.detected_iperf_port || dst.iperf_port;
-        suitePort.value = detected || DEFAULT_IPERF_PORT;
-      }
-    }
-
-    async function refreshNodes() {
-      if (isRefreshingNodes) return;
-      isRefreshingNodes = true;
-      try {
-        const previousSrc = Number(srcSelect.value) || null;
-        const previousDst = Number(dstSelect.value) || null;
         const previousSuiteSrc = Number(suiteSrcSelect?.value) || null;
         const previousSuiteDst = Number(suiteDstSelect?.value) || null;
         const res = await apiFetch('/nodes/status');
@@ -2093,8 +2157,10 @@ def _login_html() -> str:
           ? `<span class="${styles.badgeOnline}"><span class=\"h-2 w-2 rounded-full bg-emerald-400\"></span><span>在线</span></span>`
           : `<span class="${styles.badgeOffline}"><span class=\"h-2 w-2 rounded-full bg-rose-400\"></span><span>离线</span></span>`;
 
+
           const ports = node.detected_iperf_port ? `${node.detected_iperf_port}` : `${node.iperf_port}`;
-          const agentPortDisplay = maskPort(node.agent_port, privacyEnabled);
+          const agentPort = node.detected_agent_port || node.agent_port;
+          const agentPortDisplay = maskPort(agentPort, privacyEnabled);
           const iperfPortDisplay = maskPort(ports, privacyEnabled);
           const streamingBadges = renderStreamingBadges(node.id);
           const backboneBadges = renderBackboneBadges(node.backbone_latency);
@@ -2146,7 +2212,8 @@ def _login_html() -> str:
             ipDisplay.textContent = maskIp(node.ip, nextState);
           }
           if (agentPortSpan) {
-            agentPortSpan.textContent = `:${maskPort(node.agent_port, nextState)}`;
+            const agentPort = node.detected_agent_port || node.agent_port;
+            agentPortSpan.textContent = `:${maskPort(agentPort, nextState)}`;
           }
           if (iperfPortSpan) {
             iperfPortSpan.textContent = `· iperf ${maskPort(ports, nextState)}${node.description ? ' · ' + node.description : ''}`;
@@ -4053,6 +4120,7 @@ async def _check_node_health(node: Node) -> NodeWithStatus:
                     health_timestamp=data.get("timestamp"),
                     checked_at=checked_at,
                     detected_iperf_port=int(detected_port) if detected_port else None,
+                    detected_agent_port=node.agent_port,  # Agent port is the port we connected to
                     backbone_latency=backbone_latency or None,
                     streaming=streaming_statuses or None,
                     streaming_checked_at=streaming_checked_at,
@@ -4072,7 +4140,24 @@ async def _check_node_health(node: Node) -> NodeWithStatus:
         health_timestamp=None,
         checked_at=checked_at,
         detected_iperf_port=None,
+        detected_agent_port=None,
     )
+
+
+
+
+@app.post("/admin/sync_whitelist")
+async def sync_whitelist_endpoint(db: Session = Depends(get_db)):
+    """
+    Manually trigger whitelist synchronization to all agents.
+    Returns sync results with success/failed counts.
+    """
+    results = await _sync_whitelist_to_agents(db)
+    return {
+        "status": "ok",
+        "message": f"Whitelist synced to {results['success']}/{results['total_agents']} agents",
+        "results": results
+    }
 
 
 @app.get("/health")
@@ -4095,6 +4180,14 @@ def create_node(node: NodeCreate, db: Session = Depends(get_db)):
     _persist_state(db)
     _sync_agent_config(obj)
     health_monitor.invalidate(obj.id)
+    
+    # Sync whitelist to all agents (async, don't wait)
+    import asyncio
+    try:
+        asyncio.create_task(_sync_whitelist_to_agents(db))
+    except:
+        pass  # Ignore if event loop not running
+    
     return obj
 
 
@@ -4148,6 +4241,14 @@ def delete_node(node_id: int, db: Session = Depends(get_db)):
     except KeyError:
         pass
     health_monitor.invalidate(node_id)
+    
+    # Sync whitelist to all agents (async, don't wait)
+    import asyncio
+    try:
+        asyncio.create_task(_sync_whitelist_to_agents(db))
+    except:
+        pass  # Ignore if event loop not running
+    
     return {"status": "deleted"}
 
 
@@ -4181,6 +4282,53 @@ async def _ensure_iperf_server_running(dst: Node, requested_port: int) -> bool:
         await _start_iperf_server(dst, requested_port)
         return True
     return False
+
+
+async def _sync_whitelist_to_agents(db: Session) -> dict:
+    """
+    Synchronize IP whitelist to all agents.
+    Whitelist includes all node IPs + Master's own IP.
+    """
+    # Get all node IPs
+    nodes = db.scalars(select(Node)).all()
+    whitelist = [node.ip for node in nodes]
+    
+    # Add Master's own IP (if configured)
+    master_ip = os.getenv("MASTER_IP", "")
+    if master_ip and master_ip not in whitelist:
+        whitelist.append(master_ip)
+    
+    logger.info(f"Syncing whitelist with {len(whitelist)} IPs to {len(nodes)} agents")
+    
+    results = {
+        "total_agents": len(nodes),
+        "success": 0,
+        "failed": 0,
+        "errors": []
+    }
+    
+    # Send whitelist to each agent
+    async with httpx.AsyncClient(timeout=10) as client:
+        for node in nodes:
+            try:
+                url = f"http://{node.ip}:{node.agent_port}/update_whitelist"
+                response = await client.post(url, json={"allowed_ips": whitelist})
+                
+                if response.status_code == 200:
+                    results["success"] += 1
+                    logger.info(f"Whitelist synced to {node.name} ({node.ip})")
+                else:
+                    results["failed"] += 1
+                    error_msg = f"{node.name}: HTTP {response.status_code}"
+                    results["errors"].append(error_msg)
+                    logger.warning(f"Failed to sync whitelist to {node.name}: {error_msg}")
+            except Exception as e:
+                results["failed"] += 1
+                error_msg = f"{node.name}: {str(e)}"
+                results["errors"].append(error_msg)
+                logger.error(f"Failed to sync whitelist to {node.name}: {e}")
+    
+    return results
 
 
 async def _call_agent_test(src: Node, payload: dict, duration: int) -> dict:

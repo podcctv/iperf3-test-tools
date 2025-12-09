@@ -10,6 +10,10 @@ COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app.py /app/
+COPY ip_whitelist.py /app/
+
+# Create data directory for whitelist persistence
+RUN mkdir -p /app/data
 
 EXPOSE 8000 62001/tcp 62001/udp
 
