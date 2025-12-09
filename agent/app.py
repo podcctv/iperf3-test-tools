@@ -1218,8 +1218,10 @@ def run_test() -> Any:
     except subprocess.TimeoutExpired:
         return jsonify({"status": "error", "error": "timeout"}), 504
 
+
     if result.returncode != 0:
-        return jsonify({"status": "error", "error": result.stderr.strip()}), 500
+        error_msg = result.stderr.strip() or result.stdout.strip() or f"iperf3 failed with exit code {result.returncode}"
+        return jsonify({"status": "error", "error": error_msg}), 500
 
     try:
         output = json.loads(result.stdout)
