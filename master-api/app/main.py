@@ -3652,16 +3652,16 @@ def _login_html() -> str:
 
     loginButton?.addEventListener('click', (event) => { event.preventDefault(); login(); });
     loginForm?.addEventListener('submit', (event) => { event.preventDefault(); login(); });
-    document.getElementById('logout-btn').addEventListener('click', logout);
-    document.getElementById('run-test').addEventListener('click', runTest);
-    document.getElementById('run-suite-test').addEventListener('click', runSuiteTest);
+    document.getElementById('logout-btn')?.addEventListener('click', logout);
+    document.getElementById('run-test')?.addEventListener('click', runTest);
+    document.getElementById('run-suite-test')?.addEventListener('click', runSuiteTest);
     protocolSelect?.addEventListener('change', toggleProtocolOptions);
     singleTestTab?.addEventListener('click', () => setActiveTestTab('single'));
     suiteTestTab?.addEventListener('click', () => setActiveTestTab('suite'));
     suiteDstSelect?.addEventListener('change', syncSuitePort);
     suiteSrcSelect?.addEventListener('change', syncSuitePort);
     changePasswordBtn?.addEventListener('click', changePassword);
-    saveNodeBtn.addEventListener('click', saveNode);
+    saveNodeBtn?.addEventListener('click', saveNode);
 
     if (openAddNodeBtn) {
       openAddNodeBtn.addEventListener('click', () => {
@@ -3693,14 +3693,14 @@ def _login_html() -> str:
       });
     }
 
-    importConfigsBtn.addEventListener('click', () => configFileInput.click());
-    exportConfigsBtn.addEventListener('click', exportAgentConfigs);
-    configFileInput.addEventListener('change', (e) => importAgentConfigs(e.target.files[0]));
-    document.getElementById('refresh-tests').addEventListener('click', refreshTests);
-    deleteAllTestsBtn.addEventListener('click', clearAllTests);
+    importConfigsBtn?.addEventListener('click', () => configFileInput?.click());
+    exportConfigsBtn?.addEventListener('click', exportAgentConfigs);
+    configFileInput?.addEventListener('change', (e) => importAgentConfigs(e.target.files[0]));
+    document.getElementById('refresh-tests')?.addEventListener('click', refreshTests);
+    deleteAllTestsBtn?.addEventListener('click', clearAllTests);
 
     document.querySelectorAll('[data-refresh-nodes]').forEach((btn) => btn.addEventListener('click', refreshNodes));
-    dstSelect.addEventListener('change', syncTestPort);
+    dstSelect?.addEventListener('change', syncTestPort);
     passwordInput?.addEventListener('keyup', (e) => { if (e.key === 'Enter') login(); });
 
     function updateNodeStreamingBadges(nodeId) {
