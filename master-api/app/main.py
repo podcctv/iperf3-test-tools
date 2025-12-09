@@ -1258,7 +1258,27 @@ def _login_html() -> str:
           <h4 class="mb-3 text-lg font-semibold text-white">IP 白名单管理</h4>
           <p class="mb-4 text-sm text-slate-400">管理允许访问 Agent 的 IP 地址列表，支持 CIDR 网段。</p>
           
-          <div id="whitelist-alert" class="hidden mb-4 rounded-xl border border-slate-700 bg-slate-800/60 px-4 py-3 text-sm text-slate-100"></div>
+          <div id="whitelist-alert" class="hidden mb-4 rounded-xl border px-4 py-3 text-sm"></div>
+          
+          <!-- Add IP Form -->
+          <div class="mb-6 rounded-lg border border-slate-700/50 bg-slate-900/40 p-4">
+            <h5 class="mb-3 text-sm font-semibold text-white">添加 IP 地址</h5>
+            <div class="flex gap-2">
+              <input 
+                id="whitelist-ip-input" 
+                type="text" 
+                placeholder="例如: 10.0.0.1 或 10.0.0.0/24"
+                class="flex-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none"
+              />
+              <button 
+                onclick="addWhitelistIp()"
+                class="px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-sky-500 text-sm font-semibold text-white shadow-lg hover:scale-105 transition whitespace-nowrap"
+              >
+                <span>➕ 添加</span>
+              </button>
+            </div>
+            <p class="mt-2 text-xs text-slate-500">支持 IPv4、IPv6 和 CIDR 网段格式</p>
+          </div>
           
           <!-- Whitelist Stats -->
           <div id="whitelist-stats" class="mb-4 grid grid-cols-3 gap-3">
@@ -1277,10 +1297,10 @@ def _login_html() -> str:
           </div>
           
           <!-- Whitelist Actions -->
-          <div class="flex flex-wrap items-center gap-3">
-            <button id="view-whitelist-btn" onclick="viewWhitelist()" class="rounded-xl border border-slate-700 bg-slate-800/60 px-5 py-2.5 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200 inline-flex items-center gap-2">
-              <span>👁️</span>
-              <span>查看白名单</span>
+          <div class="flex flex-wrap items-center gap-3 mb-4">
+            <button id="refresh-whitelist-btn" onclick="refreshWhitelist()" class="rounded-xl border border-slate-700 bg-slate-800/60 px-5 py-2.5 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200 inline-flex items-center gap-2">
+              <span>🔄</span>
+              <span>刷新列表</span>
             </button>
             <button id="sync-whitelist-btn" onclick="syncWhitelist()" class="rounded-xl border border-emerald-500/40 bg-emerald-500/15 px-5 py-2.5 text-sm font-semibold text-emerald-100 shadow-sm transition hover:bg-emerald-500/25 inline-flex items-center gap-2">
               <span>🔄</span>
@@ -1292,15 +1312,25 @@ def _login_html() -> str:
             </button>
           </div>
           
-          <!-- Whitelist Display Area -->
-          <div id="whitelist-display" class="hidden mt-4 rounded-lg border border-slate-700 bg-slate-900/50 p-4 max-h-96 overflow-y-auto">
-            <div class="flex items-center justify-between mb-3">
-              <h5 class="text-sm font-semibold text-white">当前白名单</h5>
-              <button id="close-whitelist-display" class="text-slate-400 hover:text-white">✕</button>
-            </div>
-            <div id="whitelist-list" class="space-y-2">
-              <!-- Whitelist items will be displayed here -->
-            </div>
+          <!-- Whitelist Table -->
+          <div class="rounded-lg border border-slate-700 bg-slate-900/50 overflow-hidden">
+            <table class="w-full text-sm">
+              <thead class="bg-slate-800/60 text-slate-300 border-b border-slate-700">
+                <tr>
+                  <th class="text-left px-4 py-3 font-semibold">IP 地址</th>
+                  <th class="text-left px-4 py-3 font-semibold">来源</th>
+                  <th class="text-left px-4 py-3 font-semibold">类型</th>
+                  <th class="text-right px-4 py-3 font-semibold">操作</th>
+                </tr>
+              </thead>
+              <tbody id="whitelist-table-body" class="divide-y divide-slate-800">
+                <tr>
+                  <td colspan="4" class="px-4 py-8 text-center text-slate-500">
+                    加载中...
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
           
           <!-- Sync Results Display -->
@@ -1532,28 +1562,8 @@ def _login_html() -> str:
             });
         }
 
-        // Bind Settings Modal Tabs manually to ensure they work
-        const whitelistTabBtn = document.getElementById('whitelist-tab');
-        if (whitelistTabBtn) {
-             whitelistTabBtn.addEventListener('click', (e) => {
-                 e.preventDefault();
-                 setActiveSettingsTab('whitelist');
-             });
-        }
-        const configTabBtn = document.getElementById('config-tab');
-        if (configTabBtn) {
-             configTabBtn.addEventListener('click', (e) => {
-                 e.preventDefault();
-                 setActiveSettingsTab('config');
-             });
-        }
-        const passwordTabBtn = document.getElementById('password-tab');
-        if (passwordTabBtn) {
-             passwordTabBtn.addEventListener('click', (e) => {
-                 e.preventDefault();
-                 setActiveSettingsTab('password');
-             });
-        }
+        // NOTE: Settings modal tab buttons use inline onclick handlers
+        // Do NOT add addEventListener here as it will conflict with onclick
         
         // Config elements
         configAlert = document.getElementById('config-alert');
