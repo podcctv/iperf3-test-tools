@@ -1350,6 +1350,7 @@ def _login_html() -> str:
     }
 
     function setActiveSettingsTab(tabName) {
+      console.log('setActiveSettingsTab called with:', tabName);
       // Buttons
       const passwordTab = document.getElementById('password-tab');
       const configTab = document.getElementById('config-tab');
@@ -1359,6 +1360,8 @@ def _login_html() -> str:
       const passwordPanel = document.getElementById('password-panel');
       const configPanel = document.getElementById('config-panel');
       const whitelistPanel = document.getElementById('whitelist-panel');
+      
+      console.log('Elements found:', { passwordTab, configTab, whitelistTab, passwordPanel, configPanel, whitelistPanel });
       
       // Reset all buttons style
       [passwordTab, configTab, whitelistTab].forEach(btn => {
@@ -1382,11 +1385,13 @@ def _login_html() -> str:
         configTab.className = activeBtnClass;
         configPanel.classList.remove('hidden');
       } else if (tabName === 'whitelist' && whitelistTab && whitelistPanel) { // Support for whitelist tab
+        console.log('Activating whitelist tab');
         whitelistTab.className = activeBtnClass;
         whitelistPanel.classList.remove('hidden');
         // Initial fetch of stats when opening tab
         checkWhitelistStatus();
       }
+      console.log('setActiveSettingsTab completed');
     }
 
     // IP Whitelist Functions
