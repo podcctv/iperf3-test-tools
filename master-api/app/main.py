@@ -4338,10 +4338,14 @@ async def _execute_schedule_task(schedule_id: int):
             if not src_node or not dst_node:
                 raise Exception("Source or destination node not found")
             
+            # Get current detected port from health check
+            dst_status = await health_monitor.check_node(dst_node)
+            current_port = dst_status.detected_iperf_port or dst_status.iperf_port
+            
             # 构造测试参数
             test_params = {
                 "target": dst_node.ip,
-                "port": schedule.port or dst_node.iperf_port,
+                "port": schedule.port or current_port,  # Use detected port instead of stale DB value
                 "duration": schedule.duration,
                 "protocol": schedule.protocol,
                 "parallel": schedule.parallel,
