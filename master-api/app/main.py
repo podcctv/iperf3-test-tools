@@ -4844,12 +4844,12 @@ def _whitelist_html() -> str:
       }});
     }}
 
+
     init();
   </script>
 </body>
-</html>''
+</html>'''
 
-'
 
 def _schedules_html() -> str:
     return '''<!DOCTYPE html>
