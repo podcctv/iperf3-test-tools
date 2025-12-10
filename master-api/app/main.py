@@ -4449,11 +4449,33 @@ def _tests_page_html() -> str:
       const parallel = document.getElementById('parallel').value;
       const reverse = document.getElementById('reverse').checked;
       
+      // Get the target node's iperf port
+      const dstNode = nodeCache.find(n => n.id === parseInt(dstId));
+      const port = dstNode?.detected_iperf_port || dstNode?.iperf_port || 62001;
+      
+      // Get bandwidth and omit values
+      const tcpBandwidth = document.getElementById('tcp-bandwidth')?.value || null;
+      const udpBandwidth = document.getElementById('udp-bandwidth')?.value || null;
+      const omit = parseInt(document.getElementById('omit')?.value) || 0;
+      const bandwidth = protocol === 'udp' ? udpBandwidth : (tcpBandwidth || null);
+      
       try {
+        const payload = { 
+          src_node_id: parseInt(srcId), 
+          dst_node_id: parseInt(dstId), 
+          protocol, 
+          duration: parseInt(duration), 
+          parallel: parseInt(parallel), 
+          reverse,
+          port
+        };
+        if (bandwidth) payload.bandwidth = bandwidth;
+        if (omit > 0) payload.omit = omit;
+        
         const res = await apiFetch('/tests', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ src_node_id: parseInt(srcId), dst_node_id: parseInt(dstId), protocol, duration: parseInt(duration), parallel: parseInt(parallel), reverse })
+          body: JSON.stringify(payload)
         });
         if (!res.ok) throw new Error('Test failed');
         loadTests();
@@ -4462,6 +4484,7 @@ def _tests_page_html() -> str:
         alert.classList.remove('hidden');
       }
     }
+
     
     async function runSuiteTest() {
       const alert = document.getElementById('test-alert');
@@ -4472,11 +4495,15 @@ def _tests_page_html() -> str:
       const duration = document.getElementById('suite-duration').value;
       const parallel = document.getElementById('suite-parallel').value;
       
+      // Get the target node's iperf port
+      const dstNode = nodeCache.find(n => n.id === parseInt(dstId));
+      const port = dstNode?.detected_iperf_port || dstNode?.iperf_port || 62001;
+      
       try {
         const res = await apiFetch('/tests/suite', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ src_node_id: parseInt(srcId), dst_node_id: parseInt(dstId), duration: parseInt(duration), parallel: parseInt(parallel) })
+          body: JSON.stringify({ src_node_id: parseInt(srcId), dst_node_id: parseInt(dstId), duration: parseInt(duration), parallel: parseInt(parallel), port })
         });
         if (!res.ok) throw new Error('Test failed');
         loadTests();
