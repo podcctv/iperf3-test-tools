@@ -21,7 +21,7 @@ services:
       AGENT_IMAGE: ${AGENT_IMAGE:-iperf-agent:latest}
       STATE_FILE_PATH: /app/data/master_state.json
       STATE_RECENT_TESTS: ${STATE_RECENT_TESTS:-50}
-      MASTER_IP: ${MASTER_IP:-103.214.22.58}
+      MASTER_IP: ${MASTER_IP:-}
     ports:
       - "${MASTER_API_PORT:-9000}:8000"
       - "${MASTER_WEB_PORT:-9100}:8000"

@@ -6041,8 +6041,19 @@ async def _sync_whitelist_to_agents(db: Session, max_retries: int = 2, force: bo
     nodes = db.scalars(select(Node)).all()
     whitelist = [node.ip for node in nodes]
     
-    # Add Master's own IP (if configured)
+    # Add Master's own IP (configured or auto-detected)
     master_ip = os.getenv("MASTER_IP", "")
+    if not master_ip:
+        # Auto-detect public IP
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                resp = await client.get("https://api.ipify.org")
+                if resp.status_code == 200:
+                    master_ip = resp.text.strip()
+                    logger.info(f"Auto-detected Master IP: {master_ip}")
+        except Exception as e:
+            logger.warning(f"Failed to auto-detect Master IP: {e}")
+    
     if master_ip and master_ip not in whitelist:
         whitelist.append(master_ip)
     
