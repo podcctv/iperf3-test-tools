@@ -7,7 +7,10 @@ RUN apt-get update \
 WORKDIR /app
 
 COPY requirements.txt /app/
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt \
+    -i https://mirrors.aliyun.com/pypi/simple/ \
+    --trusted-host mirrors.aliyun.com \
+    --timeout 120
 
 COPY app.py /app/
 COPY ip_whitelist.py /app/

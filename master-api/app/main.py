@@ -2679,12 +2679,27 @@ def _login_html() -> str:
 
     function maskIp(ip, hidden) {
       if (!hidden || !ip) return ip;
-      // Mask last two segments: 1.2.3.4 -> 1.2.*.*
-      const parts = ip.split('.');
-      if (parts.length === 4) {
-          return `${parts[0]}.${parts[1]}.*.*`;
+      
+      // Check if it's a domain name (contains non-numeric parts)
+      const isIp = /^[\d.:]+$/.test(ip);
+      
+      if (isIp) {
+        // Mask last two segments of IPv4: 1.2.3.4 -> 1.2.*.*
+        const parts = ip.split('.');
+        if (parts.length === 4) {
+            return `${parts[0]}.${parts[1]}.*.*`;
+        }
+        return ip.replace(/[\d]+$/, '*'); // Fallback for IPv6 or other
+      } else {
+        // Domain name: keep first subdomain, mask the rest
+        // hkt-ty-line-1.sudatech.store -> hkt-ty-line-1.**.**
+        const parts = ip.split('.');
+        if (parts.length >= 2) {
+          const maskedParts = parts.map((part, idx) => idx === 0 ? part : '**');
+          return maskedParts.join('.');
+        }
+        return ip;
       }
-      return ip.replace(/\d+$/, '*'); // Fallback for IPv6 or other
     }
 
     async function refreshNodes() {
