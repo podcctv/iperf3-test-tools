@@ -997,6 +997,16 @@ def _login_html() -> str:
   </style>
 </head>
 <body>
+  <!-- Guest Mode Banner -->
+  <div id="guest-banner" class="hidden" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(90deg,#f59e0b,#d97706);text-align:center;padding:8px 16px;font-size:14px;font-weight:600;color:#1e293b;box-shadow:0 2px 8px rgba(0,0,0,0.3);">
+    👁️ 访客模式 · 仅可查看，无法操作
+  </div>
+  <script>
+    if (document.cookie.includes('guest_session=readonly')) {
+      document.getElementById('guest-banner').classList.remove('hidden');
+      document.body.style.paddingTop = '40px';
+    }
+  </script>
   <div class="radix-themes min-h-screen" data-theme="dark">
     <div class="page-frame">
       <div class="page-content">
@@ -4051,6 +4061,16 @@ def _tests_page_html() -> str:
   </script>
 </head>
 <body class="text-slate-100">
+  <!-- Guest Mode Banner -->
+  <div id="guest-banner" class="hidden" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(90deg,#f59e0b,#d97706);text-align:center;padding:8px 16px;font-size:14px;font-weight:600;color:#1e293b;box-shadow:0 2px 8px rgba(0,0,0,0.3);">
+    👁️ 访客模式 · 仅可查看，无法操作
+  </div>
+  <script>
+    if (document.cookie.includes('guest_session=readonly')) {
+      document.getElementById('guest-banner').classList.remove('hidden');
+      document.body.style.paddingTop = '40px';
+    }
+  </script>
   <div class="container mx-auto px-4 py-8 max-w-5xl">
     <!-- Header -->
     <div class="mb-8 flex items-center justify-between">
@@ -4525,6 +4545,16 @@ def _schedules_html() -> str:
   </style>
 </head>
 <body class="text-slate-100">
+  <!-- Guest Mode Banner -->
+  <div id="guest-banner" class="hidden" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(90deg,#f59e0b,#d97706);text-align:center;padding:8px 16px;font-size:14px;font-weight:600;color:#1e293b;box-shadow:0 2px 8px rgba(0,0,0,0.3);">
+    👁️ 访客模式 · 仅可查看，无法操作
+  </div>
+  <script>
+    if (document.cookie.includes('guest_session=readonly')) {{
+      document.getElementById('guest-banner').classList.remove('hidden');
+      document.body.style.paddingTop = '40px';
+    }}
+  </script>
   <div class="container mx-auto px-4 py-8 max-w-7xl">
     <!-- Header -->
     <div class="mb-8 flex items-center justify-between">
@@ -5726,6 +5756,70 @@ async def _check_node_health(node: Node) -> NodeWithStatus:
         whitelist_sync_at=getattr(node, "whitelist_sync_at", None),
     )
 
+
+# --- Reverse Agent Registration (for internal/NAT devices) ---
+from pydantic import BaseModel
+
+class AgentRegistration(BaseModel):
+    node_name: str
+    iperf_port: int = 5201
+    master_url: str = ""  # For reference
+
+@app.post("/api/agent/register")
+async def register_reverse_agent(
+    registration: AgentRegistration,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Register a reverse/internal agent that polls master.
+    Creates or updates a node entry for this agent.
+    """
+    # Get client IP
+    client_ip = request.client.host if request.client else "unknown"
+    
+    # Check if forwarded
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        client_ip = forwarded.split(",")[0].strip()
+    
+    # Find existing node by name
+    existing = db.scalars(
+        select(Node).where(Node.name == registration.node_name)
+    ).first()
+    
+    if existing:
+        # Update existing node with current IP
+        existing.ip = client_ip
+        existing.iperf_port = registration.iperf_port
+        existing.description = f"内网 agent (反向穿透) - {registration.master_url}"
+        db.commit()
+        db.refresh(existing)
+        return {
+            "status": "updated",
+            "node_id": existing.id,
+            "node_name": existing.name,
+            "ip": client_ip
+        }
+    
+    # Create new node
+    new_node = Node(
+        name=registration.node_name,
+        ip=client_ip,
+        agent_port=8000,
+        iperf_port=registration.iperf_port,
+        description=f"内网 agent (反向穿透) - {registration.master_url}"
+    )
+    db.add(new_node)
+    db.commit()
+    db.refresh(new_node)
+    
+    return {
+        "status": "registered",
+        "node_id": new_node.id,
+        "node_name": new_node.name,
+        "ip": client_ip
+    }
 
 
 @app.post("/nodes", response_model=NodeRead)

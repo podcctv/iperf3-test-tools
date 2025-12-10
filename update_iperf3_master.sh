@@ -128,9 +128,10 @@ echo "================ 安装选项 ================"
 echo "1) 自动安装 master（含本机 agent 容器）"
 echo "2) 自动安装 agent（仅作为测试节点）"
 echo "3) 手动安装 agent（NAT VPS 指定端口）"
-echo "4) 不执行安装（仅更新代码）"
+echo "4) 手动安装 agent（内网设备 反向穿透）"
+echo "5) 不执行安装（仅更新代码）"
 echo "========================================="
-read -rp "请选择 [1/2/3/4]：" choice
+read -rp "请选择 [1/2/3/4/5]：" choice
 
 case "$choice" in
     1)
@@ -163,6 +164,58 @@ case "$choice" in
         fi
         ;;
     4)
+        # 手动安装 agent（内网设备，反向穿透 HTTP polling）
+        cleanup_docker
+        echo "[INFO] 内网 agent 安装（反向穿透模式）"
+        echo ""
+        read -rp "请输入主控 Master API URL (如 https://yourdomain.com 或 http://1.2.3.4:8000): " MASTER_URL
+        while [ -z "$MASTER_URL" ]; do
+            read -rp "Master URL 不能为空，请重新输入: " MASTER_URL
+        done
+        
+        read -rp "请输入节点名称 (用于在主控中显示): " NODE_NAME
+        while [ -z "$NODE_NAME" ]; do
+            read -rp "节点名称不能为空，请重新输入: " NODE_NAME
+        done
+        
+        IPERF_PORT=$(prompt_required_port "iperf3 端口" "5201")
+        
+        echo "[INFO] 配置内网 agent..."
+        echo "[INFO] Master URL: $MASTER_URL"
+        echo "[INFO] 节点名称: $NODE_NAME"
+        echo "[INFO] iperf3 端口: $IPERF_PORT"
+        
+        # 创建 agent 配置目录
+        mkdir -p /opt/iperf-agent
+        cat > /opt/iperf-agent/config.json << EOF
+{
+    "mode": "reverse",
+    "master_url": "$MASTER_URL",
+    "node_name": "$NODE_NAME",
+    "iperf_port": $IPERF_PORT,
+    "poll_interval": 10
+}
+EOF
+        
+        # 运行内网 agent 容器
+        docker pull podcctv/iperf-agent:latest || true
+        docker run -d \
+            --name iperf-agent-reverse \
+            --restart=always \
+            -p ${IPERF_PORT}:${IPERF_PORT}/tcp \
+            -p ${IPERF_PORT}:${IPERF_PORT}/udp \
+            -v /opt/iperf-agent/config.json:/app/config.json:ro \
+            -e MASTER_URL="$MASTER_URL" \
+            -e NODE_NAME="$NODE_NAME" \
+            -e IPERF_PORT="$IPERF_PORT" \
+            -e AGENT_MODE="reverse" \
+            podcctv/iperf-agent:latest
+        
+        echo "[INFO] 内网 agent 安装完成！"
+        echo "[INFO] Agent 将定期向 $MASTER_URL 注册并获取测试任务"
+        echo "[INFO] 请确保主控 Master API 可以从当前网络访问"
+        ;;
+    5)
         echo "[INFO] Skip installation. Done."
         ;;
     *)
