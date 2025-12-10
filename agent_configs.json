@@ -3,7 +3,7 @@
     "name": "日本VPS-S型",
     "host": "212.135.210.155",
     "agent_port": 8000,
-    "iperf_port": 38673,
+    "iperf_port": 21774,
     "description": ""
   },
   {

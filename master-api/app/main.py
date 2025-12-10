@@ -4450,7 +4450,7 @@ def _tests_page_html() -> str:
       const reverse = document.getElementById('reverse').checked;
       
       try {
-        const res = await apiFetch('/test', {
+        const res = await apiFetch('/tests', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ src_node_id: parseInt(srcId), dst_node_id: parseInt(dstId), protocol, duration: parseInt(duration), parallel: parseInt(parallel), reverse })
@@ -4473,7 +4473,7 @@ def _tests_page_html() -> str:
       const parallel = document.getElementById('suite-parallel').value;
       
       try {
-        const res = await apiFetch('/test/dual', {
+        const res = await apiFetch('/tests/suite', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ src_node_id: parseInt(srcId), dst_node_id: parseInt(dstId), duration: parseInt(duration), parallel: parseInt(parallel) })
