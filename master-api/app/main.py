@@ -4276,6 +4276,13 @@ def _tests_page_html() -> str:
           const raw = test.raw_result || {};
           const isSuite = raw.mode === 'suite' && Array.isArray(raw.tests);
           
+          // Format timestamp
+          const testDate = test.created_at ? new Date(test.created_at) : null;
+          const timeStr = testDate ? testDate.toLocaleString('zh-CN', { 
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false 
+          }).replace(/\//g, '-') : '';
+          
           // Extract metrics from raw_result
           let metricsHtml = '';
           const formatSpeed = (bps) => bps ? ((bps / 1e6).toFixed(2) + ' Mbps') : '-';
@@ -4327,8 +4334,9 @@ def _tests_page_html() -> str:
                 </div>
               </div>`;
           } else {
-            // Single test
-            const endData = raw.end || {};
+            // Single test - check for iperf_result nesting
+            const iperfResult = raw.iperf_result || raw;
+            const endData = iperfResult.end || raw.end || {};
             const sumReceived = endData.sum_received || endData.sum || {};
             const sumSent = endData.sum_sent || endData.sum || {};
             const streams = endData.streams?.[0];
@@ -4360,7 +4368,7 @@ def _tests_page_html() -> str:
             <div class="rounded-xl border border-slate-800/70 bg-slate-900/60 p-4 space-y-2">
               <div class="flex items-center justify-between">
                 <div>
-                  <span class="text-xs text-sky-300/70 uppercase">#${test.id} · ${isSuite ? 'SUITE' : protocol}</span>
+                  <span class="text-xs text-sky-300/70 uppercase">#${test.id} · ${isSuite ? 'SUITE' : protocol}${timeStr ? ' · ' + timeStr : ''}</span>
                   <p class="text-base font-semibold text-white">${srcName} → ${dstName}</p>
                 </div>
                 <button onclick="deleteTest(${test.id})" class="text-xs text-rose-400 hover:text-rose-300 ${window.isGuest ? 'hidden' : ''}">删除</button>
