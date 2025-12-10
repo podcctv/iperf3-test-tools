@@ -197,8 +197,11 @@ case "$choice" in
 }
 EOF
         
+        # 构建内网 agent 镜像（从本地 Dockerfile）
+        echo "[INFO] 正在构建 agent 镜像..."
+        docker build -t iperf-agent-reverse:latest "${REPO_DIR}/agent"
+        
         # 运行内网 agent 容器
-        docker pull podcctv/iperf-agent:latest || true
         docker run -d \
             --name iperf-agent-reverse \
             --restart=always \
@@ -209,7 +212,7 @@ EOF
             -e NODE_NAME="$NODE_NAME" \
             -e IPERF_PORT="$IPERF_PORT" \
             -e AGENT_MODE="reverse" \
-            podcctv/iperf-agent:latest
+            iperf-agent-reverse:latest
         
         echo "[INFO] 内网 agent 安装完成！"
         echo "[INFO] Agent 将定期向 $MASTER_URL 注册并获取测试任务"
