@@ -118,9 +118,23 @@ class IPWhitelist:
         """Check if an IP is in the whitelist (supports CIDR matching)"""
         import ipaddress
         
+        # Normalize IPv4-mapped IPv6 addresses (e.g., ::ffff:192.168.1.1 -> 192.168.1.1)
+        original_ip = ip
+        try:
+            ip_obj = ipaddress.ip_address(ip)
+            if ip_obj.version == 6 and ip_obj.ipv4_mapped:
+                ip = str(ip_obj.ipv4_mapped)
+                logger.debug(f"Normalized IPv4-mapped IPv6: {original_ip} -> {ip}")
+        except ValueError:
+            pass  # Not a valid IP, will be handled below
+        
         with self._lock:
             # Direct match
             if ip in self._allowed_ips:
+                return True
+            
+            # Also check original IP in case it was in the whitelist as IPv6
+            if original_ip != ip and original_ip in self._allowed_ips:
                 return True
             
             # Check CIDR ranges

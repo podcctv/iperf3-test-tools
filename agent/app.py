@@ -1194,6 +1194,13 @@ def require_whitelisted_ip(f):
     def decorated_function(*args, **kwargs):
         client_ip = _get_client_ip()
         
+        # DEBUG: Log all request details for troubleshooting
+        app.logger.info(f"[DEBUG] Whitelist Check - Client IP: {client_ip}")
+        app.logger.info(f"[DEBUG] Headers: X-Real-IP={request.headers.get('X-Real-IP')}, "
+                       f"X-Forwarded-For={request.headers.get('X-Forwarded-For')}, "
+                       f"Remote-Addr={request.remote_addr}")
+        app.logger.info(f"[DEBUG] Current Whitelist: {whitelist.get_all()}")
+        
         if not whitelist.is_allowed(client_ip):
             app.logger.warning(
                 f"[SECURITY] Rejected request from non-whitelisted IP: {client_ip} "
@@ -1204,7 +1211,13 @@ def require_whitelisted_ip(f):
                 "error": "IP not whitelisted",
                 "message": "Your IP address is not authorized to access this service. "
                           "Contact the administrator to add your IP to the whitelist.",
-                "client_ip": client_ip
+                "client_ip": client_ip,
+                "allowed_ips": whitelist.get_all(),
+                "debug": {
+                    "x_real_ip": request.headers.get('X-Real-IP'),
+                    "x_forwarded_for": request.headers.get('X-Forwarded-For'),
+                    "remote_addr": request.remote_addr
+                }
             }), 403
         
         app.logger.info(f"[ACCESS] Request from whitelisted IP: {client_ip} to {request.endpoint}")
@@ -1492,12 +1505,19 @@ def update_whitelist() -> Any:
     Update IP whitelist from Master.
     Only accepts requests from Master IP (configured via MASTER_IP env var).
     """
-    # Verify request is from Master
+    # Get client IP using shared function for consistency
+    client_ip = _get_client_ip()
     master_ip = os.getenv("MASTER_IP", "")
-    client_ip = request.headers.get('X-Real-IP') or request.headers.get('X-Forwarded-For') or request.remote_addr
     
+    # DEBUG: Log request details
+    app.logger.info(f"[DEBUG] Whitelist Update Request - Client IP: {client_ip}, Configured Master: {master_ip}")
+    app.logger.info(f"[DEBUG] Headers: X-Real-IP={request.headers.get('X-Real-IP')}, "
+                   f"X-Forwarded-For={request.headers.get('X-Forwarded-For')}, "
+                   f"Remote-Addr={request.remote_addr}")
+    
+    # Check if MASTER_IP is set and verify caller
     if master_ip and master_ip != "0.0.0.0" and client_ip != master_ip:
-        app.logger.warning(f"Rejected whitelist update from non-master IP: {client_ip} (expected {master_ip})")
+        app.logger.warning(f"[SECURITY] Rejected whitelist update from {client_ip} (expected {master_ip})")
         return jsonify({
             "status": "error",
             "error": f"Only Master can update whitelist. Request from {client_ip}, expected {master_ip}"
