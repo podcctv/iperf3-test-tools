@@ -2730,11 +2730,11 @@ def _login_html() -> str:
 
           const ports = node.detected_iperf_port ? `${node.detected_iperf_port}` : `${node.iperf_port}`;
           const agentPort = node.detected_agent_port || node.agent_port;
-          const agentPortDisplay = maskPort(agentPort, privacyEnabled);
-          const iperfPortDisplay = maskPort(ports, privacyEnabled);
+          const agentPortDisplay = maskPort(agentPort, privacyEnabled || window.isGuest);
+          const iperfPortDisplay = maskPort(ports, privacyEnabled || window.isGuest);
           const streamingBadges = renderStreamingBadges(node.id);
           const backboneBadges = renderBackboneBadges(node.backbone_latency);
-          const ipMasked = maskIp(node.ip, privacyEnabled);
+          const ipMasked = maskIp(node.ip, privacyEnabled || window.isGuest);
 
         const item = document.createElement('div');
         item.className = styles.rowCard;
@@ -2751,9 +2751,9 @@ def _login_html() -> str:
                 ${syncBadge}
                 ${versionBadge}
                 <span class="text-base font-semibold text-white drop-shadow">${node.name}</span>
-                <button type="button" class="${styles.iconButton}" data-privacy-toggle="${node.id}" aria-label="切换 IP 隐藏">
+                ${!window.isGuest ? `<button type="button" class="${styles.iconButton}" data-privacy-toggle="${node.id}" aria-label="切换 IP 隐藏">
                   <span class="text-base">${ipPrivacyState[node.id] ? '🙈' : '👁️'}</span>
-                </button>
+                </button>` : ''}
               </div>
               ${backboneBadges ? `<div class=\"flex flex-wrap items-center gap-2\">${backboneBadges}</div>` : ''}
               <div class="flex flex-wrap items-center gap-2" data-streaming-badges="${node.id}">${streamingBadges || ''}</div>
@@ -2765,11 +2765,11 @@ def _login_html() -> str:
                 <span class="text-slate-500 border-l border-slate-700 pl-2" id="isp-${node.id}"></span>
               </p>
             </div>
-            <div class="flex flex-wrap items-center justify-start gap-2 lg:flex-col lg:items-end lg:justify-center lg:min-w-[170px] opacity-100 md:opacity-0 md:pointer-events-none md:transition md:duration-200 md:group-hover:opacity-100 md:group-hover:pointer-events-auto md:focus-within:opacity-100 md:focus-within:pointer-events-auto">
+            ${!window.isGuest ? `<div class="flex flex-wrap items-center justify-start gap-2 lg:flex-col lg:items-end lg:justify-center lg:min-w-[170px] opacity-100 md:opacity-0 md:pointer-events-none md:transition md:duration-200 md:group-hover:opacity-100 md:group-hover:pointer-events-auto md:focus-within:opacity-100 md:focus-within:pointer-events-auto">
               <button class="${styles.pillInfo}" onclick="runStreamingCheck(${node.id})">流媒体解锁测试</button>
               <button class="${styles.pillInfo}" onclick="editNode(${node.id})">编辑</button>
               <button class="${styles.pillDanger}" onclick="removeNode(${node.id})">删除</button>
-            </div>
+            </div>` : ''}
           </div>
         `;
         nodesList.appendChild(item);
@@ -5482,7 +5482,7 @@ def dashboard() -> HTMLResponse:
 @app.get("/web/schedules")
 async def schedules_page(request: Request):
     """定时任务管理页面"""
-    if not auth_manager().is_authenticated(request):
+    if not auth_manager().is_authenticated(request) and not _is_guest(request):
         return HTMLResponse(content="<script>window.location.href='/web';</script>")
     
     return HTMLResponse(content=_schedules_html())
@@ -5491,7 +5491,7 @@ async def schedules_page(request: Request):
 @app.get("/web/tests")
 async def tests_page(request: Request):
     """单次测试页面 - 显示测试计划和最近测试"""
-    if not auth_manager().is_authenticated(request):
+    if not auth_manager().is_authenticated(request) and not _is_guest(request):
         return HTMLResponse(content="<script>window.location.href='/web';</script>")
     
     return HTMLResponse(content=_tests_page_html())
@@ -5535,6 +5535,7 @@ def guest_login(response: Response) -> dict:
 @app.post("/auth/logout")
 def logout(response: Response) -> dict:
     response.delete_cookie(settings.dashboard_cookie_name)
+    response.delete_cookie("guest_session")  # Also clear guest session
     return {"status": "logged_out"}
 
 
