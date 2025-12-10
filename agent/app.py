@@ -1545,6 +1545,72 @@ def update_whitelist() -> Any:
         return jsonify({"status": "error", "error": str(e)}), 500
 
 
+@app.route("/merge_whitelist", methods=["POST"])
+def merge_whitelist() -> Any:
+    """
+    Merge IPs into whitelist (APPEND mode - keeps existing IPs).
+    
+    This is designed for multi-Master scenarios where multiple Masters
+    share the same Agent. Each Master can add its IPs without removing
+    IPs added by other Masters.
+    """
+    client_ip = _get_client_ip()
+    
+    app.logger.info(f"[DEBUG] Whitelist Merge Request - Client IP: {client_ip}")
+    
+    try:
+        data = request.get_json(force=True)
+        ips_to_add = data.get("allowed_ips", [])
+        
+        if not isinstance(ips_to_add, list):
+            return jsonify({"status": "error", "error": "allowed_ips must be a list"}), 400
+        
+        # Merge IPs into whitelist
+        result = whitelist.merge(ips_to_add)
+        
+        app.logger.info(f"Whitelist merged: {result['added']} added, {result['skipped']} skipped from {client_ip}")
+        
+        return jsonify({
+            "status": "ok",
+            "message": f"Merged {result['added']} new IPs, {result['skipped']} already existed",
+            "result": result,
+            "allowed_ips": whitelist.get_all()
+        })
+    except Exception as e:
+        app.logger.error(f"Failed to merge whitelist: {e}")
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/remove_whitelist_ips", methods=["POST"])
+def remove_whitelist_ips() -> Any:
+    """
+    Remove specific IPs from whitelist.
+    """
+    client_ip = _get_client_ip()
+    
+    app.logger.info(f"[DEBUG] Whitelist Remove Request - Client IP: {client_ip}")
+    
+    try:
+        data = request.get_json(force=True)
+        ips_to_remove = data.get("ips", [])
+        
+        if not isinstance(ips_to_remove, list):
+            return jsonify({"status": "error", "error": "ips must be a list"}), 400
+        
+        # Remove IPs from whitelist
+        result = whitelist.remove_ips(ips_to_remove)
+        
+        app.logger.info(f"Whitelist IPs removed: {result['removed']} removed from {client_ip}")
+        
+        return jsonify({
+            "status": "ok",
+            "message": f"Removed {result['removed']} IPs, {result['not_found']} not found",
+            "result": result,
+            "allowed_ips": whitelist.get_all()
+        })
+    except Exception as e:
+        app.logger.error(f"Failed to remove whitelist IPs: {e}")
+        return jsonify({"status": "error", "error": str(e)}), 500
 
 
 

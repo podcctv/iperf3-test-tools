@@ -1048,6 +1048,7 @@ def _login_html() -> str:
               <div class="flex flex-wrap items-center gap-3">
                 <a href="/web/tests" class="rounded-lg border border-sky-500/40 bg-sky-500/15 px-4 py-2 text-sm font-semibold text-sky-100 shadow-sm transition hover:bg-sky-500/25">单次测试</a>
                 <a href="/web/schedules" class="rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-100 shadow-sm transition hover:bg-emerald-500/25">定时任务</a>
+                <a href="/web/whitelist" class="guest-hide rounded-lg border border-amber-500/40 bg-amber-500/15 px-4 py-2 text-sm font-semibold text-amber-100 shadow-sm transition hover:bg-amber-500/25">白名单管理</a>
                 <button id="open-settings" onclick="toggleSettingsModal(true)" class="guest-hide rounded-lg border border-indigo-500/40 bg-indigo-500/15 px-4 py-2 text-sm font-semibold text-indigo-100 shadow-sm transition hover:bg-indigo-500/25 inline-flex items-center gap-2">
                   <span class="text-base">⚙️</span>
                   <span>设置</span>
@@ -4581,6 +4582,275 @@ def _tests_page_html() -> str:
 </body>
 </html>'''
 
+
+def _whitelist_html() -> str:
+    return f'''<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>白名单管理 - iperf3 Master</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {{ background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); min-height: 100vh; }}
+    .glass-card {{ background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(148, 163, 184, 0.1); }}
+  </style>
+</head>
+<body class="text-slate-100">
+  <div class="container mx-auto px-4 py-8 max-w-6xl">
+    <!-- Header -->
+    <div class="mb-8 flex items-center justify-between">
+      <div>
+        <h1 class="text-3xl font-bold text-white">白名单管理</h1>
+        <p class="text-slate-400 mt-1">IP Whitelist Management</p>
+      </div>
+      <div class="flex gap-3">
+        <a href="/web" class="px-4 py-2 rounded-lg border border-slate-700 bg-slate-800/60 text-sm font-semibold text-slate-100 hover:border-sky-500 transition">
+          ← 返回主页
+        </a>
+        <button id="sync-btn" class="px-4 py-2 rounded-lg bg-gradient-to-r from-sky-500 to-indigo-500 text-sm font-semibold text-white shadow-lg hover:scale-105 transition">
+          🔄 同步白名单
+        </button>
+      </div>
+    </div>
+
+    <!-- Master IP Card -->
+    <div class="glass-card rounded-2xl p-6 mb-6">
+      <h2 class="text-xl font-semibold text-amber-400 mb-4">Master API 信息</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <p class="text-slate-400 text-sm mb-1">Master IP</p>
+          <p id="master-ip" class="text-white font-mono text-lg">加载中...</p>
+        </div>
+        <div>
+          <p class="text-slate-400 text-sm mb-1">状态</p>
+          <p id="master-status" class="text-emerald-400">正常运行</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add IP Card -->
+    <div class="glass-card rounded-2xl p-6 mb-6">
+      <h2 class="text-xl font-semibold text-sky-400 mb-4">添加 IP 到白名单</h2>
+      <div class="flex gap-3">
+        <input 
+          id="ip-input" 
+          type="text" 
+          placeholder="输入 IP 地址 (e.g., 192.168.1.100)" 
+          class="flex-1 px-4 py-2 rounded-lg bg-slate-800/60 border border-slate-700 text-white focus:border-sky-500 focus:outline-none"
+        />
+        <input 
+          id="description-input" 
+          type="text" 
+          placeholder="描述 (可选)" 
+          class="flex-1 px-4 py-2 rounded-lg bg-slate-800/60 border border-slate-700 text-white focus:border-sky-500 focus:outline-none"
+        />
+        <button 
+          id="add-ip-btn" 
+          class="px-6 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-sky-500 text-sm font-semibold text-white shadow-lg hover:scale-105 transition">
+          添加
+        </button>
+      </div>
+      <p id="add-status" class="mt-2 text-sm"></p>
+    </div>
+
+    <!-- Whitelist Table -->
+    <div class="glass-card rounded-2xl p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-xl font-semibold text-white">当前白名单 (<span id="ip-count">0</span>)</h2>
+        <button id="refresh-btn" class="px-4 py-2 rounded-lg border border-slate-700 bg-slate-800/60 text-sm font-semibold text-slate-100 hover:border-sky-500 transition">
+          刷新
+        </button>
+      </div>
+      <div id="whitelist-container" class="space-y-2">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = '';
+    
+    async function apiFetch(url, options = {}) {{
+      const response = await fetch(API_BASE + url, {{
+        ...options,
+        credentials: 'include'
+      }});
+      if (!response.ok && response.status === 401) {{
+        window.location.href = '/web';
+        return null;
+      }}
+      return response;
+    }}
+
+    async function loadWhitelist() {{
+      try {{
+        const res = await apiFetch('/admin/whitelist');
+        const data = await res.json();
+        
+        if (data.status === 'ok') {{
+          displayWhitelist(data);
+        }}
+      }} catch (e) {{
+        console.error('Failed to load whitelist:', e);
+      }}
+    }}
+
+    function displayWhitelist(data) {{
+      const container = document.getElementById('whitelist-container');
+      const ipCount = document.getElementById('ip-count');
+      
+      ipCount.textContent = data.count || 0;
+      
+      if (!data.nodes || data.nodes.length === 0) {{
+        container.innerHTML = '<p class="text-slate-400 text-center py-4">暂无白名单IP</p>';
+        return;
+      }}
+      
+      container.innerHTML = data.nodes.map(node => `
+        <div class="flex items-center justify-between p-4 rounded-lg bg-slate-800/40 border border-slate-700 hover:border-sky-500/40 transition">
+          <div class="flex-1">
+            <div class="flex items-center gap-3">
+              <span class="font-mono text-white">${{node.ip}}</span>
+              <span class="text-xs px-2 py-1 rounded-full bg-slate-700 text-slate-300">${{node.name}}</span>
+              ${{node.description ? `<span class="text-sm text-slate-400">${{node.description}}</span>` : ''}}
+            </div>
+            ${{node.whitelist_sync_status ? `
+              <div class="mt-1 text-xs">
+                <span class="text-slate-500">同步状态:</span>
+                <span class="${{node.whitelist_sync_status === 'synced' ? 'text-emerald-400' : 'text-amber-400'}}">${{node.whitelist_sync_message || node.whitelist_sync_status}}</span>
+              </div>
+            ` : ''}}
+          </div>
+          <button 
+            onclick="removeIP('${{node.ip}}')" 
+            class="px-3 py-1 rounded-lg border border-rose-500/40 bg-rose-500/15 text-sm font-semibold text-rose-100 hover:bg-rose-500/25 transition">
+            删除
+          </button>
+        </div>
+      `).join('');
+    }}
+
+    async function addIP() {{
+      const ip = document.getElementById('ip-input').value.trim();
+      const description = document.getElementById('description-input').value.trim();
+      const status = document.getElementById('add-status');
+      
+      if (!ip) {{
+        status.className = 'mt-2 text-sm text-rose-400';
+        status.textContent = '请输入 IP 地址';
+        return;
+      }}
+      
+      try {{
+        const res = await apiFetch('/admin/whitelist/add', {{
+          method: 'POST',
+          headers: {{ 'Content-Type': 'application/json' }},
+          body: JSON.stringify({{ ip, description }})
+        }});
+        
+        const data = await res.json();
+        
+        if (data.status === 'ok') {{
+          status.className = 'mt-2 text-sm text-emerald-400';
+          status.textContent = data.message;
+          document.getElementById('ip-input').value = '';
+          document.getElementById('description-input').value = '';
+          setTimeout(() => loadWhitelist(), 1000);
+        }} else {{
+          status.className = 'mt-2 text-sm text-rose-400';
+          status.textContent = data.detail || '添加失败';
+        }}
+      }} catch (e) {{
+        status.className = 'mt-2 text-sm text-rose-400';
+        status.textContent = '添加失败: ' + e.message;
+      }}
+    }}
+
+    async function removeIP(ip) {{
+      if (!confirm(`确定要删除 IP: ${{ip}} 吗？`)) return;
+      
+      try {{
+        const res = await apiFetch('/admin/whitelist/remove', {{
+          method: 'DELETE',
+          headers: {{ 'Content-Type': 'application/json' }},
+          body: JSON.stringify({{ ip }})
+        }});
+        
+        const data = await res.json();
+        
+        if (data.status === 'ok') {{
+          alert(data.message);
+          loadWhitelist();
+        }} else {{
+          alert(data.detail || '删除失败');
+        }}
+      }} catch (e) {{
+        alert('删除失败: ' + e.message);
+      }}
+    }}
+
+    async function syncWhitelist() {{
+      const btn = document.getElementById('sync-btn');
+      btn.disabled = true;
+      btn.textContent = '同步中...';
+      
+      try {{
+        const res = await apiFetch('/admin/sync_whitelist', {{
+          method: 'POST'
+        }});
+        
+        const data = await res.json();
+        
+        if (data.status === 'ok') {{
+          alert(data.message);
+          loadWhitelist();
+        }} else {{
+          alert('同步失败: ' + (data.detail || '未知错误'));
+        }}
+      }} catch (e) {{
+        alert('同步失败: ' + e.message);
+      }} finally {{
+        btn.disabled = false;
+        btn.textContent = '🔄 同步白名单';
+      }}
+    }}
+
+    async function loadMasterIP() {{
+      try {{
+        const res = await apiFetch('/admin/whitelist');
+        const data = await res.json();
+        
+        // Try to detect master IP from whitelist
+        const masterIPEl = document.getElementById('master-ip');
+        const masterIP = data.whitelist && data.whitelist.length > 0 ? data.whitelist[data.whitelist.length - 1] : '未检测到';
+        masterIPEl.textContent = masterIP;
+      }} catch (e) {{
+        console.error('Failed to load master IP:', e);
+      }}
+    }}
+
+    function init() {{
+      loadWhitelist();
+      loadMasterIP();
+      
+      document.getElementById('add-ip-btn').addEventListener('click', addIP);
+      document.getElementById('sync-btn').addEventListener('click', syncWhitelist);
+      document.getElementById('refresh-btn').addEventListener('click', loadWhitelist);
+      
+      // Allow Enter key to add IP
+      document.getElementById('ip-input').addEventListener('keypress', (e) => {{
+        if (e.key === 'Enter') addIP();
+      }});
+    }}
+
+    init();
+  </script>
+</body>
+</html>''
+
+'
+
 def _schedules_html() -> str:
     return f'''<!DOCTYPE html>
 <html lang="zh-CN">
@@ -5632,6 +5902,16 @@ async def schedules_page(request: Request):
     return HTMLResponse(content=_schedules_html())
 
 
+@app.get("/web/whitelist")
+async def whitelist_page(request: Request):
+    """白名单管理页面"""
+    if not auth_manager().is_authenticated(request):
+        return HTMLResponse(content="<script>window.location.href='/web';</script>")
+    
+    return HTMLResponse(content=_whitelist_html())
+
+
+
 @app.get("/web/tests")
 async def tests_page(request: Request):
     """单次测试页面 - 显示测试计划和最近测试"""
@@ -6040,15 +6320,27 @@ async def streaming_test(node_id: int, db: Session = Depends(get_db)):
 
 
 async def _ensure_iperf_server_running(dst: Node, requested_port: int) -> bool:
+    """Ensure iperf server is running on the requested port.
+    
+    Returns True if server was started (or restarted), False if already running on correct port.
+    """
     dst_status = await health_monitor.check_node(dst)
     current_port = dst_status.detected_iperf_port or dst_status.iperf_port
+    
+    logger.info(f"Checking iperf server on {dst.name}: running={dst_status.server_running}, current_port={current_port}, requested_port={requested_port}")
+    
     if not dst_status.server_running:
+        logger.info(f"Starting iperf server on {dst.name} at port {requested_port}")
         await _start_iperf_server(dst, requested_port)
         return True
+    
     if current_port != requested_port:
+        logger.info(f"Restarting iperf server on {dst.name}: {current_port} -> {requested_port}")
         await _stop_iperf_server(dst)
         await _start_iperf_server(dst, requested_port)
         return True
+    
+    logger.info(f"Iperf server already running on correct port {current_port}")
     return False
 
 
@@ -6169,7 +6461,9 @@ async def _sync_to_single_agent(
     
     status = "failed"
     try:
-        url = f"http://{node.ip}:{node.agent_port}/update_whitelist"
+        # Use merge_whitelist endpoint (APPEND mode) to support multi-Master scenarios
+        # This allows multiple Masters to share the same Agent without overwriting each other's IPs
+        url = f"http://{node.ip}:{node.agent_port}/merge_whitelist"
         response = await client.post(url, json={"allowed_ips": whitelist})
         
         if response.status_code == 200:
@@ -6650,7 +6944,6 @@ async def create_test(test: TestCreate, db: Session = Depends(get_db)):
     if not src or not dst:
         raise HTTPException(status_code=404, detail="node not found")
 
-    requested_port = test.port
     src_status = await health_monitor.check_node(src)
     if src_status.status != "online":
         raise HTTPException(status_code=503, detail="source node is offline or unreachable")
@@ -6658,6 +6951,10 @@ async def create_test(test: TestCreate, db: Session = Depends(get_db)):
     dst_status = await health_monitor.check_node(dst)
     if dst_status.status != "online":
         raise HTTPException(status_code=503, detail="destination node is offline or unreachable")
+
+    # Priority: detected port from health check > node's configured port > request's port
+    requested_port = dst_status.detected_iperf_port or dst.iperf_port or test.port
+    logger.info(f"Using iperf port {requested_port} for test (detected: {dst_status.detected_iperf_port}, node: {dst.iperf_port}, request: {test.port})")
 
     server_started = False
     server_started = await _ensure_iperf_server_running(dst, requested_port)
@@ -6716,7 +7013,6 @@ async def create_dual_suite(test: DualSuiteTestCreate, db: Session = Depends(get
     if not src or not dst:
         raise HTTPException(status_code=404, detail="node not found")
 
-    requested_port = test.port
     src_status = await health_monitor.check_node(src)
     if src_status.status != "online":
         raise HTTPException(status_code=503, detail="source node is offline or unreachable")
@@ -6724,6 +7020,10 @@ async def create_dual_suite(test: DualSuiteTestCreate, db: Session = Depends(get
     dst_status = await health_monitor.check_node(dst)
     if dst_status.status != "online":
         raise HTTPException(status_code=503, detail="destination node is offline or unreachable")
+
+    # Priority: detected port from health check > node's configured port > request's port
+    requested_port = dst_status.detected_iperf_port or dst.iperf_port or test.port
+    logger.info(f"Using iperf port {requested_port} for suite test (detected: {dst_status.detected_iperf_port}, node: {dst.iperf_port}, request: {test.port})")
 
     server_started = False
     try:
@@ -6888,8 +7188,10 @@ async def _execute_schedule_task(schedule_id: int):
                 raise Exception("Source or destination node not found")
             
             # Get current detected port from health check
+            # Priority: detected port from health check > node's configured port > schedule's port
             dst_status = await health_monitor.check_node(dst_node)
-            current_port = dst_status.detected_iperf_port or dst_status.iperf_port
+            current_port = dst_status.detected_iperf_port or dst_node.iperf_port or schedule.port
+            logger.info(f"Schedule {schedule_id} using iperf port {current_port} (detected: {dst_status.detected_iperf_port}, node: {dst_node.iperf_port}, schedule: {schedule.port})")
             
             # Determine protocols to run
             protocols = []
