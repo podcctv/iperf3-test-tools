@@ -19,6 +19,7 @@ app = Flask(__name__)
 
 DEFAULT_IPERF_PORT = int(Path("/app").joinpath("IPERF_PORT").read_text().strip()) if Path("/app/IPERF_PORT").exists() else 62001
 AGENT_API_PORT = int(os.environ.get("AGENT_API_PORT", "8000"))
+AGENT_VERSION = "1.0.1"  # Update this when releasing new agent versions
 
 server_process: subprocess.Popen | None = None
 server_lock = threading.Lock()
@@ -1218,6 +1219,7 @@ def health() -> Any:
 
     return jsonify({
         "status": "ok",
+        "version": AGENT_VERSION,
         "server_running": _is_process_running(server_process),
         "port": DEFAULT_IPERF_PORT,
         "timestamp": int(time.time()),

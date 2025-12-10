@@ -69,6 +69,7 @@ class NodeWithStatus(NodeRead):
     backbone_latency: list[BackboneLatency] | None = None
     streaming: list[StreamingServiceStatus] | None = None
     streaming_checked_at: int | None = None
+    agent_version: str | None = None
 
 
 class TestCreate(BaseModel):

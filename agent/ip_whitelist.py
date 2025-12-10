@@ -89,18 +89,30 @@ class IPWhitelist:
                 logger.error(f"Failed to save whitelist to file: {e}")
     
     def _is_valid_ip(self, ip: str) -> bool:
-        """Validate IP address format (supports both IPv4 and IPv6)"""
+        """Validate IP address or domain name format"""
         import ipaddress
+        import re
+        
+        # Check for valid IP address
         try:
             ipaddress.ip_address(ip)
             return True
         except ValueError:
-            # Check if it's a CIDR notation
-            try:
-                ipaddress.ip_network(ip, strict=False)
-                return True
-            except ValueError:
-                return False
+            pass
+        
+        # Check if it's a CIDR notation
+        try:
+            ipaddress.ip_network(ip, strict=False)
+            return True
+        except ValueError:
+            pass
+        
+        # Check if it's a valid domain name
+        domain_pattern = r'^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
+        if re.match(domain_pattern, ip):
+            return True
+        
+        return False
     
     def is_allowed(self, ip: str) -> bool:
         """Check if an IP is in the whitelist (supports CIDR matching)"""

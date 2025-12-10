@@ -49,6 +49,9 @@ from .state_store import StateStore
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+# Expected agent version - update when releasing new agent versions
+EXPECTED_AGENT_VERSION = "1.0.1"
+
 # ============================================================================
 # Scheduler Setup
 # ============================================================================
@@ -2595,13 +2598,22 @@ def _login_html() -> str:
           const errorMsg = node.whitelist_sync_message || '未知错误';
           
           if (node.whitelist_sync_status === 'synced') {
-              syncBadge = `<span class="inline-flex items-center rounded-md bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-400 ring-1 ring-inset ring-emerald-500/20 cursor-help" title="白名单已同步 (${syncTime})">🛡️ 已同步</span>`;
+              syncBadge = `<span class="inline-flex items-center rounded-md bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-400 ring-1 ring-inset ring-emerald-500/20 cursor-help" title="白名单已同步 (${syncTime})">🔄 白名单</span>`;
           } else if (node.whitelist_sync_status === 'not_synced') {
-              syncBadge = `<span class="inline-flex items-center rounded-md bg-yellow-500/10 px-2 py-0.5 text-xs font-medium text-yellow-400 ring-1 ring-inset ring-yellow-500/20 cursor-help" title="白名单内容不一致 (${syncTime})">🛡️ 未同步</span>`;
+              syncBadge = `<span class="inline-flex items-center rounded-md bg-yellow-500/10 px-2 py-0.5 text-xs font-medium text-yellow-400 ring-1 ring-inset ring-yellow-500/20 cursor-help" title="白名单内容不一致 (${syncTime})">⚠️ 白名单</span>`;
           } else if (node.whitelist_sync_status === 'failed') {
-             syncBadge = `<span class="inline-flex items-center rounded-md bg-rose-500/10 px-2 py-0.5 text-xs font-medium text-rose-400 ring-1 ring-inset ring-rose-500/20 cursor-help" title="同步失败: ${errorMsg} (${syncTime})">🛡️ 错误</span>`;
+             syncBadge = `<span class="inline-flex items-center rounded-md bg-rose-500/10 px-2 py-0.5 text-xs font-medium text-rose-400 ring-1 ring-inset ring-rose-500/20 cursor-help" title="同步失败: ${errorMsg} (${syncTime})">❌ 白名单</span>`;
           } else {
-             syncBadge = `<span class="inline-flex items-center rounded-md bg-slate-500/10 px-2 py-0.5 text-xs font-medium text-slate-400 ring-1 ring-inset ring-slate-500/20" title="白名单同步状态未知">🛡️ 检查中</span>`;
+             syncBadge = `<span class="inline-flex items-center rounded-md bg-slate-500/10 px-2 py-0.5 text-xs font-medium text-slate-400 ring-1 ring-inset ring-slate-500/20" title="白名单同步状态未知">❓ 白名单</span>`;
+          }
+          
+          // Version Mismatch Badge
+          const expectedVersion = '1.0.1';
+          let versionBadge = '';
+          if (node.agent_version && node.agent_version !== expectedVersion) {
+              versionBadge = `<span class="inline-flex items-center rounded-md bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-400 ring-1 ring-inset ring-amber-500/20 cursor-help" title="Agent版本 ${node.agent_version} 与预期版本 ${expectedVersion} 不一致，请更新">⬆️ 需更新</span>`;
+          } else if (!node.agent_version && node.status === 'online') {
+              versionBadge = `<span class="inline-flex items-center rounded-md bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-400 ring-1 ring-inset ring-amber-500/20 cursor-help" title="无法获取Agent版本，可能需要更新">⬆️ 需更新</span>`;
           }
 
 
@@ -2626,6 +2638,7 @@ def _login_html() -> str:
                 ${statusBadge}
                 ${locationBadge}
                 ${syncBadge}
+                ${versionBadge}
                 <span class="text-base font-semibold text-white drop-shadow">${node.name}</span>
                 <button type="button" class="${styles.iconButton}" data-privacy-toggle="${node.id}" aria-label="切换 IP 隐藏">
                   <span class="text-base">${ipPrivacyState[node.id] ? '🙈' : '👁️'}</span>
@@ -4987,6 +5000,7 @@ async def _check_node_health(node: Node) -> NodeWithStatus:
                     whitelist_sync_status=getattr(node, "whitelist_sync_status", "unknown"),
                     whitelist_sync_message=getattr(node, "whitelist_sync_message", None),
                     whitelist_sync_at=getattr(node, "whitelist_sync_at", None),
+                    agent_version=data.get("version"),
                 )
     except Exception:
         pass
