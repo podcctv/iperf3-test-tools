@@ -4592,7 +4592,7 @@ def _whitelist_html() -> str:
   <title>白名单管理 - iperf3 Master</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    body {{ background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); min-height: 100vh; }}
+    body {{ background: linear-gradient(135deg, ##0f172a 0%, ##1e293b 100%); min-height: 100vh; }}
     .glass-card {{ background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(148, 163, 184, 0.1); }}
   </style>
 </head>
