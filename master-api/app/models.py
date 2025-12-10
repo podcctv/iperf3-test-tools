@@ -16,6 +16,7 @@ class Node(Base):
     agent_port = Column(Integer, default=8000)
     iperf_port = Column(Integer, default=DEFAULT_IPERF_PORT)
     description = Column(String, nullable=True)
+    is_internal = Column(Boolean, default=False)  # True for NAT/internal agents
     whitelist_sync_status = Column(String, default="unknown")  # unknown, synced, failed
     whitelist_sync_message = Column(String, nullable=True)     # Error details or status msg
     whitelist_sync_at = Column(DateTime(timezone=True), nullable=True)

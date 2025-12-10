@@ -30,6 +30,7 @@ class NodeUpdate(BaseModel):
 
 class NodeRead(NodeBase):
     id: int
+    is_internal: bool = False
     whitelist_sync_status: str | None = "unknown"
     whitelist_sync_message: str | None = None
     whitelist_sync_at: datetime | None = None

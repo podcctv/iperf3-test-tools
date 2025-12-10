@@ -1354,14 +1354,14 @@ def _login_html() -> str:
           
           <div id="config-alert" class="hidden mb-4 rounded-xl border border-slate-700 bg-slate-800/60 px-4 py-3 text-sm text-slate-100"></div>
           
-          <input id="config-file-input" type="file" accept="application/json" class="hidden" />
+          <input id="config-file-input" type="file" accept="application/json" class="hidden" onchange="if(this.files[0]) { importAgentConfigs(this.files[0]); this.value=''; }" />
           
           <div class="flex flex-wrap items-center gap-3">
-            <button id="export-configs" class="rounded-xl border border-slate-700 bg-slate-800/60 px-5 py-2.5 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200 inline-flex items-center gap-2">
+            <button id="export-configs" onclick="exportAgentConfigs()" class="rounded-xl border border-slate-700 bg-slate-800/60 px-5 py-2.5 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200 inline-flex items-center gap-2">
               <span>📤</span>
               <span>导出配置</span>
             </button>
-            <button id="import-configs" class="rounded-xl border border-sky-500/40 bg-sky-500/15 px-5 py-2.5 text-sm font-semibold text-sky-100 shadow-sm transition hover:bg-sky-500/25 inline-flex items-center gap-2">
+            <button id="import-configs" onclick="document.getElementById('config-file-input').click()" class="rounded-xl border border-sky-500/40 bg-sky-500/15 px-5 py-2.5 text-sm font-semibold text-sky-100 shadow-sm transition hover:bg-sky-500/25 inline-flex items-center gap-2">
               <span>📥</span>
               <span>导入配置</span>
             </button>
@@ -2729,12 +2729,18 @@ def _login_html() -> str:
           }
           
           // Version Mismatch Badge - only show when agent reports a different version
-          const expectedVersion = '1.0.1';
+          const expectedVersion = '1.0.2';
           let versionBadge = '';
           if (node.agent_version && node.agent_version !== expectedVersion) {
               versionBadge = `<span class="inline-flex items-center rounded-md bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-400 ring-1 ring-inset ring-amber-500/20 cursor-help" title="Agent版本 ${node.agent_version} 与预期版本 ${expectedVersion} 不一致，请更新">⬆️ 需更新</span>`;
           }
           // Note: If agent_version is null/missing, we don't show the badge to avoid false positives
+          
+          // Internal Agent Badge - for NAT/reverse connection agents
+          let internalBadge = '';
+          if (node.is_internal) {
+              internalBadge = `<span class="inline-flex items-center rounded-md bg-violet-500/10 px-2 py-0.5 text-xs font-medium text-violet-400 ring-1 ring-inset ring-violet-500/20 cursor-help" title="内网设备 (反向穿透模式)">🔗 内网</span>`;
+          }
 
 
           const ports = node.detected_iperf_port ? `${node.detected_iperf_port}` : `${node.iperf_port}`;
@@ -2759,6 +2765,7 @@ def _login_html() -> str:
                 ${locationBadge}
                 ${syncBadge}
                 ${versionBadge}
+                ${internalBadge}
                 <span class="text-base font-semibold text-white drop-shadow">${node.name}</span>
                 ${!window.isGuest ? `<button type="button" class="${styles.iconButton}" data-privacy-toggle="${node.id}" aria-label="切换 IP 隐藏">
                   <span class="text-base">${ipPrivacyState[node.id] ? '🙈' : '👁️'}</span>
@@ -5764,6 +5771,12 @@ class AgentRegistration(BaseModel):
     node_name: str
     iperf_port: int = 5201
     master_url: str = ""  # For reference
+    agent_version: str = ""
+
+# In-memory task queue for internal agents
+_internal_agent_tasks: dict[str, list[dict]] = {}  # node_name -> list of pending tasks
+_task_results: dict[int, dict] = {}  # task_id -> result
+_task_id_counter = 0
 
 @app.post("/api/agent/register")
 async def register_reverse_agent(
@@ -5792,7 +5805,8 @@ async def register_reverse_agent(
         # Update existing node with current IP
         existing.ip = client_ip
         existing.iperf_port = registration.iperf_port
-        existing.description = f"内网 agent (反向穿透) - {registration.master_url}"
+        existing.is_internal = True
+        existing.description = f"内网 agent (反向穿透)"
         db.commit()
         db.refresh(existing)
         return {
@@ -5808,7 +5822,8 @@ async def register_reverse_agent(
         ip=client_ip,
         agent_port=8000,
         iperf_port=registration.iperf_port,
-        description=f"内网 agent (反向穿透) - {registration.master_url}"
+        is_internal=True,
+        description=f"内网 agent (反向穿透)"
     )
     db.add(new_node)
     db.commit()
@@ -5820,6 +5835,53 @@ async def register_reverse_agent(
         "node_name": new_node.name,
         "ip": client_ip
     }
+
+
+@app.get("/api/agent/tasks")
+async def get_agent_tasks(node_name: str):
+    """
+    Get pending tasks for an internal agent.
+    Returns tasks and clears them from queue.
+    """
+    global _internal_agent_tasks
+    tasks = _internal_agent_tasks.get(node_name, [])
+    if tasks:
+        _internal_agent_tasks[node_name] = []  # Clear after returning
+    return {"status": "ok", "tasks": tasks}
+
+
+class TaskResult(BaseModel):
+    node_name: str
+    result: dict
+
+@app.post("/api/agent/tasks/{task_id}/result")
+async def submit_task_result(task_id: int, result: TaskResult):
+    """
+    Receive task result from internal agent.
+    """
+    global _task_results
+    _task_results[task_id] = {
+        "node_name": result.node_name,
+        "result": result.result,
+        "received_at": datetime.now(timezone.utc).isoformat()
+    }
+    return {"status": "ok", "task_id": task_id}
+
+
+def queue_task_for_internal_agent(node_name: str, task: dict) -> int:
+    """
+    Queue a test task for an internal agent.
+    Returns the task ID.
+    """
+    global _internal_agent_tasks, _task_id_counter
+    _task_id_counter += 1
+    task["id"] = _task_id_counter
+    
+    if node_name not in _internal_agent_tasks:
+        _internal_agent_tasks[node_name] = []
+    _internal_agent_tasks[node_name].append(task)
+    
+    return _task_id_counter
 
 
 @app.post("/nodes", response_model=NodeRead)

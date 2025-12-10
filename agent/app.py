@@ -19,7 +19,33 @@ app = Flask(__name__)
 
 DEFAULT_IPERF_PORT = int(Path("/app").joinpath("IPERF_PORT").read_text().strip()) if Path("/app/IPERF_PORT").exists() else 62001
 AGENT_API_PORT = int(os.environ.get("AGENT_API_PORT", "8000"))
-AGENT_VERSION = "1.0.1"  # Update this when releasing new agent versions
+AGENT_VERSION = "1.0.2"  # Update this when releasing new agent versions
+
+# Reverse mode configuration for internal agents behind NAT
+AGENT_MODE = os.environ.get("AGENT_MODE", "normal").lower()
+MASTER_URL = os.environ.get("MASTER_URL", "")
+NODE_NAME = os.environ.get("NODE_NAME", "")
+POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "10"))
+IPERF_PORT = int(os.environ.get("IPERF_PORT", str(DEFAULT_IPERF_PORT)))
+
+# Try to load from config.json if env vars not set
+_config_path = Path("/app/config.json")
+if _config_path.exists():
+    try:
+        _config = json.loads(_config_path.read_text())
+        if not MASTER_URL:
+            MASTER_URL = _config.get("master_url", "")
+        if not NODE_NAME:
+            NODE_NAME = _config.get("node_name", "")
+        if AGENT_MODE == "normal":
+            AGENT_MODE = _config.get("mode", "normal")
+        POLL_INTERVAL = _config.get("poll_interval", POLL_INTERVAL)
+        IPERF_PORT = _config.get("iperf_port", IPERF_PORT)
+    except Exception:
+        pass
+
+_reverse_thread: threading.Thread | None = None
+_reverse_running = False
 
 server_process: subprocess.Popen | None = None
 server_lock = threading.Lock()
@@ -1512,5 +1538,184 @@ def get_whitelist_stats() -> Any:
     })
 
 
+# ============== Reverse Mode Polling Logic ==============
+
+def _execute_test_task(task: dict) -> dict:
+    """Execute a test task received from master and return result."""
+    target = task.get("target_ip")
+    port = task.get("target_port", 5201)
+    duration = task.get("duration", 10)
+    protocol = task.get("protocol", "tcp")
+    parallel = task.get("parallel", 1)
+    reverse_mode = task.get("reverse", False)
+    bandwidth = task.get("bandwidth")
+    
+    proto_flag = "-u" if protocol == "udp" else ""
+    reverse_flag = "-R" if reverse_mode else ""
+    extra_flags: list[str] = []
+    
+    if bandwidth:
+        extra_flags.extend(["-b", str(bandwidth)])
+    if reverse_mode:
+        extra_flags.append("--get-server-output")
+    
+    cmd_parts = [
+        "iperf3", "-c", str(target), "-p", str(port),
+        "-t", str(duration), "-P", str(parallel),
+    ]
+    
+    if proto_flag:
+        cmd_parts.append(proto_flag)
+    if reverse_flag:
+        cmd_parts.append(reverse_flag)
+    cmd_parts.extend(extra_flags)
+    cmd_parts.append("-J")
+    
+    try:
+        result = subprocess.run(
+            cmd_parts,
+            capture_output=True,
+            text=True,
+            timeout=duration + 30,
+        )
+        
+        if result.returncode != 0:
+            error_msg = result.stderr.strip() or result.stdout.strip() or f"iperf3 exit code {result.returncode}"
+            return {"status": "error", "error": error_msg}
+        
+        output = json.loads(result.stdout)
+        return {"status": "ok", "iperf_result": output}
+        
+    except subprocess.TimeoutExpired:
+        return {"status": "error", "error": "Test execution timed out"}
+    except json.JSONDecodeError as e:
+        return {"status": "error", "error": f"Failed to parse iperf3 output: {e}"}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+def _reverse_mode_register():
+    """Register this agent with the master."""
+    if not MASTER_URL or not NODE_NAME:
+        return False
+    
+    register_url = f"{MASTER_URL.rstrip('/')}/api/agent/register"
+    payload = {
+        "node_name": NODE_NAME,
+        "iperf_port": IPERF_PORT,
+        "agent_version": AGENT_VERSION,
+    }
+    
+    try:
+        resp = requests.post(register_url, json=payload, timeout=10)
+        if resp.ok:
+            app.logger.info(f"[REVERSE] Registered with master: {NODE_NAME}")
+            return True
+        else:
+            app.logger.warning(f"[REVERSE] Registration failed: {resp.status_code}")
+            return False
+    except Exception as e:
+        app.logger.warning(f"[REVERSE] Registration error: {e}")
+        return False
+
+
+def _reverse_mode_poll():
+    """Poll master for pending tasks."""
+    if not MASTER_URL or not NODE_NAME:
+        return None
+    
+    tasks_url = f"{MASTER_URL.rstrip('/')}/api/agent/tasks"
+    params = {"node_name": NODE_NAME}
+    
+    try:
+        resp = requests.get(tasks_url, params=params, timeout=10)
+        if resp.ok:
+            data = resp.json()
+            tasks = data.get("tasks", [])
+            return tasks
+        return []
+    except Exception as e:
+        app.logger.debug(f"[REVERSE] Poll error: {e}")
+        return []
+
+
+def _reverse_mode_report_result(task_id: int, result: dict):
+    """Report task result back to master."""
+    if not MASTER_URL:
+        return
+    
+    result_url = f"{MASTER_URL.rstrip('/')}/api/agent/tasks/{task_id}/result"
+    payload = {
+        "node_name": NODE_NAME,
+        "result": result,
+    }
+    
+    try:
+        resp = requests.post(result_url, json=payload, timeout=10)
+        if resp.ok:
+            app.logger.info(f"[REVERSE] Result reported for task {task_id}")
+        else:
+            app.logger.warning(f"[REVERSE] Failed to report result: {resp.status_code}")
+    except Exception as e:
+        app.logger.warning(f"[REVERSE] Report error: {e}")
+
+
+def _reverse_mode_loop():
+    """Background loop for reverse mode polling."""
+    global _reverse_running
+    _reverse_running = True
+    
+    app.logger.info(f"[REVERSE] Starting reverse mode: master={MASTER_URL}, node={NODE_NAME}")
+    
+    # Initial registration
+    registered = False
+    while _reverse_running and not registered:
+        registered = _reverse_mode_register()
+        if not registered:
+            time.sleep(POLL_INTERVAL)
+    
+    # Polling loop
+    last_register = time.time()
+    while _reverse_running:
+        try:
+            # Re-register periodically (every 5 minutes)
+            if time.time() - last_register > 300:
+                _reverse_mode_register()
+                last_register = time.time()
+            
+            # Poll for tasks
+            tasks = _reverse_mode_poll()
+            if tasks:
+                for task in tasks:
+                    task_id = task.get("id")
+                    app.logger.info(f"[REVERSE] Executing task {task_id}: {task.get('target_ip')}")
+                    result = _execute_test_task(task)
+                    _reverse_mode_report_result(task_id, result)
+            
+            time.sleep(POLL_INTERVAL)
+        except Exception as e:
+            app.logger.error(f"[REVERSE] Loop error: {e}")
+            time.sleep(POLL_INTERVAL)
+
+
+def start_reverse_mode():
+    """Start the reverse mode polling thread."""
+    global _reverse_thread
+    if AGENT_MODE != "reverse":
+        return
+    
+    if not MASTER_URL or not NODE_NAME:
+        app.logger.error("[REVERSE] Missing MASTER_URL or NODE_NAME for reverse mode")
+        return
+    
+    _reverse_thread = threading.Thread(target=_reverse_mode_loop, daemon=True)
+    _reverse_thread.start()
+
+
 if __name__ == "__main__":
+    # Start reverse mode polling if configured
+    if AGENT_MODE == "reverse":
+        start_reverse_mode()
+    
     app.run(host="0.0.0.0", port=AGENT_API_PORT)
+
