@@ -129,6 +129,10 @@ def _ensure_whitelist_sync_columns() -> None:
                 connection.exec_driver_sql(
                     "ALTER TABLE nodes ADD COLUMN whitelist_sync_at DATETIME"
                 )
+            if "is_internal" not in column_names:
+                connection.exec_driver_sql(
+                    "ALTER TABLE nodes ADD COLUMN is_internal BOOLEAN DEFAULT 0"
+                )
         elif dialect == "postgresql":
             result = connection.execute(
                 text(
@@ -144,6 +148,8 @@ def _ensure_whitelist_sync_columns() -> None:
                 connection.execute(text("ALTER TABLE nodes ADD COLUMN whitelist_sync_message VARCHAR"))
             if "whitelist_sync_at" not in column_names:
                 connection.execute(text("ALTER TABLE nodes ADD COLUMN whitelist_sync_at TIMESTAMPTZ"))
+            if "is_internal" not in column_names:
+                connection.execute(text("ALTER TABLE nodes ADD COLUMN is_internal BOOLEAN DEFAULT FALSE"))
         
         connection.commit()
 
