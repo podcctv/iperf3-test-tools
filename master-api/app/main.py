@@ -4745,6 +4745,7 @@ def _schedules_html() -> str:
       const res = await apiFetch('/schedules');
       schedules = await res.json();
       renderSchedules();
+      updateTrafficBadges();
       
       // Fetch ISPs
       schedules.forEach(s => {{
