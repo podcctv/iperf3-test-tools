@@ -52,6 +52,37 @@ logger.setLevel(logging.INFO)
 # Expected agent version - update when releasing new agent versions
 EXPECTED_AGENT_VERSION = "1.0.1"
 
+# Whitelist hash tracking for smart sync
+_whitelist_hash_file = Path(os.getenv("DATA_DIR", "/app/data")) / "whitelist_hash.txt"
+_last_whitelist_hash: str | None = None
+
+def _compute_whitelist_hash(ips: list[str]) -> str:
+    """Compute MD5 hash of sorted IP list for change detection."""
+    import hashlib
+    sorted_ips = sorted(set(ips))
+    content = ",".join(sorted_ips)
+    return hashlib.md5(content.encode()).hexdigest()
+
+def _load_whitelist_hash() -> str | None:
+    """Load stored whitelist hash from disk."""
+    global _last_whitelist_hash
+    try:
+        if _whitelist_hash_file.exists():
+            _last_whitelist_hash = _whitelist_hash_file.read_text().strip()
+        return _last_whitelist_hash
+    except Exception:
+        return None
+
+def _save_whitelist_hash(hash_value: str) -> None:
+    """Save whitelist hash to disk for persistence."""
+    global _last_whitelist_hash
+    try:
+        _whitelist_hash_file.parent.mkdir(parents=True, exist_ok=True)
+        _whitelist_hash_file.write_text(hash_value)
+        _last_whitelist_hash = hash_value
+    except Exception as e:
+        logger.error(f"Failed to save whitelist hash: {e}")
+
 # ============================================================================
 # Scheduler Setup
 # ============================================================================
@@ -2607,14 +2638,13 @@ def _login_html() -> str:
              syncBadge = `<span class="inline-flex items-center rounded-md bg-slate-500/10 px-2 py-0.5 text-xs font-medium text-slate-400 ring-1 ring-inset ring-slate-500/20" title="白名单同步状态未知">❓ 白名单</span>`;
           }
           
-          // Version Mismatch Badge
+          // Version Mismatch Badge - only show when agent reports a different version
           const expectedVersion = '1.0.1';
           let versionBadge = '';
           if (node.agent_version && node.agent_version !== expectedVersion) {
               versionBadge = `<span class="inline-flex items-center rounded-md bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-400 ring-1 ring-inset ring-amber-500/20 cursor-help" title="Agent版本 ${node.agent_version} 与预期版本 ${expectedVersion} 不一致，请更新">⬆️ 需更新</span>`;
-          } else if (!node.agent_version && node.status === 'online') {
-              versionBadge = `<span class="inline-flex items-center rounded-md bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-400 ring-1 ring-inset ring-amber-500/20 cursor-help" title="无法获取Agent版本，可能需要更新">⬆️ 需更新</span>`;
           }
+          // Note: If agent_version is null/missing, we don't show the badge to avoid false positives
 
 
           const ports = node.detected_iperf_port ? `${node.detected_iperf_port}` : `${node.iperf_port}`;
