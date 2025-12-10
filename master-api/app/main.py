@@ -595,6 +595,11 @@ def _set_auth_cookie(response: Response, password: str) -> None:
     dashboard_auth.set_auth_cookie(response, password)
 
 
+def _is_guest(request: Request) -> bool:
+    """Check if request is from a guest session."""
+    return request.cookies.get("guest_session") == "readonly"
+
+
 
 
 
@@ -1011,6 +1016,9 @@ def _login_html() -> str:
                 <button id="login-btn" type="button" class="btn-primary">
                   Login
                 </button>
+                <button id="guest-login-btn" type="button" class="w-full mt-3 rounded-xl border border-slate-600 bg-slate-800/60 px-4 py-3 text-sm font-semibold text-slate-300 transition hover:border-sky-500 hover:text-sky-200">
+                  👁️ 访客模式 (只读)
+                </button>
               </form>
             </div>
           </div>
@@ -1025,7 +1033,7 @@ def _login_html() -> str:
               <div class="flex flex-wrap items-center gap-3">
                 <a href="/web/tests" class="rounded-lg border border-sky-500/40 bg-sky-500/15 px-4 py-2 text-sm font-semibold text-sky-100 shadow-sm transition hover:bg-sky-500/25">单次测试</a>
                 <a href="/web/schedules" class="rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-100 shadow-sm transition hover:bg-emerald-500/25">定时任务</a>
-                <button id="open-settings" onclick="toggleSettingsModal(true)" class="rounded-lg border border-indigo-500/40 bg-indigo-500/15 px-4 py-2 text-sm font-semibold text-indigo-100 shadow-sm transition hover:bg-indigo-500/25 inline-flex items-center gap-2">
+                <button id="open-settings" onclick="toggleSettingsModal(true)" class="guest-hide rounded-lg border border-indigo-500/40 bg-indigo-500/15 px-4 py-2 text-sm font-semibold text-indigo-100 shadow-sm transition hover:bg-indigo-500/25 inline-flex items-center gap-2">
                   <span class="text-base">⚙️</span>
                   <span>设置</span>
                 </button>
@@ -1042,7 +1050,7 @@ def _login_html() -> str:
                   </div>
                   <div class="flex flex-wrap gap-2">
                     <button data-refresh-nodes onclick="refreshNodes()" class="rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200">刷新</button>
-                    <button id="open-add-node" class="rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-100 shadow-sm transition hover:bg-emerald-500/25">添加节点</button>
+                    <button id="open-add-node" class="guest-hide rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-100 shadow-sm transition hover:bg-emerald-500/25">添加节点</button>
                   </div>
                 </div>
                 <div id="streaming-progress" class="hidden space-y-2 rounded-xl border border-slate-800 bg-slate-900/50 p-3">
@@ -1853,6 +1861,16 @@ def _login_html() -> str:
             passwordInput.focus();
         }
         
+        // Guest login button
+        const guestBtn = document.getElementById('guest-login-btn');
+        if (guestBtn) {
+            guestBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                console.log('Guest login button clicked');
+                guestLogin();
+            });
+        }
+        
         // Note: Whitelist buttons now use inline onclick handlers
         // Do NOT add addEventListener here as it conflicts with onclick
         
@@ -2216,7 +2234,9 @@ def _login_html() -> str:
     }
 
     function maskIp(ip, shouldMask) {
-      if (!shouldMask || !ip) return ip;
+      // Always mask for guests
+      const isGuest = window.isGuest === true;
+      if ((!shouldMask && !isGuest) || !ip) return ip;
       if (ip.includes(':')) {
         const segments = ip.split(':');
         const kept = segments.slice(0, 2).join(':');
@@ -2402,11 +2422,26 @@ def _login_html() -> str:
         }
 
         const data = await res.json();
-        if (data.authenticated) {
+        const isGuest = data.isGuest === true;
+        window.isGuest = isGuest;
+        
+        if (data.authenticated || isGuest) {
           loginCard.classList.add('hidden');
           appCard.classList.remove('hidden');
           setLoginState('unlocked');
-          authHint.textContent = '已通过认证，可管理节点与测速任务。';
+          
+          if (isGuest) {
+            authHint.textContent = '👁️ 访客模式 - 仅可查看，无法操作';
+            authHint.className = 'text-sm text-amber-400';
+            // Hide action buttons for guests
+            document.querySelectorAll('.guest-hide').forEach(el => el.classList.add('hidden'));
+            document.getElementById('logout-btn')?.classList.remove('hidden');
+          } else {
+            authHint.textContent = '已通过认证，可管理节点与测速任务。';
+            authHint.className = 'text-sm text-slate-400';
+            document.querySelectorAll('.guest-hide').forEach(el => el.classList.remove('hidden'));
+          }
+          
           await refreshNodes();
           await refreshTests();
           return true;
@@ -2534,7 +2569,26 @@ def _login_html() -> str:
 
     async function logout() {
       await apiFetch('/auth/logout', { method: 'POST' });
+      // Also clear guest session
+      document.cookie = 'guest_session=; Max-Age=0; path=/';
+      window.isGuest = false;
       await checkAuth();
+    }
+    
+    async function guestLogin() {
+      console.log('Starting guest login...');
+      try {
+        const res = await apiFetch('/auth/guest', { method: 'POST' });
+        if (res.ok) {
+          console.log('Guest login successful');
+          window.isGuest = true;
+          await checkAuth();
+        } else {
+          console.error('Guest login failed');
+        }
+      } catch (err) {
+        console.error('Guest login error:', err);
+      }
     }
 
     async function changePassword() {
@@ -5445,7 +5499,10 @@ async def tests_page(request: Request):
 
 @app.get("/auth/status")
 def auth_status(request: Request) -> dict:
-    return {"authenticated": _is_authenticated(request)}
+    return {
+        "authenticated": _is_authenticated(request),
+        "isGuest": _is_guest(request)
+    }
 
 
 @app.post("/auth/login")
@@ -5459,6 +5516,20 @@ def login(response: Response, payload: dict = Body(...)) -> dict:
 
     _set_auth_cookie(response, str(raw_password))
     return {"status": "ok"}
+
+
+@app.post("/auth/guest")
+def guest_login(response: Response) -> dict:
+    """Guest login - sets a guest session cookie for read-only access."""
+    response.set_cookie(
+        key="guest_session",
+        value="readonly",
+        httponly=True,
+        max_age=86400 * 7,  # 7 days
+        samesite="lax",
+        secure=False,
+    )
+    return {"status": "ok", "mode": "guest"}
 
 
 @app.post("/auth/logout")
@@ -6214,85 +6285,7 @@ async def get_whitelist_status(db: Session = Depends(get_db)):
 
 
 
-@app.get("/api/daily_traffic_stats")
-async def get_daily_traffic_stats(db: Session = Depends(get_db)):
-    """
-    Get daily traffic statistics for all nodes.
-    Calculates total bytes transferred today based on test results.
-    """
-    from datetime import datetime, timezone, timedelta
-    
-    # Get today's date range (00:00 to 23:59)
-    now = datetime.now(timezone.utc)
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    today_end = now.replace(hour=23, minute=59, second=59, microsecond=999999)
-    
-    # Get all nodes
-    nodes = db.scalars(select(Node)).all()
-    node_stats = []
-    
-    for node in nodes:
-        # Get all test results for this node today (as source or destination)
-        results = db.scalars(
-            select(TestResult).where(
-                or_(
-                    TestResult.src_node_id == node.id,
-                    TestResult.dst_node_id == node.id
-                ),
-                TestResult.created_at >= today_start,
-                TestResult.created_at <= today_end
-            )
-        ).all()
-        
-        # Calculate total bytes
-        total_bytes = 0
-        for result in results:
-            if result.raw_result and isinstance(result.raw_result, dict):
-                try:
-                    # Extract iperf result
-                    iperf_data = result.raw_result.get("iperf_result", {})
-                    end_data = iperf_data.get("end", {})
-                    
-                    # Sum sent and received bytes
-                    # sum_sent: bytes sent by sender
-                    # sum_received: bytes received by receiver
-                    # Regardless of direction (normal/reverse), these represent the payload
-                    bytes_sent = 0
-                    bytes_recvd = 0
-                    
-                    if "sum_sent" in end_data:
-                        bytes_sent = end_data["sum_sent"].get("bytes", 0)
-                         
-                    if "sum_received" in end_data:
-                        bytes_recvd = end_data["sum_received"].get("bytes", 0)
-                    
-                    # Only fallback if BOTH are missing (very old iperf or minimal output)
-                    if bytes_sent == 0 and bytes_recvd == 0 and "sum" in end_data:
-                         bytes_sent = end_data["sum"].get("bytes", 0)
-                    
-                    # Add to total (Consumption includes both directions if applicable, or just the main payload)
-                    # For unidirectional, one is usually 0 or small control traffic
-                    total_bytes += (bytes_sent + bytes_recvd)
-                except Exception:
-                    continue
-        
-        node_stats.append({
-            "node_id": node.id,
-            "name": node.name,
-            "ip": node.ip,
-            "total_bytes": int(total_bytes),
-            "total_gb": round(total_bytes / (1024 * 1024 * 1024), 2),
-            "test_count": len(results)
-        })
-    
-    return {
-        "status": "ok",
-        "date": today_start.strftime("%Y-%m-%d"),
-        "nodes": node_stats,
-        "total_nodes": len(node_stats)
-    }
-
-
+# Note: Duplicate /api/daily_traffic_stats removed - using the one at ~line 5962
 @app.get("/api/daily_schedule_traffic_stats")
 async def get_daily_schedule_traffic_stats(db: Session = Depends(get_db)):
     """
