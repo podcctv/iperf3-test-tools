@@ -4347,7 +4347,7 @@ def _tests_page_html() -> str:
                   <span class="text-xs text-sky-300/70 uppercase">#${test.id} · ${isSuite ? 'SUITE' : protocol}</span>
                   <p class="text-base font-semibold text-white">${srcName} → ${dstName}</p>
                 </div>
-                <button onclick="deleteTest(${test.id})" class="text-xs text-rose-400 hover:text-rose-300">删除</button>
+                <button onclick="deleteTest(${test.id})" class="text-xs text-rose-400 hover:text-rose-300 ${window.isGuest ? 'hidden' : ''}">删除</button>
               </div>
               ${metricsHtml}
             </div>
@@ -4457,7 +4457,28 @@ def _tests_page_html() -> str:
     });
     
     // Initialize
-    loadNodes().then(loadTests);
+    async function init() {
+      // Check guest status first
+      try {
+        const authRes = await apiFetch('/auth/status');
+        const authData = await authRes.json();
+        window.isGuest = authData.isGuest === true;
+        
+        if (window.isGuest) {
+          // Hide test form panel for guests
+          const testPlanPanel = document.querySelector('.panel-card.mb-6');
+          if (testPlanPanel) testPlanPanel.classList.add('hidden');
+          // Hide delete all tests button
+          document.getElementById('delete-all-tests')?.classList.add('hidden');
+        }
+      } catch (e) {
+        console.error('Auth check failed:', e);
+      }
+      
+      await loadNodes();
+      await loadTests();
+    }
+    init();
   </script>
 </body>
 </html>'''
@@ -4734,14 +4755,14 @@ def _schedules_html() -> str:
                    <div class="font-mono text-emerald-400" data-countdown="${{schedule.next_run_at || ''}}" data-schedule-id="${{schedule.id}}">Calculating...</div>
                 </div>
                 ${{statusBadge}}
-                <div class="flex items-center gap-2">
+                ${{!window.isGuest ? `<div class="flex items-center gap-2">
                     <button onclick="toggleSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:border-sky-500 transition whitespace-nowrap" id="btn-toggle-${{schedule.id}}">
                     ${{schedule.enabled ? '暂停' : '启用'}}
                     </button>
                     <button onclick="runSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:emerald-500 transition whitespace-nowrap">立即运行</button>
                     <button onclick="editSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:border-sky-500 transition whitespace-nowrap">编辑</button>
                     <button onclick="deleteSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-rose-700 bg-rose-900/20 text-xs font-semibold text-rose-300 hover:bg-rose-900/40 transition whitespace-nowrap">删除</button>
-                </div>
+                </div>` : ''}}
               </div>
             </div>
             
@@ -5458,6 +5479,20 @@ def _schedules_html() -> str:
 
     // 初始化
     (async () => {{
+      // Check guest status first
+      try {{
+        const authRes = await apiFetch('/auth/status');
+        const authData = await authRes.json();
+        window.isGuest = authData.isGuest === true;
+        
+        if (window.isGuest) {{
+          // Hide create schedule button for guests
+          document.getElementById('create-schedule-btn')?.classList.add('hidden');
+        }}
+      }} catch (e) {{
+        console.error('Auth check failed:', e);
+      }}
+      
       await loadNodes();
       await loadSchedules();
       await updateScheduleTrafficBadges();
