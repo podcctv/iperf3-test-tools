@@ -1023,7 +1023,7 @@ def _login_html() -> str:
                 <p class="text-sm text-slate-400" id="auth-hint"></p>
               </div>
               <div class="flex flex-wrap items-center gap-3">
-                <button onclick="openTestModal()" class="rounded-lg border border-sky-500/40 bg-sky-500/15 px-4 py-2 text-sm font-semibold text-sky-100 shadow-sm transition hover:bg-sky-500/25 inline-flex items-center gap-2"><span>🧪</span><span>单次测试</span></button>
+                <a href="/web/tests" class="rounded-lg border border-sky-500/40 bg-sky-500/15 px-4 py-2 text-sm font-semibold text-sky-100 shadow-sm transition hover:bg-sky-500/25">单次测试</a>
                 <a href="/web/schedules" class="rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-100 shadow-sm transition hover:bg-emerald-500/25">定时任务</a>
                 <button id="open-settings" onclick="toggleSettingsModal(true)" class="rounded-lg border border-indigo-500/40 bg-indigo-500/15 px-4 py-2 text-sm font-semibold text-indigo-100 shadow-sm transition hover:bg-indigo-500/25 inline-flex items-center gap-2">
                   <span class="text-base">⚙️</span>
@@ -1056,8 +1056,8 @@ def _login_html() -> str:
                 </div>
                 <div id="nodes-list" class="text-sm text-slate-400 space-y-3">暂无节点。</div>
               </div>
-
-              <div class="panel-card rounded-2xl p-5 space-y-4">
+              <!-- Test Plan Panel - hidden on main page, shown on /web/tests -->
+              <div id="test-plan-panel" class="panel-card rounded-2xl p-5 space-y-4 hidden">
                 <div class="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <p class="text-xs uppercase tracking-[0.2em] text-sky-300/70">IPERF3 测试</p>
@@ -1188,7 +1188,8 @@ def _login_html() -> str:
                 </div>
               </div>
 
-              <div class="panel-card rounded-2xl p-5 space-y-4">
+              <!-- Recent Tests Panel - hidden on main page, shown on /web/tests -->
+              <div id="recent-tests-panel" class="panel-card rounded-2xl p-5 space-y-4 hidden">
                 <div class="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <h3 class="text-lg font-semibold text-white">最近测试</h3>
@@ -3975,6 +3976,367 @@ def _login_html() -> str:
     """
 
 
+def _tests_page_html() -> str:
+    """Generate HTML for the tests page with test plan and recent tests"""
+    return '''<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>单次测试 - iperf3 Master</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); min-height: 100vh; }
+    .glass-card { background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(148, 163, 184, 0.1); }
+    .panel-card { background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(8px); border: 1px solid rgba(100, 116, 139, 0.2); }
+  </style>
+</head>
+<body class="text-slate-100">
+  <div class="container mx-auto px-4 py-8 max-w-5xl">
+    <!-- Header -->
+    <div class="mb-8 flex items-center justify-between">
+      <div>
+        <h1 class="text-3xl font-bold text-white">单次测试</h1>
+        <p class="text-slate-400 mt-1">Quick Test & Results</p>
+      </div>
+      <div class="flex gap-3">
+        <a href="/web" class="px-4 py-2 rounded-lg border border-slate-700 bg-slate-800/60 text-sm font-semibold text-slate-100 hover:border-sky-500 transition">
+          ← 返回主页
+        </a>
+      </div>
+    </div>
+
+    <!-- Test Plan Panel -->
+    <div class="panel-card rounded-2xl p-5 space-y-4 mb-6">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p class="text-xs uppercase tracking-[0.2em] text-sky-300/70">IPERF3 测试</p>
+          <h3 class="text-lg font-semibold text-white">测试计划</h3>
+        </div>
+        <div class="inline-flex items-center gap-2 rounded-full border border-slate-700/70 bg-slate-900/70 p-1 shadow-inner shadow-black/20">
+          <button id="single-test-tab" class="rounded-full bg-gradient-to-r from-sky-500/80 to-indigo-500/80 px-4 py-1.5 text-xs font-semibold text-slate-50 shadow-lg shadow-sky-500/15 ring-1 ring-sky-400/40 transition hover:brightness-110">单程测试</button>
+          <button id="suite-test-tab" class="rounded-full px-4 py-1.5 text-xs font-semibold text-slate-300 transition hover:text-white">双向 TCP/UDP 测试</button>
+        </div>
+      </div>
+      <p id="test-panel-intro" class="text-sm text-slate-400">快速规划 iperf3 单程或双向链路测试，支持限速、并行与反向 (-R)。</p>
+      <div id="test-alert" class="hidden rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100"></div>
+
+      <div id="single-test-panel" class="space-y-4">
+        <div class="grid gap-3 sm:grid-cols-2">
+          <div class="space-y-2">
+            <label class="text-sm font-medium text-slate-200">源节点</label>
+            <select id="src-select" class="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60"></select>
+          </div>
+          <div class="space-y-2">
+            <label class="text-sm font-medium text-slate-200">目标节点</label>
+            <select id="dst-select" class="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60"></select>
+          </div>
+          <div class="space-y-2">
+            <label class="text-sm font-medium text-slate-200">协议</label>
+            <select id="protocol" class="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60"><option value="tcp">TCP</option><option value="udp">UDP</option></select>
+          </div>
+          <div class="space-y-2">
+            <label class="text-sm font-medium text-slate-200">时长（秒）</label>
+            <input id="duration" type="number" value="10" class="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60">
+          </div>
+          <div class="space-y-2">
+            <label class="text-sm font-medium text-slate-200">并行数</label>
+            <input id="parallel" type="number" value="1" class="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60">
+          </div>
+          <div class="space-y-2">
+            <label class="text-sm font-medium text-slate-200">忽略前（秒）</label>
+            <input id="omit" type="number" value="0" class="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60">
+          </div>
+        </div>
+        <div id="tcp-options" class="space-y-2">
+          <label class="text-sm font-medium text-slate-200">TCP 限速带宽(-b，可选) <span class="text-slate-500 font-normal">例如 0（不限）或 500M</span></label>
+          <input id="tcp-bandwidth" type="text" placeholder="例如 0（不限）或 500M" class="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60">
+        </div>
+        <div id="udp-options" class="hidden space-y-4">
+          <div class="space-y-2">
+            <label class="text-sm font-medium text-slate-200">UDP 带宽 (-b) <span class="text-slate-500 font-normal">如 100M</span></label>
+            <input id="udp-bandwidth" type="text" value="100M" class="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60">
+          </div>
+          <div class="space-y-2">
+            <label class="text-sm font-medium text-slate-200">UDP 长度 (-l，可选) <span class="text-slate-500 font-normal">例如 1400</span></label>
+            <input id="udp-len" type="text" placeholder="默认" class="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60">
+          </div>
+        </div>
+        <div class="flex items-center gap-3 pt-2">
+          <input type="checkbox" id="reverse" class="rounded border-slate-700 bg-slate-900/60">
+          <label for="reverse" class="text-sm text-slate-300">反向测试 (-R)</label>
+          <span class="text-xs text-slate-500">在源节点上发起反向流量测试。</span>
+        </div>
+        <button id="run-test" class="w-full rounded-xl bg-gradient-to-r from-sky-500 to-indigo-500 px-4 py-3 text-sm font-semibold text-white shadow-lg transition hover:scale-[1.01]">
+          🚀 开始测试
+        </button>
+      </div>
+
+      <div id="suite-test-panel" class="hidden space-y-4">
+        <div class="grid gap-3 sm:grid-cols-2">
+          <div class="space-y-2">
+            <label class="text-sm font-medium text-slate-200">源节点</label>
+            <select id="suite-src-select" class="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500"></select>
+          </div>
+          <div class="space-y-2">
+            <label class="text-sm font-medium text-slate-200">目标节点</label>
+            <select id="suite-dst-select" class="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500"></select>
+          </div>
+          <div class="space-y-2">
+            <label class="text-sm font-medium text-slate-200">时长（秒）</label>
+            <input id="suite-duration" type="number" value="10" class="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500">
+          </div>
+          <div class="space-y-2">
+            <label class="text-sm font-medium text-slate-200">并行数</label>
+            <input id="suite-parallel" type="number" value="1" class="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500">
+          </div>
+        </div>
+        <button id="run-suite-test" class="w-full rounded-xl bg-gradient-to-r from-emerald-500 to-sky-500 px-4 py-3 text-sm font-semibold text-white shadow-lg transition hover:scale-[1.01]">
+          🚀 开始双向 TCP/UDP 测试
+        </button>
+      </div>
+
+      <div id="test-progress" class="hidden space-y-2 rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+        <div class="flex items-center justify-between text-sm">
+          <span class="text-slate-400">测试进行中...</span>
+          <span id="test-progress-label" class="font-semibold text-sky-300">0%</span>
+        </div>
+        <div class="h-2 w-full rounded-full bg-slate-800/80">
+          <div id="test-progress-bar" class="h-2 w-0 rounded-full bg-gradient-to-r from-sky-500 to-indigo-500 transition-all duration-300"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent Tests Panel -->
+    <div class="panel-card rounded-2xl p-5 space-y-4">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 class="text-lg font-semibold text-white">最近测试</h3>
+          <p class="text-sm text-slate-400">按时间倒序展示，可展开查看原始输出。</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <select id="tests-page-size" class="rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2 text-sm text-slate-100">
+            <option value="5">5 条/页</option>
+            <option value="10" selected>10 条/页</option>
+            <option value="20">20 条/页</option>
+            <option value="50">50 条/页</option>
+          </select>
+          <button id="refresh-tests" class="rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200">刷新</button>
+          <button id="delete-all-tests" class="rounded-lg border border-rose-500/40 bg-rose-500/15 px-4 py-2 text-sm font-semibold text-rose-100 shadow-sm transition hover:bg-rose-500/25">清空记录</button>
+        </div>
+      </div>
+      <div id="tests-list" class="text-sm text-slate-400 space-y-3">加载中...</div>
+      <div id="tests-pagination" class="flex flex-wrap items-center justify-center gap-2 pt-4 hidden">
+        <button id="tests-prev" class="rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-sm font-medium text-slate-300 transition hover:border-sky-500 hover:text-sky-200 disabled:opacity-40 disabled:cursor-not-allowed">« 上一页</button>
+        <span id="tests-page-info" class="text-sm text-slate-400 px-3">第 1 页 / 共 1 页</span>
+        <button id="tests-next" class="rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-sm font-medium text-slate-300 transition hover:border-sky-500 hover:text-sky-200 disabled:opacity-40 disabled:cursor-not-allowed">下一页 »</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Minimal JS for tests page
+    const API_BASE = '';
+    let nodeCache = [];
+    let testsCurrentPage = 1;
+    let testsAllData = [];
+    
+    async function apiFetch(path, options = {}) {
+      return fetch(API_BASE + path, { credentials: 'include', ...options });
+    }
+    
+    function getTestsPageSize() {
+      const select = document.getElementById('tests-page-size');
+      return select ? parseInt(select.value, 10) : 10;
+    }
+    
+    function updateTestsPagination() {
+      const pageSize = getTestsPageSize();
+      const totalPages = Math.max(1, Math.ceil(testsAllData.length / pageSize));
+      const pagination = document.getElementById('tests-pagination');
+      const pageInfo = document.getElementById('tests-page-info');
+      const prevBtn = document.getElementById('tests-prev');
+      const nextBtn = document.getElementById('tests-next');
+      
+      if (testsAllData.length <= pageSize) {
+        pagination?.classList.add('hidden');
+        return;
+      }
+      
+      pagination?.classList.remove('hidden');
+      if (pageInfo) pageInfo.textContent = `第 ${testsCurrentPage} 页 / 共 ${totalPages} 页`;
+      if (prevBtn) prevBtn.disabled = testsCurrentPage <= 1;
+      if (nextBtn) nextBtn.disabled = testsCurrentPage >= totalPages;
+    }
+    
+    async function loadNodes() {
+      try {
+        const res = await apiFetch('/nodes');
+        nodeCache = await res.json();
+        populateNodeSelects();
+      } catch (e) {
+        console.error('Failed to load nodes:', e);
+      }
+    }
+    
+    function populateNodeSelects() {
+      const selects = ['src-select', 'dst-select', 'suite-src-select', 'suite-dst-select'];
+      selects.forEach(id => {
+        const select = document.getElementById(id);
+        if (select) {
+          select.innerHTML = nodeCache.map(n => 
+            `<option value="${n.id}">${n.name} (${n.ip} | iperf ${n.detected_iperf_port || n.iperf_port})</option>`
+          ).join('');
+        }
+      });
+    }
+    
+    async function loadTests() {
+      const testsList = document.getElementById('tests-list');
+      try {
+        const res = await apiFetch('/tests');
+        const tests = await res.json();
+        
+        if (!tests.length) {
+          testsList.textContent = '暂无测试记录。';
+          document.getElementById('tests-pagination')?.classList.add('hidden');
+          return;
+        }
+        
+        testsAllData = tests.slice().reverse();
+        const pageSize = getTestsPageSize();
+        const start = (testsCurrentPage - 1) * pageSize;
+        const pageData = testsAllData.slice(start, start + pageSize);
+        
+        testsList.innerHTML = pageData.map(test => {
+          const srcNode = nodeCache.find(n => n.id === test.src_node_id);
+          const dstNode = nodeCache.find(n => n.id === test.dst_node_id);
+          const srcName = srcNode?.name || `Node ${test.src_node_id}`;
+          const dstName = dstNode?.name || `Node ${test.dst_node_id}`;
+          const protocol = test.protocol?.toUpperCase() || 'TCP';
+          const isSuite = test.raw_result?.tcp_forward || test.raw_result?.udp_forward;
+          
+          return `
+            <div class="rounded-xl border border-slate-800/70 bg-slate-900/60 p-4 space-y-2">
+              <div class="flex items-center justify-between">
+                <div>
+                  <span class="text-xs text-sky-300/70 uppercase">#${test.id} · ${isSuite ? 'TCP/UDP 双向' : protocol}</span>
+                  <p class="text-base font-semibold text-white">${srcName} → ${dstName}</p>
+                </div>
+                <button onclick="deleteTest(${test.id})" class="text-xs text-rose-400 hover:text-rose-300">删除</button>
+              </div>
+            </div>
+          `;
+        }).join('');
+        
+        updateTestsPagination();
+      } catch (e) {
+        testsList.textContent = '加载失败: ' + e.message;
+      }
+    }
+    
+    async function deleteTest(id) {
+      if (!confirm('确定删除此测试记录？')) return;
+      await apiFetch(`/tests/${id}`, { method: 'DELETE' });
+      loadTests();
+    }
+    
+    async function runTest() {
+      const alert = document.getElementById('test-alert');
+      alert.classList.add('hidden');
+      
+      const srcId = document.getElementById('src-select').value;
+      const dstId = document.getElementById('dst-select').value;
+      const protocol = document.getElementById('protocol').value;
+      const duration = document.getElementById('duration').value;
+      const parallel = document.getElementById('parallel').value;
+      const reverse = document.getElementById('reverse').checked;
+      
+      try {
+        const res = await apiFetch('/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ src_node_id: parseInt(srcId), dst_node_id: parseInt(dstId), protocol, duration: parseInt(duration), parallel: parseInt(parallel), reverse })
+        });
+        if (!res.ok) throw new Error('Test failed');
+        loadTests();
+      } catch (e) {
+        alert.textContent = '测试失败: ' + e.message;
+        alert.classList.remove('hidden');
+      }
+    }
+    
+    async function runSuiteTest() {
+      const alert = document.getElementById('test-alert');
+      alert.classList.add('hidden');
+      
+      const srcId = document.getElementById('suite-src-select').value;
+      const dstId = document.getElementById('suite-dst-select').value;
+      const duration = document.getElementById('suite-duration').value;
+      const parallel = document.getElementById('suite-parallel').value;
+      
+      try {
+        const res = await apiFetch('/test/dual', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ src_node_id: parseInt(srcId), dst_node_id: parseInt(dstId), duration: parseInt(duration), parallel: parseInt(parallel) })
+        });
+        if (!res.ok) throw new Error('Test failed');
+        loadTests();
+      } catch (e) {
+        alert.textContent = '测试失败: ' + e.message;
+        alert.classList.remove('hidden');
+      }
+    }
+    
+    // Tab switching
+    document.getElementById('single-test-tab')?.addEventListener('click', () => {
+      document.getElementById('single-test-panel').classList.remove('hidden');
+      document.getElementById('suite-test-panel').classList.add('hidden');
+      document.getElementById('single-test-tab').className = 'rounded-full bg-gradient-to-r from-sky-500/80 to-indigo-500/80 px-4 py-1.5 text-xs font-semibold text-slate-50 shadow-lg shadow-sky-500/15 ring-1 ring-sky-400/40 transition hover:brightness-110';
+      document.getElementById('suite-test-tab').className = 'rounded-full px-4 py-1.5 text-xs font-semibold text-slate-300 transition hover:text-white';
+    });
+    document.getElementById('suite-test-tab')?.addEventListener('click', () => {
+      document.getElementById('single-test-panel').classList.add('hidden');
+      document.getElementById('suite-test-panel').classList.remove('hidden');
+      document.getElementById('suite-test-tab').className = 'rounded-full bg-gradient-to-r from-emerald-500/80 to-sky-500/80 px-4 py-1.5 text-xs font-semibold text-slate-50 shadow-lg shadow-emerald-500/15 ring-1 ring-emerald-400/40 transition hover:brightness-110';
+      document.getElementById('single-test-tab').className = 'rounded-full px-4 py-1.5 text-xs font-semibold text-slate-300 transition hover:text-white';
+    });
+    
+    // Protocol switching
+    document.getElementById('protocol')?.addEventListener('change', (e) => {
+      const isUdp = e.target.value === 'udp';
+      document.getElementById('tcp-options').classList.toggle('hidden', isUdp);
+      document.getElementById('udp-options').classList.toggle('hidden', !isUdp);
+    });
+    
+    // Event listeners
+    document.getElementById('run-test')?.addEventListener('click', runTest);
+    document.getElementById('run-suite-test')?.addEventListener('click', runSuiteTest);
+    document.getElementById('refresh-tests')?.addEventListener('click', loadTests);
+    document.getElementById('delete-all-tests')?.addEventListener('click', async () => {
+      if (!confirm('确定清空所有测试记录？')) return;
+      await apiFetch('/tests', { method: 'DELETE' });
+      loadTests();
+    });
+    document.getElementById('tests-prev')?.addEventListener('click', () => {
+      if (testsCurrentPage > 1) { testsCurrentPage--; loadTests(); }
+    });
+    document.getElementById('tests-next')?.addEventListener('click', () => {
+      const pageSize = getTestsPageSize();
+      const totalPages = Math.ceil(testsAllData.length / pageSize);
+      if (testsCurrentPage < totalPages) { testsCurrentPage++; loadTests(); }
+    });
+    document.getElementById('tests-page-size')?.addEventListener('change', () => {
+      testsCurrentPage = 1; loadTests();
+    });
+    
+    // Initialize
+    loadNodes().then(loadTests);
+  </script>
+</body>
+</html>'''
+
 def _schedules_html() -> str:
     return f'''<!DOCTYPE html>
 <html lang="zh-CN">
@@ -4999,6 +5361,15 @@ async def schedules_page(request: Request):
         return HTMLResponse(content="<script>window.location.href='/web';</script>")
     
     return HTMLResponse(content=_schedules_html())
+
+
+@app.get("/web/tests")
+async def tests_page(request: Request):
+    """单次测试页面 - 显示测试计划和最近测试"""
+    if not auth_manager().is_authenticated(request):
+        return HTMLResponse(content="<script>window.location.href='/web';</script>")
+    
+    return HTMLResponse(content=_tests_page_html())
 
 
 @app.get("/auth/status")
