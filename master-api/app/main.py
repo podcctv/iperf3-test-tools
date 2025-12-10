@@ -4214,62 +4214,72 @@ def _tests_page_html() -> str:
           const srcName = srcNode?.name || `Node ${test.src_node_id}`;
           const dstName = dstNode?.name || `Node ${test.dst_node_id}`;
           const protocol = test.protocol?.toUpperCase() || 'TCP';
-          const isSuite = test.raw_result?.tcp_forward || test.raw_result?.udp_forward;
+          const raw = test.raw_result || {};
+          const isSuite = raw.mode === 'suite' && Array.isArray(raw.tests);
           
           // Extract metrics from raw_result
           let metricsHtml = '';
+          const formatSpeed = (bps) => bps ? ((bps / 1e6).toFixed(2) + ' Mbps') : '-';
+          
           if (isSuite) {
-            const tcpFwd = test.raw_result?.tcp_forward?.end?.sum_received;
-            const tcpRev = test.raw_result?.tcp_reverse?.end?.sum_received;
-            const udpFwd = test.raw_result?.udp_forward?.end?.sum;
-            const udpRev = test.raw_result?.udp_reverse?.end?.sum;
+            // Suite test - extract from tests array
+            const tests = raw.tests || [];
+            const getTestSpeed = (label) => {
+              const t = tests.find(e => e.label === label);
+              if (!t) return null;
+              const r = t.raw || t;
+              const end = r.end || {};
+              return (end.sum_received || end.sum)?.bits_per_second;
+            };
             
-            const formatSpeed = (bps) => bps ? ((bps / 1e6).toFixed(2) + ' Mbps') : '-';
+            const tcpFwd = getTestSpeed('TCP 去程');
+            const tcpRev = getTestSpeed('TCP 回程');
+            const udpFwd = getTestSpeed('UDP 去程');
+            const udpRev = getTestSpeed('UDP 回程');
             
             metricsHtml = `
               <div class="grid grid-cols-2 gap-2 pt-2">
                 <div class="rounded-lg bg-slate-950/50 p-2 border border-slate-800/50">
                   <span class="text-xs text-slate-500">TCP 去程</span>
-                  <p class="text-emerald-300 font-semibold">${formatSpeed(tcpFwd?.bits_per_second)}</p>
+                  <p class="text-emerald-300 font-semibold">${formatSpeed(tcpFwd)}</p>
                 </div>
                 <div class="rounded-lg bg-slate-950/50 p-2 border border-slate-800/50">
                   <span class="text-xs text-slate-500">TCP 回程</span>
-                  <p class="text-amber-300 font-semibold">${formatSpeed(tcpRev?.bits_per_second)}</p>
+                  <p class="text-amber-300 font-semibold">${formatSpeed(tcpRev)}</p>
                 </div>
                 <div class="rounded-lg bg-slate-950/50 p-2 border border-slate-800/50">
                   <span class="text-xs text-slate-500">UDP 去程</span>
-                  <p class="text-sky-300 font-semibold">${formatSpeed(udpFwd?.bits_per_second)}</p>
+                  <p class="text-sky-300 font-semibold">${formatSpeed(udpFwd)}</p>
                 </div>
                 <div class="rounded-lg bg-slate-950/50 p-2 border border-slate-800/50">
                   <span class="text-xs text-slate-500">UDP 回程</span>
-                  <p class="text-indigo-300 font-semibold">${formatSpeed(udpRev?.bits_per_second)}</p>
+                  <p class="text-indigo-300 font-semibold">${formatSpeed(udpRev)}</p>
                 </div>
               </div>`;
           } else {
-            const endData = test.raw_result?.end;
-            const sumReceived = endData?.sum_received || endData?.sum;
-            const sumSent = endData?.sum_sent || endData?.sum;
-            const streams = endData?.streams?.[0];
+            // Single test
+            const endData = raw.end || {};
+            const sumReceived = endData.sum_received || endData.sum || {};
+            const sumSent = endData.sum_sent || endData.sum || {};
+            const streams = endData.streams?.[0];
             const rtt = streams?.sender?.mean_rtt;
-            const jitter = endData?.sum?.jitter_ms;
-            
-            const formatSpeed = (bps) => bps ? ((bps / 1e6).toFixed(2) + ' Mbps') : '-';
+            const jitter = sumReceived.jitter_ms ?? sumSent.jitter_ms;
             
             metricsHtml = `
               <div class="grid grid-cols-2 gap-2 pt-2">
                 <div class="rounded-lg bg-slate-950/50 p-2 border border-slate-800/50">
                   <span class="text-xs text-slate-500">接收速率</span>
-                  <p class="text-emerald-300 font-semibold">${formatSpeed(sumReceived?.bits_per_second)}</p>
+                  <p class="text-emerald-300 font-semibold">${formatSpeed(sumReceived.bits_per_second)}</p>
                 </div>
                 <div class="rounded-lg bg-slate-950/50 p-2 border border-slate-800/50">
                   <span class="text-xs text-slate-500">发送速率</span>
-                  <p class="text-amber-300 font-semibold">${formatSpeed(sumSent?.bits_per_second)}</p>
+                  <p class="text-amber-300 font-semibold">${formatSpeed(sumSent.bits_per_second)}</p>
                 </div>
                 ${rtt ? `<div class="rounded-lg bg-slate-950/50 p-2 border border-slate-800/50">
                   <span class="text-xs text-slate-500">RTT</span>
                   <p class="text-sky-300 font-semibold">${(rtt / 1000).toFixed(2)} ms</p>
                 </div>` : ''}
-                ${jitter !== undefined ? `<div class="rounded-lg bg-slate-950/50 p-2 border border-slate-800/50">
+                ${jitter !== undefined && jitter !== null ? `<div class="rounded-lg bg-slate-950/50 p-2 border border-slate-800/50">
                   <span class="text-xs text-slate-500">抖动</span>
                   <p class="text-indigo-300 font-semibold">${jitter.toFixed(2)} ms</p>
                 </div>` : ''}
