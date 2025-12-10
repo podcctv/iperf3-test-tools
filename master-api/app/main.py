@@ -5173,7 +5173,7 @@ async def _ensure_iperf_server_running(dst: Node, requested_port: int) -> bool:
     return False
 
 
-async def _sync_whitelist_to_agents(db: Session, max_retries: int = 2) -> dict:
+async def _sync_whitelist_to_agents(db: Session, max_retries: int = 2, force: bool = False) -> dict:
     """
     Synchronize IP whitelist to all agents with retry mechanism.
     Whitelist includes all node IPs + Master's own IP.
@@ -5196,12 +5196,31 @@ async def _sync_whitelist_to_agents(db: Session, max_retries: int = 2) -> dict:
     
     logger.info(f"Syncing whitelist with {len(whitelist)} IPs to {len(nodes)} agents")
     
+    # Smart sync: Check if whitelist has changed
+    current_hash = _compute_whitelist_hash(whitelist)
+    stored_hash = _load_whitelist_hash()
+    
+    if not force and stored_hash == current_hash:
+        logger.info(f"Whitelist unchanged (hash: {current_hash[:8]}...), skipping sync")
+        return {
+            "total_agents": len(nodes),
+            "success": len(nodes),
+            "failed": 0,
+            "errors": [],
+            "retried": 0,
+            "skipped": True,
+            "reason": "whitelist_unchanged"
+        }
+    
+    logger.info(f"Hash changed: {stored_hash[:8] if stored_hash else 'None'}... -> {current_hash[:8]}...")
+    
     results = {
         "total_agents": len(nodes),
         "success": 0,
         "failed": 0,
         "errors": [],
-        "retried": 0
+        "retried": 0,
+        "skipped": False
     }
     
     failed_nodes = []
@@ -5233,6 +5252,11 @@ async def _sync_whitelist_to_agents(db: Session, max_retries: int = 2) -> dict:
                         still_failed.append(node)
             
             failed_nodes = still_failed
+    
+    # Save hash after successful sync
+    if results["failed"] == 0:
+        _save_whitelist_hash(current_hash)
+        logger.info(f"Whitelist hash saved: {current_hash[:8]}...")
     
     return results
 
@@ -5414,7 +5438,7 @@ async def sync_whitelist_endpoint(db: Session = Depends(get_db)):
     Manually trigger whitelist synchronization to all agents.
     Returns detailed sync results including success/failure counts.
     """
-    results = await _sync_whitelist_to_agents(db)
+    results = await _sync_whitelist_to_agents(db, force=True)  # Manual sync always forces
     
     return {
         "status": "ok",
