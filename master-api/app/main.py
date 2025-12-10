@@ -4584,7 +4584,7 @@ def _tests_page_html() -> str:
 
 
 def _whitelist_html() -> str:
-    return f'''<!DOCTYPE html>
+    return '''<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
@@ -4592,8 +4592,8 @@ def _whitelist_html() -> str:
   <title>白名单管理 - iperf3 Master</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    body {{ background: linear-gradient(135deg, ##0f172a 0%, ##1e293b 100%); min-height: 100vh; }}
-    .glass-card {{ background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(148, 163, 184, 0.1); }}
+    body { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); min-height: 100vh; }
+    .glass-card { background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(148, 163, 184, 0.1); }
   </style>
 </head>
 <body class="text-slate-100">
@@ -4852,7 +4852,7 @@ def _whitelist_html() -> str:
 '
 
 def _schedules_html() -> str:
-    return f'''<!DOCTYPE html>
+    return '''<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
@@ -4861,12 +4861,12 @@ def _schedules_html() -> str:
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
-    body {{ background: linear-gradient(135deg, ##0f172a 0%, ##1e293b 100%); min-height: 100vh; }}
-    .glass-card {{ background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(148, 163, 184, 0.1); }}
-    .custom-scrollbar::-webkit-scrollbar {{ width: 6px; height: 6px; }}
-    .custom-scrollbar::-webkit-scrollbar-track {{ background: rgba(15, 23, 42, 0.3); border-radius: 3px; }}
-    .custom-scrollbar::-webkit-scrollbar-thumb {{ background: rgba(148, 163, 184, 0.3); border-radius: 3px; }}
-    .custom-scrollbar::-webkit-scrollbar-thumb:hover {{ background: rgba(148, 163, 184, 0.5); }}
+    body { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); min-height: 100vh; }
+    .glass-card { background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(148, 163, 184, 0.1); }
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.3); border-radius: 3px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.3); border-radius: 3px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.5); }
   </style>
 </head>
 <body class="text-slate-100">
