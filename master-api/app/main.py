@@ -1010,14 +1010,13 @@ def _login_html() -> str:
 
               <form id="login-form">
                 <div class="form-group">
-                  <label class="form-label" for="password-input">Password</label>
                   <input id="password-input" class="form-input" type="password" placeholder="Enter dashboard password" autocomplete="current-password" required />
                 </div>
                 <button id="login-btn" type="button" class="btn-primary">
                   Login
                 </button>
-                <button id="guest-login-btn" type="button" class="w-full mt-3 rounded-xl border border-slate-600 bg-slate-800/60 px-4 py-3 text-sm font-semibold text-slate-300 transition hover:border-sky-500 hover:text-sky-200">
-                  👁️ 访客模式 (只读)
+                <button id="guest-login-btn" type="button" class="btn-primary" style="background: linear-gradient(135deg, #475569 0%, #334155 100%); margin-top: 0.75rem;">
+                  访客模式
                 </button>
               </form>
             </div>
@@ -4044,6 +4043,12 @@ def _tests_page_html() -> str:
     .glass-card { background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(148, 163, 184, 0.1); }
     .panel-card { background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(8px); border: 1px solid rgba(100, 116, 139, 0.2); }
   </style>
+  <script>
+    // Hide test panel immediately if guest cookie exists to prevent flash
+    if (document.cookie.includes('guest_session=readonly')) {
+      document.write('<style>#test-plan-panel{display:none!important}</style>');
+    }
+  </script>
 </head>
 <body class="text-slate-100">
   <div class="container mx-auto px-4 py-8 max-w-5xl">
@@ -4061,7 +4066,7 @@ def _tests_page_html() -> str:
     </div>
 
     <!-- Test Plan Panel -->
-    <div class="panel-card rounded-2xl p-5 space-y-4 mb-6">
+    <div id="test-plan-panel" class="panel-card rounded-2xl p-5 space-y-4 mb-6">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p class="text-xs uppercase tracking-[0.2em] text-sky-300/70">IPERF3 测试</p>
@@ -4281,9 +4286,20 @@ def _tests_page_html() -> str:
             const getTestSpeed = (label) => {
               const t = tests.find(e => e.label === label);
               if (!t) return null;
-              const r = t.raw || t;
-              const end = r.end || {};
-              return (end.sum_received || end.sum)?.bits_per_second;
+              
+              // Try summary first (pre-calculated)
+              if (t.summary?.bits_per_second) return t.summary.bits_per_second;
+              
+              // Check multiple possible raw data locations
+              const rawData = t.raw || t;
+              const result = rawData.iperf_result || rawData;
+              const end = result.end || rawData.end || {};
+              
+              // Try sum_received, then sum (for UDP)
+              const sumRecv = end.sum_received || {};
+              const sumData = end.sum || {};
+              
+              return sumRecv.bits_per_second || sumData.bits_per_second || null;
             };
             
             const tcpFwd = getTestSpeed('TCP 去程');
@@ -4466,8 +4482,7 @@ def _tests_page_html() -> str:
         
         if (window.isGuest) {
           // Hide test form panel for guests
-          const testPlanPanel = document.querySelector('.panel-card.mb-6');
-          if (testPlanPanel) testPlanPanel.classList.add('hidden');
+          document.getElementById('test-plan-panel')?.classList.add('hidden');
           // Hide delete all tests button
           document.getElementById('delete-all-tests')?.classList.add('hidden');
         }
