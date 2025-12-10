@@ -1023,7 +1023,7 @@ def _login_html() -> str:
                 <p class="text-sm text-slate-400" id="auth-hint"></p>
               </div>
               <div class="flex flex-wrap items-center gap-3">
-                <button data-refresh-nodes onclick="refreshNodes()" class="rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200">刷新节点</button>
+                <button onclick="openTestModal()" class="rounded-lg border border-sky-500/40 bg-sky-500/15 px-4 py-2 text-sm font-semibold text-sky-100 shadow-sm transition hover:bg-sky-500/25 inline-flex items-center gap-2"><span>🧪</span><span>单次测试</span></button>
                 <a href="/web/schedules" class="rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-100 shadow-sm transition hover:bg-emerald-500/25">定时任务</a>
                 <button id="open-settings" onclick="toggleSettingsModal(true)" class="rounded-lg border border-indigo-500/40 bg-indigo-500/15 px-4 py-2 text-sm font-semibold text-indigo-100 shadow-sm transition hover:bg-indigo-500/25 inline-flex items-center gap-2">
                   <span class="text-base">⚙️</span>
@@ -1195,11 +1195,23 @@ def _login_html() -> str:
                     <p class="text-sm text-slate-400">按时间倒序展示，可展开查看原始输出。</p>
                   </div>
                   <div class="flex flex-wrap items-center gap-2">
+                    <select id="tests-page-size" class="rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2 text-sm text-slate-100">
+                      <option value="5">5 条/页</option>
+                      <option value="10" selected>10 条/页</option>
+                      <option value="20">20 条/页</option>
+                      <option value="50">50 条/页</option>
+                    </select>
                     <button id="refresh-tests" class="rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200">刷新</button>
                     <button id="delete-all-tests" class="rounded-lg border border-rose-500/40 bg-rose-500/15 px-4 py-2 text-sm font-semibold text-rose-100 shadow-sm transition hover:bg-rose-500/25">清空记录</button>
                   </div>
                 </div>
                 <div id="tests-list" class="text-sm text-slate-400 space-y-3">暂无测试记录。</div>
+                <!-- Pagination Controls -->
+                <div id="tests-pagination" class="flex flex-wrap items-center justify-center gap-2 pt-4 hidden">
+                  <button id="tests-prev" class="rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-sm font-medium text-slate-300 transition hover:border-sky-500 hover:text-sky-200 disabled:opacity-40 disabled:cursor-not-allowed">« 上一页</button>
+                  <span id="tests-page-info" class="text-sm text-slate-400 px-3">第 1 页 / 共 1 页</span>
+                  <button id="tests-next" class="rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-sm font-medium text-slate-300 transition hover:border-sky-500 hover:text-sky-200 disabled:opacity-40 disabled:cursor-not-allowed">下一页 »</button>
+                </div>
               </div>
             </div>
           </div>
@@ -1466,6 +1478,19 @@ def _login_html() -> str:
           modal.classList.add('hidden');
           modal.classList.remove('flex');
         }
+      }
+    }
+    
+    // Open Test Modal - scrolls to test panel section
+    function openTestModal() {
+      const testPanel = document.querySelector('.panel-card:has(#single-test-tab)');
+      if (testPanel) {
+        testPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // Highlight the panel briefly
+        testPanel.style.boxShadow = '0 0 0 2px rgba(56, 189, 248, 0.5)';
+        setTimeout(() => {
+          testPanel.style.boxShadow = '';
+        }, 1500);
       }
     }
 
@@ -2909,18 +2934,63 @@ def _login_html() -> str:
       }
       await refreshNodes();
     }
+    // Pagination state for tests
+    let testsCurrentPage = 1;
+    let testsAllData = [];
+    
+    function getTestsPageSize() {
+      const select = document.getElementById('tests-page-size');
+      return select ? parseInt(select.value, 10) : 10;
+    }
+    
+    function updateTestsPagination() {
+      const pageSize = getTestsPageSize();
+      const totalPages = Math.max(1, Math.ceil(testsAllData.length / pageSize));
+      const pagination = document.getElementById('tests-pagination');
+      const pageInfo = document.getElementById('tests-page-info');
+      const prevBtn = document.getElementById('tests-prev');
+      const nextBtn = document.getElementById('tests-next');
+      
+      if (testsAllData.length <= pageSize) {
+        pagination?.classList.add('hidden');
+        return;
+      }
+      
+      pagination?.classList.remove('hidden');
+      if (pageInfo) pageInfo.textContent = `第 ${testsCurrentPage} 页 / 共 ${totalPages} 页`;
+      if (prevBtn) prevBtn.disabled = testsCurrentPage <= 1;
+      if (nextBtn) nextBtn.disabled = testsCurrentPage >= totalPages;
+    }
+    
+    function renderTestsPage() {
+      const pageSize = getTestsPageSize();
+      const start = (testsCurrentPage - 1) * pageSize;
+      const pageData = testsAllData.slice(start, start + pageSize);
+      
+      testsList.innerHTML = '';
+      if (!pageData.length) {
+        testsList.textContent = '暂无测试记录。';
+        document.getElementById('tests-pagination')?.classList.add('hidden');
+        return;
+      }
+      
+      renderTestCards(pageData);
+      updateTestsPagination();
+    }
 
     async function refreshTests() {
       const res = await apiFetch('/tests');
       const tests = await res.json();
       if (!tests.length) {
         testsList.textContent = '暂无测试记录。';
+        document.getElementById('tests-pagination')?.classList.add('hidden');
+        testsAllData = [];
         return;
       }
       testsList.innerHTML = '';
 
       const detailBlocks = new Map();
-      const enrichedTests = tests.slice().reverse().map((test) => {
+      const allEnrichedTests = tests.slice().reverse().map((test) => {
         const metrics = summarizeTestMetrics(test.raw_result || {});
         if (metrics?.isSuite) {
           const suiteEntries = normalizeSuiteEntries(test);
@@ -2931,10 +3001,21 @@ def _login_html() -> str:
         const jitterValue = metrics.jitterStats?.avg ?? (metrics.jitterMs ?? null);
         return { test, metrics, rateSummary, latencyValue, jitterValue };
       });
+      
+      // Store all tests for pagination
+      testsAllData = allEnrichedTests;
+      
+      // Slice for current page
+      const pageSize = getTestsPageSize();
+      const start = (testsCurrentPage - 1) * pageSize;
+      const enrichedTests = allEnrichedTests.slice(start, start + pageSize);
+      
+      // Update pagination controls
+      updateTestsPagination();
 
       const maxRate = Math.max(
         1,
-        ...enrichedTests
+        ...allEnrichedTests
           .filter((item) => !item.metrics?.isSuite)
           .map(({ rateSummary }) => Math.max(rateSummary.receiverRateValue || 0, rateSummary.senderRateValue || 0))
       );
@@ -3844,6 +3925,26 @@ def _login_html() -> str:
     configFileInput?.addEventListener('change', (e) => importAgentConfigs(e.target.files[0]));
     document.getElementById('refresh-tests')?.addEventListener('click', refreshTests);
     deleteAllTestsBtn?.addEventListener('click', clearAllTests);
+    
+    // Pagination event listeners
+    document.getElementById('tests-prev')?.addEventListener('click', () => {
+      if (testsCurrentPage > 1) {
+        testsCurrentPage--;
+        refreshTests();
+      }
+    });
+    document.getElementById('tests-next')?.addEventListener('click', () => {
+      const pageSize = getTestsPageSize();
+      const totalPages = Math.ceil(testsAllData.length / pageSize);
+      if (testsCurrentPage < totalPages) {
+        testsCurrentPage++;
+        refreshTests();
+      }
+    });
+    document.getElementById('tests-page-size')?.addEventListener('change', () => {
+      testsCurrentPage = 1;
+      refreshTests();
+    });
 
     document.querySelectorAll('[data-refresh-nodes]').forEach((btn) => btn.addEventListener('click', refreshNodes));
     dstSelect?.addEventListener('change', syncTestPort);
