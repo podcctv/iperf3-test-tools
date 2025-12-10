@@ -4216,15 +4216,76 @@ def _tests_page_html() -> str:
           const protocol = test.protocol?.toUpperCase() || 'TCP';
           const isSuite = test.raw_result?.tcp_forward || test.raw_result?.udp_forward;
           
+          // Extract metrics from raw_result
+          let metricsHtml = '';
+          if (isSuite) {
+            const tcpFwd = test.raw_result?.tcp_forward?.end?.sum_received;
+            const tcpRev = test.raw_result?.tcp_reverse?.end?.sum_received;
+            const udpFwd = test.raw_result?.udp_forward?.end?.sum;
+            const udpRev = test.raw_result?.udp_reverse?.end?.sum;
+            
+            const formatSpeed = (bps) => bps ? ((bps / 1e6).toFixed(2) + ' Mbps') : '-';
+            
+            metricsHtml = `
+              <div class="grid grid-cols-2 gap-2 pt-2">
+                <div class="rounded-lg bg-slate-950/50 p-2 border border-slate-800/50">
+                  <span class="text-xs text-slate-500">TCP 去程</span>
+                  <p class="text-emerald-300 font-semibold">${formatSpeed(tcpFwd?.bits_per_second)}</p>
+                </div>
+                <div class="rounded-lg bg-slate-950/50 p-2 border border-slate-800/50">
+                  <span class="text-xs text-slate-500">TCP 回程</span>
+                  <p class="text-amber-300 font-semibold">${formatSpeed(tcpRev?.bits_per_second)}</p>
+                </div>
+                <div class="rounded-lg bg-slate-950/50 p-2 border border-slate-800/50">
+                  <span class="text-xs text-slate-500">UDP 去程</span>
+                  <p class="text-sky-300 font-semibold">${formatSpeed(udpFwd?.bits_per_second)}</p>
+                </div>
+                <div class="rounded-lg bg-slate-950/50 p-2 border border-slate-800/50">
+                  <span class="text-xs text-slate-500">UDP 回程</span>
+                  <p class="text-indigo-300 font-semibold">${formatSpeed(udpRev?.bits_per_second)}</p>
+                </div>
+              </div>`;
+          } else {
+            const endData = test.raw_result?.end;
+            const sumReceived = endData?.sum_received || endData?.sum;
+            const sumSent = endData?.sum_sent || endData?.sum;
+            const streams = endData?.streams?.[0];
+            const rtt = streams?.sender?.mean_rtt;
+            const jitter = endData?.sum?.jitter_ms;
+            
+            const formatSpeed = (bps) => bps ? ((bps / 1e6).toFixed(2) + ' Mbps') : '-';
+            
+            metricsHtml = `
+              <div class="grid grid-cols-2 gap-2 pt-2">
+                <div class="rounded-lg bg-slate-950/50 p-2 border border-slate-800/50">
+                  <span class="text-xs text-slate-500">接收速率</span>
+                  <p class="text-emerald-300 font-semibold">${formatSpeed(sumReceived?.bits_per_second)}</p>
+                </div>
+                <div class="rounded-lg bg-slate-950/50 p-2 border border-slate-800/50">
+                  <span class="text-xs text-slate-500">发送速率</span>
+                  <p class="text-amber-300 font-semibold">${formatSpeed(sumSent?.bits_per_second)}</p>
+                </div>
+                ${rtt ? `<div class="rounded-lg bg-slate-950/50 p-2 border border-slate-800/50">
+                  <span class="text-xs text-slate-500">RTT</span>
+                  <p class="text-sky-300 font-semibold">${(rtt / 1000).toFixed(2)} ms</p>
+                </div>` : ''}
+                ${jitter !== undefined ? `<div class="rounded-lg bg-slate-950/50 p-2 border border-slate-800/50">
+                  <span class="text-xs text-slate-500">抖动</span>
+                  <p class="text-indigo-300 font-semibold">${jitter.toFixed(2)} ms</p>
+                </div>` : ''}
+              </div>`;
+          }
+          
           return `
             <div class="rounded-xl border border-slate-800/70 bg-slate-900/60 p-4 space-y-2">
               <div class="flex items-center justify-between">
                 <div>
-                  <span class="text-xs text-sky-300/70 uppercase">#${test.id} · ${isSuite ? 'TCP/UDP 双向' : protocol}</span>
+                  <span class="text-xs text-sky-300/70 uppercase">#${test.id} · ${isSuite ? 'SUITE' : protocol}</span>
                   <p class="text-base font-semibold text-white">${srcName} → ${dstName}</p>
                 </div>
                 <button onclick="deleteTest(${test.id})" class="text-xs text-rose-400 hover:text-rose-300">删除</button>
               </div>
+              ${metricsHtml}
             </div>
           `;
         }).join('');
