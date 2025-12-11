@@ -6531,64 +6531,8 @@ _internal_agent_tasks: dict[str, list[dict]] = {}  # node_name -> list of pendin
 _task_results: dict[int, dict] = {}  # task_id -> result
 _task_id_counter = 0
 
-@app.post("/api/agent/register")
-async def register_reverse_agent(
-    registration: AgentRegistration,
-    request: Request,
-    db: Session = Depends(get_db)
-):
-    """
-    Register a reverse/internal agent that polls master.
-    Creates or updates a node entry for this agent.
-    """
-    # Get client IP
-    client_ip = request.client.host if request.client else "unknown"
-    
-    # Check if forwarded
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        client_ip = forwarded.split(",")[0].strip()
-    
-    # Find existing node by name
-    existing = db.scalars(
-        select(Node).where(Node.name == registration.node_name)
-    ).first()
-    
-    if existing:
-        # Update existing node with current IP
-        existing.ip = client_ip
-        existing.iperf_port = registration.iperf_port
-        existing.is_internal = True
-        existing.description = f"内网 agent (反向穿透)"
-        db.commit()
-        db.refresh(existing)
-        return {
-            "status": "updated",
-            "node_id": existing.id,
-            "node_name": existing.name,
-            "ip": client_ip
-        }
-    
-    # Create new node
-    new_node = Node(
-        name=registration.node_name,
-        ip=client_ip,
-        agent_port=8000,
-        iperf_port=registration.iperf_port,
-        is_internal=True,
-        description=f"内网 agent (反向穿透)"
-    )
-    db.add(new_node)
-    db.commit()
-    db.refresh(new_node)
-    
-    return {
-        "status": "registered",
-        "node_id": new_node.id,
-        "node_name": new_node.name,
-        "ip": client_ip
-    }
-
+# NOTE: Old register_reverse_agent endpoint removed - now using agent_register at line ~8248
+# which properly handles agent_mode, last_heartbeat, and whitelist sync
 
 @app.get("/api/agent/tasks")
 async def get_agent_tasks(node_name: str):
