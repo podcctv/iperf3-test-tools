@@ -8237,21 +8237,32 @@ def debug_failures(db: Session = Depends(get_db)):
 # Reverse Mode (NAT) Agent API Endpoints
 # ============================================================================
 
+class AgentRegisterRequest(BaseModel):
+    """Request model for agent registration."""
+    node_name: str
+    iperf_port: int = 5201
+    agent_version: str | None = None
+    mode: str = "reverse"
+
+
 @app.post("/api/agent/register")
 async def agent_register(
     request: Request,
-    node_name: str = Body(..., embed=False, alias="node_name"),
-    iperf_port: int = Body(5201, embed=False),
-    agent_version: str = Body(None, embed=False),
-    mode: str = Body("reverse", embed=False),
+    payload: AgentRegisterRequest,
     db: Session = Depends(get_db)
 ):
     """
     Register a reverse mode (NAT) agent with the master.
     Called periodically by agents behind NAT to maintain heartbeat.
     """
-    # DEBUG: Print to stdout for guaranteed visibility
-    print(f"[REGISTER] Agent registration: node={node_name}, mode={mode}, version={agent_version}", flush=True)
+    # DEBUG: Print to stdout at very start
+    print(f"[REGISTER] === AGENT REGISTRATION RECEIVED ===", flush=True)
+    print(f"[REGISTER] node={payload.node_name}, mode={payload.mode}, version={payload.agent_version}", flush=True)
+    
+    node_name = payload.node_name
+    iperf_port = payload.iperf_port
+    agent_version = payload.agent_version
+    mode = payload.mode
     
     # Get client IP from request
     client_ip = request.client.host if request.client else "unknown"
@@ -8259,22 +8270,25 @@ async def agent_register(
     if forwarded:
         client_ip = forwarded.split(",")[0].strip()
     
+    print(f"[REGISTER] client_ip={client_ip}", flush=True)
+    
     # Find or create node
     node = db.scalars(select(Node).where(Node.name == node_name)).first()
     
     if node:
         # Update existing node
+        print(f"[REGISTER] Updating existing node: {node_name} (id={node.id})", flush=True)
         node.last_heartbeat = datetime.now(timezone.utc)
         node.agent_version = agent_version
         node.agent_mode = mode
         node.iperf_port = iperf_port
         # Update IP if it changed (NAT agents may have dynamic IPs)
         if node.ip != client_ip and client_ip != "unknown":
-            logger.info(f"[REVERSE] Agent {node_name} IP changed: {node.ip} -> {client_ip}")
+            print(f"[REGISTER] IP changed: {node.ip} -> {client_ip}", flush=True)
             node.ip = client_ip
     else:
         # Create new node for this agent
-        logger.info(f"[REVERSE] New agent registered: {node_name} from {client_ip}")
+        print(f"[REGISTER] Creating new node: {node_name}", flush=True)
         node = Node(
             name=node_name,
             ip=client_ip,
@@ -8290,7 +8304,7 @@ async def agent_register(
     db.commit()
     db.refresh(node)
     
-    logger.info(f"[REVERSE] Agent {node_name} registered: mode={mode}, version={agent_version}, ip={client_ip}")
+    print(f"[REGISTER] Success: node_id={node.id}, agent_mode={node.agent_mode}", flush=True)
     
     return {
         "status": "ok",
