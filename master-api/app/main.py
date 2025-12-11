@@ -6596,7 +6596,7 @@ class TaskResult(BaseModel):
 @app.post("/api/agent/tasks/{task_id}/result")
 async def submit_task_result(task_id: int, result: TaskResult):
     """
-    Receive task result from internal agent.
+    Receive task result from internal agent (alternative endpoint).
     """
     global _task_results
     _task_results[task_id] = {
@@ -6604,6 +6604,28 @@ async def submit_task_result(task_id: int, result: TaskResult):
         "result": result.result,
         "received_at": datetime.now(timezone.utc).isoformat()
     }
+    return {"status": "ok", "task_id": task_id}
+
+
+class AgentResultPayload(BaseModel):
+    """Payload for agent result reporting - matches what agent sends."""
+    task_id: int
+    result: dict
+
+
+@app.post("/api/agent/result")
+async def receive_agent_result(payload: AgentResultPayload):
+    """
+    Receive task result from reverse mode (NAT) agent.
+    This is the endpoint the agent actually POSTs to.
+    """
+    global _task_results
+    task_id = payload.task_id
+    _task_results[task_id] = {
+        "result": payload.result,
+        "received_at": datetime.now(timezone.utc).isoformat()
+    }
+    logger.info(f"[REVERSE-RESULT] Received result for task {task_id}")
     return {"status": "ok", "task_id": task_id}
 
 
