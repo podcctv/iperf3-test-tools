@@ -130,8 +130,11 @@ echo "2) 自动安装 agent（仅作为测试节点）"
 echo "3) 手动安装 agent（NAT VPS 指定端口）"
 echo "4) 手动安装 agent（内网设备 反向穿透）"
 echo "5) 不执行安装（仅更新代码）"
+echo "================ 查询选项 ================"
+echo "6) 查看 iperf-agent 日志"
+echo "7) 查看 master-api 日志"
 echo "========================================="
-read -rp "请选择 [1/2/3/4/5]：" choice
+read -rp "请选择 [1-7]：" choice
 
 case "$choice" in
     1)
@@ -221,7 +224,40 @@ EOF
     5)
         echo "[INFO] Skip installation. Done."
         ;;
+    6)
+        # 查看 iperf-agent 日志
+        echo "[INFO] 查看 iperf-agent 日志 (按 Ctrl+C 退出)..."
+        echo ""
+        # 尝试多种可能的容器名称
+        AGENT_CONTAINER=$(docker ps -q --filter "name=iperf-agent" | head -1)
+        if [ -z "$AGENT_CONTAINER" ]; then
+            AGENT_CONTAINER=$(docker ps -q --filter "name=iperf3-test-tools-agent" | head -1)
+        fi
+        if [ -n "$AGENT_CONTAINER" ]; then
+            docker logs -f "$AGENT_CONTAINER"
+        else
+            echo "[ERROR] 未找到 iperf-agent 容器"
+            echo "[INFO] 可用容器列表："
+            docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Image}}"
+        fi
+        ;;
+    7)
+        # 查看 master-api 日志
+        echo "[INFO] 查看 master-api 日志 (按 Ctrl+C 退出)..."
+        echo ""
+        MASTER_CONTAINER=$(docker ps -q --filter "name=master-api" | head -1)
+        if [ -z "$MASTER_CONTAINER" ]; then
+            MASTER_CONTAINER=$(docker ps -q --filter "name=iperf3-test-tools-master" | head -1)
+        fi
+        if [ -n "$MASTER_CONTAINER" ]; then
+            docker logs -f "$MASTER_CONTAINER"
+        else
+            echo "[ERROR] 未找到 master-api 容器"
+            echo "[INFO] 可用容器列表："
+            docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Image}}"
+        fi
+        ;;
     *)
-        echo "[WARN] Invalid choice. No installation performed."
+        echo "[WARN] Invalid choice. No action performed."
         ;;
 esac

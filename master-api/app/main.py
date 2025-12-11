@@ -4176,13 +4176,13 @@ def _tests_page_html() -> str:
         </button>
       </div>
 
-      <div id="test-progress" class="hidden space-y-2 rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+      <div id="test-progress" class="hidden space-y-2 rounded-xl border border-sky-500/30 bg-slate-900/80 p-4">
         <div class="flex items-center justify-between text-sm">
-          <span class="text-slate-400">测试进行中...</span>
-          <span id="test-progress-label" class="font-semibold text-sky-300">0%</span>
+          <span id="progress-status" class="text-slate-300">测试进行中...</span>
+          <span id="progress-time" class="font-mono text-xs text-sky-300">0s / ~0s</span>
         </div>
-        <div class="h-2 w-full rounded-full bg-slate-800/80">
-          <div id="test-progress-bar" class="h-2 w-0 rounded-full bg-gradient-to-r from-sky-500 to-indigo-500 transition-all duration-300"></div>
+        <div class="h-2.5 w-full rounded-full bg-slate-800/80 overflow-hidden">
+          <div id="progress-bar" class="h-full w-0 rounded-full bg-gradient-to-r from-sky-500 to-indigo-500 transition-all duration-500"></div>
         </div>
       </div>
     </div>
@@ -4302,7 +4302,7 @@ def _tests_page_html() -> str:
           return;
         }
         
-        testsAllData = tests.slice().reverse();
+        testsAllData = tests;  // Already sorted by backend (newest first)
         const pageSize = getTestsPageSize();
         const start = (testsCurrentPage - 1) * pageSize;
         const pageData = testsAllData.slice(start, start + pageSize);
@@ -4432,17 +4432,22 @@ def _tests_page_html() -> str:
     
     async function runTest() {
       const alert = document.getElementById('test-alert');
+      const progressEl = document.getElementById('test-progress');
+      const progressStatus = document.getElementById('progress-status');
+      const progressBar = document.getElementById('progress-bar');
+      const progressTime = document.getElementById('progress-time');
       alert.classList.add('hidden');
       
       const srcId = document.getElementById('src-select').value;
       const dstId = document.getElementById('dst-select').value;
       const protocol = document.getElementById('protocol').value;
-      const duration = document.getElementById('duration').value;
+      const duration = parseInt(document.getElementById('duration').value);
       const parallel = document.getElementById('parallel').value;
       const reverse = document.getElementById('reverse').checked;
       
       // Get the target node's iperf port
       const dstNode = nodeCache.find(n => n.id === parseInt(dstId));
+      const srcNode = nodeCache.find(n => n.id === parseInt(srcId));
       const port = dstNode?.detected_iperf_port || dstNode?.iperf_port || 62001;
       
       // Get bandwidth and omit values
@@ -4451,12 +4456,27 @@ def _tests_page_html() -> str:
       const omit = parseInt(document.getElementById('omit')?.value) || 0;
       const bandwidth = protocol === 'udp' ? udpBandwidth : (tcpBandwidth || null);
       
+      // Show progress bar
+      progressEl?.classList.remove('hidden');
+      if (progressStatus) progressStatus.textContent = `测试中: ${srcNode?.name || 'src'} → ${dstNode?.name || 'dst'}`;
+      if (progressBar) progressBar.style.width = '0%';
+      
+      // Start progress timer
+      const totalTime = duration + 15;  // Add buffer time
+      let elapsed = 0;
+      const timer = setInterval(() => {
+        elapsed++;
+        const pct = Math.min(95, (elapsed / totalTime) * 100);
+        if (progressBar) progressBar.style.width = pct + '%';
+        if (progressTime) progressTime.textContent = `${elapsed}s / ~${totalTime}s`;
+      }, 1000);
+      
       try {
         const payload = { 
           src_node_id: parseInt(srcId), 
           dst_node_id: parseInt(dstId), 
           protocol, 
-          duration: parseInt(duration), 
+          duration, 
           parallel: parseInt(parallel), 
           reverse,
           port
@@ -4469,9 +4489,17 @@ def _tests_page_html() -> str:
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
-        if (!res.ok) throw new Error('Test failed');
-        loadTests();
+        clearInterval(timer);
+        if (progressBar) progressBar.style.width = '100%';
+        if (progressStatus) progressStatus.textContent = res.ok ? '测试完成!' : '测试失败';
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.detail || 'Test failed');
+        }
+        setTimeout(() => { progressEl?.classList.add('hidden'); loadTests(); }, 1500);
       } catch (e) {
+        clearInterval(timer);
+        progressEl?.classList.add('hidden');
         alert.textContent = '测试失败: ' + e.message;
         alert.classList.remove('hidden');
       }
@@ -4480,26 +4508,54 @@ def _tests_page_html() -> str:
     
     async function runSuiteTest() {
       const alert = document.getElementById('test-alert');
+      const progressEl = document.getElementById('test-progress');
+      const progressStatus = document.getElementById('progress-status');
+      const progressBar = document.getElementById('progress-bar');
+      const progressTime = document.getElementById('progress-time');
       alert.classList.add('hidden');
       
       const srcId = document.getElementById('suite-src-select').value;
       const dstId = document.getElementById('suite-dst-select').value;
-      const duration = document.getElementById('suite-duration').value;
+      const duration = parseInt(document.getElementById('suite-duration').value);
       const parallel = document.getElementById('suite-parallel').value;
       
       // Get the target node's iperf port
       const dstNode = nodeCache.find(n => n.id === parseInt(dstId));
+      const srcNode = nodeCache.find(n => n.id === parseInt(srcId));
       const port = dstNode?.detected_iperf_port || dstNode?.iperf_port || 62001;
+      
+      // Show progress bar (suite = 4 tests)
+      progressEl?.classList.remove('hidden');
+      if (progressStatus) progressStatus.textContent = `双向测试: ${srcNode?.name || 'src'} ↔ ${dstNode?.name || 'dst'}`;
+      if (progressBar) progressBar.style.width = '0%';
+      
+      // Start progress timer (4 tests)
+      const totalTime = (duration * 4) + 30;  // 4 tests + buffer
+      let elapsed = 0;
+      const timer = setInterval(() => {
+        elapsed++;
+        const pct = Math.min(95, (elapsed / totalTime) * 100);
+        if (progressBar) progressBar.style.width = pct + '%';
+        if (progressTime) progressTime.textContent = `${elapsed}s / ~${totalTime}s`;
+      }, 1000);
       
       try {
         const res = await apiFetch('/tests/suite', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ src_node_id: parseInt(srcId), dst_node_id: parseInt(dstId), duration: parseInt(duration), parallel: parseInt(parallel), port })
+          body: JSON.stringify({ src_node_id: parseInt(srcId), dst_node_id: parseInt(dstId), duration, parallel: parseInt(parallel), port })
         });
-        if (!res.ok) throw new Error('Test failed');
-        loadTests();
+        clearInterval(timer);
+        if (progressBar) progressBar.style.width = '100%';
+        if (progressStatus) progressStatus.textContent = res.ok ? '测试完成!' : '测试失败';
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.detail || 'Test failed');
+        }
+        setTimeout(() => { progressEl?.classList.add('hidden'); loadTests(); }, 1500);
       } catch (e) {
+        clearInterval(timer);
+        progressEl?.classList.add('hidden');
         alert.textContent = '测试失败: ' + e.message;
         alert.classList.remove('hidden');
       }
@@ -4532,8 +4588,16 @@ def _tests_page_html() -> str:
     document.getElementById('refresh-tests')?.addEventListener('click', loadTests);
     document.getElementById('delete-all-tests')?.addEventListener('click', async () => {
       if (!confirm('确定清空所有测试记录？')) return;
-      await apiFetch('/tests', { method: 'DELETE' });
-      loadTests();
+      try {
+        const res = await apiFetch('/tests', { method: 'DELETE' });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || 'Delete failed');
+        }
+        loadTests();
+      } catch (e) {
+        alert('删除失败: ' + e.message);
+      }
     });
     document.getElementById('tests-prev')?.addEventListener('click', () => {
       if (testsCurrentPage > 1) { testsCurrentPage--; loadTests(); }
@@ -6685,16 +6749,21 @@ async def _call_reverse_agent_test(src: Node, payload: dict, duration: int) -> d
         if task_id in _task_results:
             result_data = _task_results.pop(task_id)
             result = result_data.get("result", {})
-            logger.info(f"[REVERSE-TEST] Received result for task {task_id}")
+            logger.info(f"[REVERSE-TEST] Received result for task {task_id}: status={result.get('status')}")
+            logger.info(f"[REVERSE-TEST] Result keys: {list(result.keys()) if isinstance(result, dict) else 'not a dict'}")
             
             if result.get("status") == "ok":
                 # Return in same format as direct agent call
-                return {"status": "ok", "iperf_result": result.get("iperf_result", {})}
+                iperf_result = result.get("iperf_result", {})
+                logger.info(f"[REVERSE-TEST] Returning iperf_result with {len(iperf_result) if isinstance(iperf_result, dict) else 0} keys")
+                return {"status": "ok", "iperf_result": iperf_result}
             else:
                 error_msg = result.get("error", "Unknown error from reverse agent")
+                logger.warning(f"[REVERSE-TEST] Task {task_id} failed: {error_msg}")
                 raise HTTPException(status_code=502, detail=f"reverse agent test failed: {error_msg}")
         
-        logger.debug(f"[REVERSE-TEST] Waiting for task {task_id}, {waited}s/{max_wait}s")
+        if waited % 10 == 0:  # Log every 10 seconds
+            logger.info(f"[REVERSE-TEST] Waiting for task {task_id}, {waited}s/{max_wait}s")
     
     # Timeout - clean up task if still pending
     if src.name in _internal_agent_tasks:
