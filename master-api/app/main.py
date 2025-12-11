@@ -5388,8 +5388,31 @@ def _schedules_html() -> str:
               
               <!-- History Panel -->
               <div id="history-panel-${schedule.id}" class="hidden mt-4 pt-4 border-t border-slate-700/50">
-                  <div class="bg-slate-900/50 rounded-lg p-3 max-h-40 overflow-y-auto custom-scrollbar" id="history-list-${schedule.id}">
-                      <div class="text-center text-xs text-slate-500 py-2">加载历史记录...</div>
+                  <div class="flex items-center justify-between mb-3">
+                    <h5 class="text-sm font-bold text-slate-300">📜 测试历史</h5>
+                    <div id="history-pagination-${schedule.id}" class="flex items-center gap-2 text-xs">
+                      <button onclick="historyPage(${schedule.id}, -1)" class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-300" data-prev>« 上页</button>
+                      <span class="text-slate-400" data-info>1/1</span>
+                      <button onclick="historyPage(${schedule.id}, 1)" class="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-300" data-next>下页 »</button>
+                    </div>
+                  </div>
+                  <div class="overflow-x-auto custom-scrollbar">
+                    <table class="w-full text-xs">
+                      <thead>
+                        <tr class="text-slate-400 border-b border-slate-700">
+                          <th class="py-2 px-2 text-left font-medium">时间</th>
+                          <th class="py-2 px-2 text-left font-medium">协议</th>
+                          <th class="py-2 px-2 text-right font-medium text-sky-400">上传(Mb)</th>
+                          <th class="py-2 px-2 text-right font-medium text-emerald-400">下载(Mb)</th>
+                          <th class="py-2 px-2 text-right font-medium">延迟(ms)</th>
+                          <th class="py-2 px-2 text-right font-medium">丢包(%)</th>
+                          <th class="py-2 px-2 text-center font-medium">状态</th>
+                        </tr>
+                      </thead>
+                      <tbody id="history-${schedule.id}" class="text-slate-300">
+                        <tr><td colspan="7" class="py-3 text-center text-slate-500">加载中...</td></tr>
+                      </tbody>
+                    </table>
                   </div>
               </div>
             </div>`;
@@ -5479,24 +5502,52 @@ def _schedules_html() -> str:
       renderHistoryTable(scheduleId, data.results);
     }
     
-    // 渲染历史表格
-    function renderHistoryTable(scheduleId, results) {
+    // 历史记录分页数据存储
+    const historyPageData = {};
+    const HISTORY_PAGE_SIZE = 10;
+    
+    // 渲染历史表格（带分页）
+    function renderHistoryTable(scheduleId, results, page = 1) {
       const tbody = document.getElementById(`history-${scheduleId}`);
+      const pagination = document.getElementById(`history-pagination-${scheduleId}`);
       if (!tbody) return;
       
+      // Store results for pagination
+      historyPageData[scheduleId] = { results: [...results].reverse(), page };
+      
       if (results.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="py-2 text-center text-slate-500">暂无数据</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="py-3 text-center text-slate-500">暂无数据</td></tr>';
+        if (pagination) pagination.classList.add('hidden');
         return;
       }
       
-      // 按时间倒序
-      const sorted = [...results].reverse().slice(0, 10); // 显示最近10条
+      // Pagination calculation
+      const sorted = historyPageData[scheduleId].results;
+      const totalPages = Math.ceil(sorted.length / HISTORY_PAGE_SIZE);
+      const currentPage = Math.max(1, Math.min(page, totalPages));
+      historyPageData[scheduleId].page = currentPage;
       
-      tbody.innerHTML = sorted.map(r => {
-          const time = new Date(r.executed_at).toLocaleTimeString('zh-CN');
-          const statusColor = r.status === 'success' ? 'text-emerald-400' : 'text-rose-400';
+      const start = (currentPage - 1) * HISTORY_PAGE_SIZE;
+      const pageData = sorted.slice(start, start + HISTORY_PAGE_SIZE);
+      
+      // Update pagination UI
+      if (pagination) {
+        pagination.classList.remove('hidden');
+        const info = pagination.querySelector('[data-info]');
+        const prevBtn = pagination.querySelector('[data-prev]');
+        const nextBtn = pagination.querySelector('[data-next]');
+        if (info) info.textContent = `${currentPage}/${totalPages}`;
+        if (prevBtn) prevBtn.disabled = currentPage <= 1;
+        if (nextBtn) nextBtn.disabled = currentPage >= totalPages;
+      }
+      
+      tbody.innerHTML = pageData.map(r => {
+          const time = new Date(r.executed_at).toLocaleTimeString('zh-CN', {
+            hour: '2-digit', minute: '2-digit', second: '2-digit'
+          });
+          const statusClass = r.status === 'success' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400';
           const s = r.test_result?.summary || {};
-          const protocol = r.test_result?.protocol || 'tcp';
+          const protocol = (r.test_result?.protocol || 'tcp').toUpperCase();
           
           // Determine upload/download speeds
           let up = '-';
@@ -5512,30 +5563,40 @@ def _schedules_html() -> str:
           // Fallback compatibility
           if (up === '-' && down === '-' && s.bits_per_second) {
               const bps = (s.bits_per_second / 1000000).toFixed(2);
-              const isReverse = r.test_result.params?.reverse || r.test_result.raw_result?.start?.test_start?.reverse;
+              const isReverse = r.test_result?.params?.reverse || r.test_result?.raw_result?.start?.test_start?.reverse;
               if (isReverse) down = bps;
               else up = bps;
           }
           
           // TCP 不显示丢包，UDP 才有丢包数据
-          const lostPercent = protocol === 'udp' 
+          const lostPercent = protocol === 'UDP' 
             ? (s.lost_percent?.toFixed(2) || '-')
-            : '<span class="text-slate-600">N/A</span>';
+            : '<span class="text-slate-600">-</span>';
           
           return `
-            <tr>
-              <td class="py-2">${time}</td>
-              <td class="py-2 text-sky-400">${up}</td>
-              <td class="py-2 text-emerald-400">${down}</td>
-              <td class="py-1">${s.latency_ms?.toFixed(2) || '-'}</td>
-              <td class="py-1">${lostPercent}</td>
-              <td class="py-1 ${statusColor} text-xs" title="${r.error_message || ''}">
-                ${r.status}
-                ${r.status === 'failed' ? '<span class="ml-1 cursor-help">ⓘ</span>' : ''}
+            <tr class="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors">
+              <td class="py-2 px-2 font-mono">${time}</td>
+              <td class="py-2 px-2"><span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${protocol === 'TCP' ? 'bg-sky-500/20 text-sky-400' : 'bg-purple-500/20 text-purple-400'}">${protocol}</span></td>
+              <td class="py-2 px-2 text-right font-mono text-sky-400">${up}</td>
+              <td class="py-2 px-2 text-right font-mono text-emerald-400">${down}</td>
+              <td class="py-2 px-2 text-right font-mono">${s.latency_ms?.toFixed(1) || '-'}</td>
+              <td class="py-2 px-2 text-right font-mono">${lostPercent}</td>
+              <td class="py-2 px-2 text-center">
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold ${statusClass}" title="${r.error_message || ''}">
+                  ${r.status === 'success' ? '✓' : '✗'}
+                </span>
               </td>
             </tr>
           `;
       }).join('');
+    }
+    
+    // 历史分页翻页
+    function historyPage(scheduleId, offset) {
+      const data = historyPageData[scheduleId];
+      if (!data) return;
+      const newPage = data.page + offset;
+      renderHistoryTable(scheduleId, data.results.slice().reverse(), newPage);
     }
 
 
@@ -6160,34 +6221,45 @@ def _schedules_html() -> str:
                         displayTraffic = mb + 'M';
                     }
                     
-                    // 渐变颜色配置
-                    const gradients = [
+                    // Check online status
+                    const isOnline = n.status === 'online';
+                    
+                    // Color config - use grayed out for offline nodes
+                    const gradients = isOnline ? [
                         'from-sky-500/20 to-blue-600/10',
                         'from-emerald-500/20 to-teal-600/10',
                         'from-purple-500/20 to-pink-600/10',
                         'from-amber-500/20 to-orange-600/10'
-                    ];
-                    const borderColors = ['border-sky-500/30', 'border-emerald-500/30', 'border-purple-500/30', 'border-amber-500/30'];
-                    const textColors = ['text-sky-400', 'text-emerald-400', 'text-purple-400', 'text-amber-400'];
+                    ] : ['from-slate-600/20 to-slate-700/10'];
+                    
+                    const borderColors = isOnline 
+                        ? ['border-sky-500/30', 'border-emerald-500/30', 'border-purple-500/30', 'border-amber-500/30']
+                        : ['border-slate-600/30'];
+                    const textColors = isOnline 
+                        ? ['text-sky-400', 'text-emerald-400', 'text-purple-400', 'text-amber-400']
+                        : ['text-slate-500'];
+                    
                     const gradient = gradients[idx % gradients.length];
                     const borderColor = borderColors[idx % borderColors.length];
                     const textColor = textColors[idx % textColors.length];
                     
-                    // Status indicator
-                    const isOnline = n.status === 'online';
+                    // Status indicator - Green for online, Red for offline
                     const statusDot = isOnline 
-                        ? '<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>'
-                        : '<span class="w-2 h-2 rounded-full bg-slate-500"></span>';
+                        ? '<span class="w-2 h-2 rounded-full bg-emerald-400 shadow shadow-emerald-400/50 animate-pulse"></span>'
+                        : '<span class="w-2 h-2 rounded-full bg-rose-500"></span>';
+                    
+                    // Card opacity for offline
+                    const cardOpacity = isOnline ? '' : 'opacity-60';
                     
                     return `
-                      <div class="relative overflow-hidden rounded-2xl bg-gradient-to-br ${gradient} border ${borderColor} p-4 transition-all hover:scale-[1.02] hover:shadow-lg group">
+                      <div class="relative overflow-hidden rounded-2xl bg-gradient-to-br ${gradient} border ${borderColor} p-4 transition-all hover:scale-[1.02] hover:shadow-lg group ${cardOpacity}">
                         <div class="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-white/5 to-transparent rounded-full -translate-y-6 translate-x-6"></div>
                         
                         <!-- Header: Flag + Status + Name -->
                         <div class="flex items-center gap-2 mb-3">
                           ${statusDot}
                           <span id="vps-flag-${n.node_id}" class="text-xs font-bold text-slate-400 bg-slate-700/50 px-1.5 py-0.5 rounded">--</span>
-                          <h4 class="text-sm font-bold text-white truncate flex-1">${n.name}</h4>
+                          <h4 class="text-sm font-bold ${isOnline ? 'text-white' : 'text-slate-400'} truncate flex-1">${n.name}</h4>
                           <span id="vps-tasks-${n.node_id}" class="px-2 py-0.5 rounded-full bg-slate-700/50 text-xs text-slate-400 font-bold" title="运行中的任务数">0 任务</span>
                         </div>
                         
