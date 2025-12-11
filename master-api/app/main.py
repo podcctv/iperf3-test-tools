@@ -6393,6 +6393,186 @@ def _schedules_html() -> str:
 '''
 
 
+def _admin_html() -> str:
+    return '''<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>系统管理 - iPerf3 测试工具</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+  </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
+  <div class="max-w-4xl mx-auto px-6 py-10">
+    
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-10">
+      <div>
+        <h1 class="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500">系统管理</h1>
+        <p class="text-sm text-slate-400 mt-1">System Administration</p>
+      </div>
+      <a href="/web" class="px-4 py-2 bg-slate-700 rounded-lg text-sm font-medium hover:bg-slate-600 transition-colors flex items-center gap-2">
+        ← 返回主页
+      </a>
+    </div>
+    
+    <!-- Database Management Card -->
+    <div class="bg-slate-800/50 backdrop-blur border border-slate-700 rounded-2xl p-6 mb-6">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-10 h-10 bg-rose-500/20 rounded-xl flex items-center justify-center">
+          <span class="text-xl">🗄️</span>
+        </div>
+        <div>
+          <h2 class="text-lg font-bold text-white">数据库管理</h2>
+          <p class="text-xs text-slate-400">Database Management</p>
+        </div>
+      </div>
+      
+      <p class="text-sm text-slate-400 mb-6">
+        清空测试数据将删除所有单次测试记录和定时任务执行历史。<strong class="text-rose-400">节点配置和定时任务设置不会被删除。</strong>
+      </p>
+      
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Clear All Test Data -->
+        <div class="bg-slate-900/50 border border-slate-700 rounded-xl p-4">
+          <h3 class="font-bold text-white mb-2">🧹 清空所有测试数据</h3>
+          <p class="text-xs text-slate-400 mb-4">删除 test_results 和 schedule_results 表中的所有记录</p>
+          <button id="clear-all-data" class="w-full px-4 py-2 bg-rose-600 hover:bg-rose-500 rounded-lg text-sm font-bold transition-colors">
+            清空所有数据
+          </button>
+        </div>
+        
+        <!-- Clear Only Schedule Results -->
+        <div class="bg-slate-900/50 border border-slate-700 rounded-xl p-4">
+          <h3 class="font-bold text-white mb-2">📊 仅清空定时任务历史</h3>
+          <p class="text-xs text-slate-400 mb-4">只删除 schedule_results 表中的记录</p>
+          <button id="clear-schedule-results" class="w-full px-4 py-2 bg-amber-600 hover:bg-amber-500 rounded-lg text-sm font-bold transition-colors">
+            清空定时任务历史
+          </button>
+        </div>
+      </div>
+      
+      <!-- Result Message -->
+      <div id="db-result" class="mt-4 hidden"></div>
+    </div>
+    
+    <!-- Traceroute Card -->
+    <div class="bg-slate-800/50 backdrop-blur border border-slate-700 rounded-2xl p-6 mb-6">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-10 h-10 bg-emerald-500/20 rounded-xl flex items-center justify-center">
+          <span class="text-xl">🌐</span>
+        </div>
+        <div>
+          <h2 class="text-lg font-bold text-white">Traceroute 路由追踪</h2>
+          <p class="text-xs text-slate-400">Network Path Tracing</p>
+        </div>
+      </div>
+      
+      <p class="text-sm text-slate-400 mb-6">
+        从指定节点到目标地址进行路由追踪，分析网络路径和延迟。
+      </p>
+      
+      <div class="bg-slate-900/50 border border-slate-700 rounded-xl p-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="font-bold text-white mb-1">🚧 即将推出</h3>
+            <p class="text-xs text-slate-400">此功能正在开发中...</p>
+          </div>
+          <button disabled class="px-4 py-2 bg-slate-600 text-slate-400 rounded-lg text-sm font-bold cursor-not-allowed">
+            开发中
+          </button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Other Tools Card -->
+    <div class="bg-slate-800/50 backdrop-blur border border-slate-700 rounded-2xl p-6">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-10 h-10 bg-sky-500/20 rounded-xl flex items-center justify-center">
+          <span class="text-xl">🔧</span>
+        </div>
+        <div>
+          <h2 class="text-lg font-bold text-white">其他工具</h2>
+          <p class="text-xs text-slate-400">Other Tools</p>
+        </div>
+      </div>
+      
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <a href="/web/whitelist" class="bg-slate-900/50 border border-slate-700 rounded-xl p-4 text-center hover:border-sky-500/50 transition-colors">
+          <span class="text-2xl">🛡️</span>
+          <div class="text-sm font-bold mt-2">IP 白名单</div>
+        </a>
+        <a href="/web/schedules" class="bg-slate-900/50 border border-slate-700 rounded-xl p-4 text-center hover:border-emerald-500/50 transition-colors">
+          <span class="text-2xl">📅</span>
+          <div class="text-sm font-bold mt-2">定时任务</div>
+        </a>
+        <a href="/web/tests" class="bg-slate-900/50 border border-slate-700 rounded-xl p-4 text-center hover:border-purple-500/50 transition-colors">
+          <span class="text-2xl">🚀</span>
+          <div class="text-sm font-bold mt-2">单次测试</div>
+        </a>
+        <a href="/web" class="bg-slate-900/50 border border-slate-700 rounded-xl p-4 text-center hover:border-amber-500/50 transition-colors">
+          <span class="text-2xl">🏠</span>
+          <div class="text-sm font-bold mt-2">主控面板</div>
+        </a>
+      </div>
+    </div>
+    
+  </div>
+  
+  <script>
+    const apiFetch = (url, options = {}) => {
+      return fetch(url, {
+        ...options,
+        headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }
+      });
+    };
+    
+    function showResult(message, isError = false) {
+      const el = document.getElementById('db-result');
+      el.className = `mt-4 p-3 rounded-lg text-sm font-bold ${isError ? 'bg-rose-500/20 text-rose-400' : 'bg-emerald-500/20 text-emerald-400'}`;
+      el.textContent = message;
+      el.classList.remove('hidden');
+    }
+    
+    document.getElementById('clear-all-data').addEventListener('click', async () => {
+      if (!confirm('⚠️ 确定要清空所有测试数据吗？\\n\\n这将删除：\\n- 所有单次测试记录\\n- 所有定时任务执行历史\\n\\n此操作不可撤销！')) return;
+      
+      try {
+        const res = await apiFetch('/admin/clear_all_test_data', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok) {
+          showResult(`✓ 成功清空数据：删除了 ${data.test_results_deleted || 0} 条测试记录，${data.schedule_results_deleted || 0} 条定时任务历史`);
+        } else {
+          showResult(`✗ 失败: ${data.detail || '未知错误'}`, true);
+        }
+      } catch (e) {
+        showResult(`✗ 请求失败: ${e.message}`, true);
+      }
+    });
+    
+    document.getElementById('clear-schedule-results').addEventListener('click', async () => {
+      if (!confirm('⚠️ 确定要清空定时任务历史吗？\\n\\n这将删除所有定时任务的执行记录。\\n\\n此操作不可撤销！')) return;
+      
+      try {
+        const res = await apiFetch('/admin/clear_schedule_results', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok) {
+          showResult(`✓ 成功清空定时任务历史：删除了 ${data.count || 0} 条记录`);
+        } else {
+          showResult(`✗ 失败: ${data.detail || '未知错误'}`, true);
+        }
+      } catch (e) {
+        showResult(`✗ 请求失败: ${e.message}`, true);
+      }
+    });
+  </script>
+</body>
+</html>
+'''
+
 
 @app.get("/web", response_class=HTMLResponse)
 def dashboard() -> HTMLResponse:
@@ -6427,6 +6607,15 @@ async def tests_page(request: Request):
         return HTMLResponse(content="<script>window.location.href='/web';</script>")
     
     return HTMLResponse(content=_tests_page_html())
+
+
+@app.get("/web/admin")
+async def admin_page(request: Request):
+    """系统管理页面"""
+    if not auth_manager().is_authenticated(request):
+        return HTMLResponse(content="<script>window.location.href='/web';</script>")
+    
+    return HTMLResponse(content=_admin_html())
 
 
 @app.get("/auth/status")
@@ -7845,6 +8034,62 @@ def delete_all_tests(db: Session = Depends(get_db)):
     return {"status": "deleted", "count": len(results)}
 
 
+# ============================================================================
+# Admin Endpoints - Database Management
+# ============================================================================
+
+@app.post("/admin/clear_all_test_data")
+def clear_all_test_data(db: Session = Depends(get_db)):
+    """
+    Clear all test data from the database.
+    This includes: test_results and schedule_results.
+    Does NOT delete: nodes, schedules (configurations).
+    """
+    # Count before deletion
+    test_count = db.execute(text("SELECT COUNT(*) FROM test_results")).scalar()
+    schedule_result_count = db.execute(text("SELECT COUNT(*) FROM schedule_results")).scalar()
+    
+    # Delete schedule_results first (has FK to test_results)
+    db.execute(text("DELETE FROM schedule_results"))
+    
+    # Delete test_results
+    db.execute(text("DELETE FROM test_results"))
+    
+    db.commit()
+    _persist_state(db)
+    
+    logger.info(f"[ADMIN] Cleared all test data: {test_count} test_results, {schedule_result_count} schedule_results")
+    
+    return {
+        "status": "ok",
+        "test_results_deleted": test_count,
+        "schedule_results_deleted": schedule_result_count
+    }
+
+
+@app.post("/admin/clear_schedule_results")
+def clear_schedule_results(db: Session = Depends(get_db)):
+    """
+    Clear only schedule_results from the database.
+    This preserves test_results from manual/single tests.
+    """
+    # Count before deletion
+    count = db.execute(text("SELECT COUNT(*) FROM schedule_results")).scalar()
+    
+    # Delete all schedule_results
+    db.execute(text("DELETE FROM schedule_results"))
+    
+    db.commit()
+    _persist_state(db)
+    
+    logger.info(f"[ADMIN] Cleared schedule results: {count} records")
+    
+    return {
+        "status": "ok",
+        "count": count
+    }
+
+
 @app.delete("/tests/{test_id}")
 def delete_test(test_id: int, db: Session = Depends(get_db)):
     test = db.get(TestResult, test_id)
@@ -8006,6 +8251,17 @@ async def _execute_schedule_task(schedule_id: int):
                     
                     if is_nat_source:
                         # NAT source node: queue task for agent to poll and execute
+                        # IMPORTANT: Start iperf server on destination BEFORE queuing task
+                        # so the NAT agent can connect when it picks up the task
+                        try:
+                            server_port = await _ensure_iperf_server_running(effective_dst, current_port)
+                            # Update test_params with the actual port the server is running on
+                            test_params["target_port"] = server_port
+                            logger.info(f"[NAT-SCHEDULE] Started iperf server on {effective_dst.name}:{server_port} for NAT agent test")
+                        except Exception as e:
+                            logger.error(f"[NAT-SCHEDULE] Failed to start iperf server on {effective_dst.name}: {e}")
+                            raise
+                        
                         pending_task = PendingTask(
                             node_name=effective_src.name,
                             task_type="iperf_test",
