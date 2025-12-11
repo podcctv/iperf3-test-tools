@@ -1788,6 +1788,7 @@ def _reverse_mode_register():
         "node_name": NODE_NAME,
         "iperf_port": IPERF_PORT,
         "agent_version": AGENT_VERSION,
+        "mode": "reverse",  # Tell master this is a NAT agent
     }
     
     try:
