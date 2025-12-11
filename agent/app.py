@@ -1780,6 +1780,7 @@ def _execute_test_task(task: dict) -> dict:
 def _reverse_mode_register():
     """Register this agent with the master."""
     if not MASTER_URL or not NODE_NAME:
+        print(f"[REVERSE] Cannot register: MASTER_URL={MASTER_URL}, NODE_NAME={NODE_NAME}", flush=True)
         return False
     
     register_url = f"{MASTER_URL.rstrip('/')}/api/agent/register"
@@ -1790,15 +1791,16 @@ def _reverse_mode_register():
     }
     
     try:
+        print(f"[REVERSE] Registering with {register_url}...", flush=True)
         resp = requests.post(register_url, json=payload, timeout=10)
         if resp.ok:
-            app.logger.info(f"[REVERSE] Registered with master: {NODE_NAME}")
+            print(f"[REVERSE] Registered with master: {NODE_NAME} (HTTP {resp.status_code})", flush=True)
             return True
         else:
-            app.logger.warning(f"[REVERSE] Registration failed: {resp.status_code}")
+            print(f"[REVERSE] Registration failed: {resp.status_code} - {resp.text[:200]}", flush=True)
             return False
     except Exception as e:
-        app.logger.warning(f"[REVERSE] Registration error: {e}")
+        print(f"[REVERSE] Registration error: {e}", flush=True)
         return False
 
 
@@ -1848,21 +1850,29 @@ def _reverse_mode_loop():
     global _reverse_running
     _reverse_running = True
     
-    app.logger.info(f"[REVERSE] Starting reverse mode: master={MASTER_URL}, node={NODE_NAME}")
+    print(f"[REVERSE] Starting reverse mode loop: master={MASTER_URL}, node={NODE_NAME}", flush=True)
     
     # Initial registration
     registered = False
+    retry_count = 0
     while _reverse_running and not registered:
+        print(f"[REVERSE] Attempting registration (attempt {retry_count + 1})...", flush=True)
         registered = _reverse_mode_register()
         if not registered:
+            retry_count += 1
+            print(f"[REVERSE] Registration failed, waiting {POLL_INTERVAL}s before retry", flush=True)
             time.sleep(POLL_INTERVAL)
+    
+    if registered:
+        print(f"[REVERSE] Initial registration successful!", flush=True)
     
     # Polling loop
     last_register = time.time()
     while _reverse_running:
         try:
-            # Re-register periodically (every 5 minutes)
-            if time.time() - last_register > 300:
+            # Re-register every 30 seconds to maintain heartbeat (threshold is 60s)
+            if time.time() - last_register > 30:
+                print(f"[REVERSE] Sending heartbeat...", flush=True)
                 _reverse_mode_register()
                 last_register = time.time()
             
@@ -1871,13 +1881,13 @@ def _reverse_mode_loop():
             if tasks:
                 for task in tasks:
                     task_id = task.get("id")
-                    app.logger.info(f"[REVERSE] Executing task {task_id}: {task.get('target_ip')}")
+                    print(f"[REVERSE] Executing task {task_id}: {task.get('target_ip')}", flush=True)
                     result = _execute_test_task(task)
                     _reverse_mode_report_result(task_id, result)
             
             time.sleep(POLL_INTERVAL)
         except Exception as e:
-            app.logger.error(f"[REVERSE] Loop error: {e}")
+            print(f"[REVERSE] Loop error: {e}", flush=True)
             time.sleep(POLL_INTERVAL)
 
 
