@@ -8359,8 +8359,20 @@ async def _execute_schedule_task(schedule_id: int):
                             status="pending",
                         )
                         db.add(pending_task)
+                        db.flush()  # Get pending_task.id
+                        
+                        # Record pending schedule result immediately
+                        schedule_result = ScheduleResult(
+                            schedule_id=schedule_id,
+                            test_result_id=None,
+                            executed_at=execution_time,
+                            status="pending",
+                            error_message=f"Queued as task #{pending_task.id} for NAT agent {effective_src.name}",
+                        )
+                        db.add(schedule_result)
                         db.commit()
-                        logger.info(f"[REVERSE] Schedule {schedule_id} ({proto}) queued as PendingTask for NAT agent {effective_src.name}")
+                        
+                        logger.info(f"[REVERSE] Schedule {schedule_id} ({proto}) queued as PendingTask #{pending_task.id} for NAT agent {effective_src.name}")
                         # Don't wait for result - agent will report via /api/agent/result
                         continue
                     
