@@ -798,6 +798,15 @@ async def _on_startup() -> None:
     await backbone_monitor.start()
     _load_schedules_on_startup()
     _log_dashboard_password()
+    
+    # Auto-sync whitelist with master IP on startup
+    try:
+        db = SessionLocal()
+        result = await _sync_whitelist_to_agents(db, force=True)
+        logger.info(f"[STARTUP] Whitelist sync: {result.get('success', 0)} agents synced, {result.get('failed', 0)} failed")
+        db.close()
+    except Exception as e:
+        logger.error(f"[STARTUP] Whitelist sync failed: {e}")
 
 
 @app.on_event("shutdown")
@@ -6312,8 +6321,16 @@ async def _check_node_health(node: Node) -> NodeWithStatus:
         agent_version = getattr(node, "agent_version", None)
         
         if last_heartbeat:
+            # Handle timezone-aware vs naive datetime comparison
+            now = datetime.now(timezone.utc)
+            if last_heartbeat.tzinfo is None:
+                # Naive datetime from SQLite - assume it's UTC
+                last_heartbeat = last_heartbeat.replace(tzinfo=timezone.utc)
+            
+            heartbeat_age = (now - last_heartbeat).total_seconds()
+            logger.debug(f"[HEALTH] {node.name}: mode={node_mode}, heartbeat_age={heartbeat_age:.1f}s")
+            
             # Check if heartbeat is within 60 seconds (online threshold)
-            heartbeat_age = (datetime.now(timezone.utc) - last_heartbeat).total_seconds()
             if heartbeat_age < 60:
                 return NodeWithStatus(
                     id=node.id,
@@ -8192,12 +8209,13 @@ async def agent_register(
     db.commit()
     db.refresh(node)
     
-    logger.debug(f"[REVERSE] Agent {node_name} heartbeat, version={agent_version}")
+    logger.info(f"[REVERSE] Agent {node_name} registered: mode={mode}, version={agent_version}, ip={client_ip}")
     
     return {
         "status": "ok",
         "node_id": node.id,
         "node_name": node.name,
+        "agent_mode": node.agent_mode,  # Echo back for debugging
         "message": "registered"
     }
 
