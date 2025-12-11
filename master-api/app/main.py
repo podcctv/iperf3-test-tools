@@ -51,7 +51,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 # Expected agent version - update when releasing new agent versions
-EXPECTED_AGENT_VERSION = "1.0.1"
+EXPECTED_AGENT_VERSION = "1.0.3"
 
 # Whitelist hash tracking for smart sync
 _whitelist_hash_file = Path(os.getenv("DATA_DIR", "/app/data")) / "whitelist_hash.txt"
@@ -4265,7 +4265,7 @@ def _tests_page_html() -> str:
         const select = document.getElementById(id);
         if (select) {
           select.innerHTML = nodeCache.map(n => 
-            `<option value="${n.id}">${n.name} (${n.ip} | iperf ${n.detected_iperf_port || n.iperf_port})</option>`
+            `<option value="${n.id}">${n.name} (${maskIp(n.ip, true)} | iperf ${maskPort(n.detected_iperf_port || n.iperf_port, true)})</option>`
           ).join('');
         }
       });
@@ -5126,7 +5126,7 @@ def _schedules_html() -> str:
       const srcSelect = document.getElementById('schedule-src');
       const dstSelect = document.getElementById('schedule-dst');
       
-      const options = nodes.map(n => `<option value="${n.id}">${n.name} (${n.ip})</option>`).join('');
+      const options = nodes.map(n => `<option value="${n.id}">${n.name} (${maskAddress(n.ip, true)})</option>`).join('');
       srcSelect.innerHTML = options;
       dstSelect.innerHTML = options;
     }
@@ -6115,7 +6115,7 @@ def _schedules_html() -> str:
                             <div class="text-[10px] text-slate-500 uppercase tracking-wider">今日流量</div>
                           </div>
                           <div class="text-right space-y-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <div class="text-xs text-slate-400 font-mono truncate max-w-[120px]" title="${n.ip}">${maskAddress(n.ip, true)}</div>
+                            <div class="text-xs text-slate-400 font-mono truncate max-w-[120px]" title="${maskAddress(n.ip, true)}">${maskAddress(n.ip, true)}</div>
                             <div id="vps-isp-${n.node_id}" class="text-[10px] text-slate-500 truncate max-w-[120px]"></div>
                           </div>
                         </div>
@@ -6535,16 +6535,32 @@ _task_id_counter = 0
 # which properly handles agent_mode, last_heartbeat, and whitelist sync
 
 @app.get("/api/agent/tasks")
-async def get_agent_tasks(node_name: str):
+async def get_agent_tasks(node_name: str, db: Session = Depends(get_db)):
     """
     Get pending tasks for an internal agent.
-    Returns tasks and clears them from queue.
+    Returns tasks, whitelist, and clears tasks from queue.
     """
     global _internal_agent_tasks
     tasks = _internal_agent_tasks.get(node_name, [])
     if tasks:
         _internal_agent_tasks[node_name] = []  # Clear after returning
-    return {"status": "ok", "tasks": tasks}
+    
+    # Get whitelist from database
+    whitelist_ips = []
+    try:
+        whitelist_entries = db.scalars(select(Whitelist)).all()
+        whitelist_ips = [w.ip for w in whitelist_entries]
+        
+        # Update node's whitelist sync status
+        node = db.scalars(select(Node).where(Node.name == node_name)).first()
+        if node:
+            node.whitelist_sync_status = "synced"
+            db.commit()
+    except Exception as e:
+        print(f"[TASKS] Error getting whitelist: {e}", flush=True)
+    
+    return {"status": "ok", "tasks": tasks, "whitelist": whitelist_ips}
+
 
 
 class TaskResult(BaseModel):

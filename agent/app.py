@@ -1825,8 +1825,7 @@ def _reverse_mode_poll():
                 old_count = len(whitelist.get_all())
                 whitelist.update(whitelist_ips)
                 new_count = len(whitelist.get_all())
-                if old_count != new_count:
-                    print(f"[REVERSE] Whitelist synced: {new_count} IPs", flush=True)
+                print(f"[REVERSE] Whitelist: received {len(whitelist_ips)} IPs, applied {new_count} (was {old_count})", flush=True)
             
             tasks = data.get("tasks", [])
             return tasks
