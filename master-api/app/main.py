@@ -4566,6 +4566,8 @@ def _whitelist_html() -> str:
   <style>
     body { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); min-height: 100vh; }
     .glass-card { background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(148, 163, 184, 0.1); }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin { display: inline-block; animation: spin 1s linear infinite; }
   </style>
 </head>
 <body class="text-slate-100">
@@ -4837,10 +4839,15 @@ def _whitelist_html() -> str:
 
     async function syncWhitelist() {
       const btn = document.getElementById('sync-btn');
+      const statusEl = document.getElementById('sync-status');
       
       try {
         btn.disabled = true;
-        btn.innerHTML = '<span>🔄</span><span>同步中...</span>';
+        btn.innerHTML = '<span class="spin">🔄</span> 同步中...';
+        
+        // Update sync status to show syncing
+        statusEl.innerHTML = '<span class="spin">🔄</span> 同步中...';
+        statusEl.className = 'text-xl font-semibold text-sky-400';
         
         const res = await apiFetch('/admin/sync_whitelist', { method: 'POST' });
         const data = await res.json();
@@ -4855,6 +4862,8 @@ def _whitelist_html() -> str:
         
       } catch (e) {
         showAlert(`同步请求失败: ${e.message}`, 'error');
+        statusEl.textContent = '● 同步失败';
+        statusEl.className = 'text-xl font-semibold text-rose-400';
       } finally {
         btn.disabled = false;
         btn.innerHTML = '🔄 同步到所有Agent';
@@ -4867,8 +4876,12 @@ def _whitelist_html() -> str:
       
       if (btn) {
         btn.disabled = true;
-        btn.innerHTML = '📊 检查中...';
+        btn.innerHTML = '<span class="spin">📊</span> 检查中...';
       }
+      
+      // Update sync status to show checking
+      statusEl.innerHTML = '<span class="spin">🔄</span> 检查中...';
+      statusEl.className = 'text-xl font-semibold text-sky-400';
       
       try {
         const res = await apiFetch('/admin/whitelist');
