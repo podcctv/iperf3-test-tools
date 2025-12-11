@@ -4837,6 +4837,19 @@ def _whitelist_html() -> str:
       }
     }
 
+    // Set all table sync status cells to spinning state
+    function setTableSyncingState(syncing) {
+      const tbody = document.getElementById('tbody');
+      if (!tbody) return;
+      
+      const statusCells = tbody.querySelectorAll('tr td:nth-child(3)');
+      statusCells.forEach(cell => {
+        if (syncing) {
+          cell.innerHTML = '<span class="text-sky-400 flex items-center gap-1"><span class="spin">🔄</span> 同步中...</span>';
+        }
+      });
+    }
+
     async function syncWhitelist() {
       const btn = document.getElementById('sync-btn');
       const statusEl = document.getElementById('sync-status');
@@ -4848,6 +4861,9 @@ def _whitelist_html() -> str:
         // Update sync status to show syncing
         statusEl.innerHTML = '<span class="spin">🔄</span> 同步中...';
         statusEl.className = 'text-xl font-semibold text-sky-400';
+        
+        // Set all table rows to syncing state
+        setTableSyncingState(true);
         
         const res = await apiFetch('/admin/sync_whitelist', { method: 'POST' });
         const data = await res.json();
