@@ -7179,7 +7179,7 @@ async def daily_traffic_stats(db: Session = Depends(get_db)):
     nodes = db.scalars(select(Node)).all()
     
     # Get health status for all nodes
-    health_statuses = health_monitor.get_statuses()
+    health_statuses = await health_monitor.get_statuses()
     status_by_id = {s.id: s.health_status for s in health_statuses}
     
     # Initialize traffic counters
