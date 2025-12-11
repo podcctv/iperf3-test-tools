@@ -5914,48 +5914,58 @@ def _schedules_html() -> str:
         el.textContent = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
       });
       
-      // 智能检测Running状态变化，只在状态变化时刷新
+      // 智能检测Running状态，主动轮询获取新数据
       document.querySelectorAll('[data-countdown]').forEach(el => {
         const scheduleId = el.dataset.scheduleId;
         if (!scheduleId) return;
         
-        const wasRunning = el.dataset.wasRunning === 'true';
         const isRunning = el.textContent === 'Running...';
+        const lastPolled = parseInt(el.dataset.lastPolled || '0');
+        const now = Date.now();
         
-        if (wasRunning && !isRunning) {
-          // 任务刚完成，刷新这个卡片的图表
-          console.log(`Schedule ${scheduleId} completed, refreshing chart...`);
-          loadChartData(parseInt(scheduleId));
-          // 静默刷新这个任务的数据（不刷新整个列表）
-          refreshSingleSchedule(parseInt(scheduleId));
+        // 在Running状态时，每5秒轮询一次后端
+        if (isRunning && (now - lastPolled > 5000)) {
+          el.dataset.lastPolled = now.toString();
+          console.log(`Schedule ${scheduleId} is running, polling for update...`);
+          
+          // 异步获取新数据
+          refreshSingleSchedule(parseInt(scheduleId)).then(updated => {
+            if (updated) {
+              console.log(`Schedule ${scheduleId} updated, refreshing chart...`);
+              loadChartData(parseInt(scheduleId));
+            }
+          });
         }
-        
-        el.dataset.wasRunning = isRunning ? 'true' : 'false';
       });
     }
     
-    // 静默刷新单个任务数据（避免页面抖动）
+    // 静默刷新单个任务数据（避免页面抖动），返回是否有更新
     async function refreshSingleSchedule(scheduleId) {
       try {
-        const res = await apiFetch('/schedules');
-        const allSchedules = await res.json();
-        const newData = allSchedules.find(s => s.id === scheduleId);
+        const res = await apiFetch(`/schedules/${scheduleId}`);
+        const newData = await res.json();
         
-        if (newData) {
+        if (newData && newData.next_run_at) {
           // 更新本地数据
           const idx = schedules.findIndex(s => s.id === scheduleId);
+          const oldNextRunAt = idx >= 0 ? schedules[idx].next_run_at : null;
+          
           if (idx >= 0) {
             schedules[idx] = newData;
           }
           
           // 更新倒计时元素
           const countdownEl = document.querySelector(`[data-schedule-id="${scheduleId}"]`);
-          if (countdownEl && newData.next_run_at) {
+          if (countdownEl) {
+            const hadUpdate = oldNextRunAt !== newData.next_run_at;
             countdownEl.dataset.countdown = newData.next_run_at;
+            return hadUpdate; // 返回是否有更新
           }
         }
+        return false;
       } catch (e) {
         console.error('Failed to refresh single schedule:', e);
+        return false;
       }
     }
 
@@ -5976,19 +5986,46 @@ def _schedules_html() -> str:
         if (data.status === 'ok') {
             const vpsContainer = document.getElementById('vps-daily-summary');
             if (vpsContainer) {
-                vpsContainer.innerHTML = data.nodes.map(n => {
+                vpsContainer.innerHTML = data.nodes.map((n, idx) => {
+                    // 智能格式化流量显示
+                    let displayTraffic = n.total_gb + 'G';
+                    if (n.total_bytes > 0 && n.total_gb < 0.01) {
+                        const mb = (n.total_bytes / (1024 * 1024)).toFixed(1);
+                        displayTraffic = mb + 'M';
+                    }
+                    
+                    // 渐变颜色配置
+                    const gradients = [
+                        'from-sky-500/20 to-blue-600/10',
+                        'from-emerald-500/20 to-teal-600/10',
+                        'from-purple-500/20 to-pink-600/10',
+                        'from-amber-500/20 to-orange-600/10'
+                    ];
+                    const borderColors = ['border-sky-500/30', 'border-emerald-500/30', 'border-purple-500/30', 'border-amber-500/30'];
+                    const textColors = ['text-sky-400', 'text-emerald-400', 'text-purple-400', 'text-amber-400'];
+                    const gradient = gradients[idx % gradients.length];
+                    const borderColor = borderColors[idx % borderColors.length];
+                    const textColor = textColors[idx % textColors.length];
+                    
                     return `
-                      <div class="glass-card p-4 rounded-xl flex items-center justify-between">
-                        <div>
-                          <h4 class="text-sm font-semibold text-slate-200">${n.name}</h4>
-                          <div class="text-xs text-slate-500 font-mono">
-                             ${maskAddress(n.ip, true)}
-                             <span id="vps-isp-${n.node_id}" class="ml-2 pl-2 border-l border-slate-700 text-slate-600"></span>
+                      <div class="relative overflow-hidden rounded-2xl bg-gradient-to-br ${gradient} border ${borderColor} p-5 transition-all hover:scale-[1.02] hover:shadow-lg">
+                        <div class="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-white/5 to-transparent rounded-full -translate-y-8 translate-x-8"></div>
+                        <div class="relative z-10 flex items-center justify-between">
+                          <div class="space-y-1">
+                            <div class="flex items-center gap-2">
+                              <span class="text-lg">🖥️</span>
+                              <h4 class="text-base font-bold text-white">${n.name}</h4>
+                            </div>
+                            <div class="text-xs text-slate-400 font-mono flex items-center gap-1">
+                               <span class="opacity-70">${maskAddress(n.ip, true)}</span>
+                               <span class="text-slate-600">|</span>
+                               <span id="vps-isp-${n.node_id}" class="text-slate-500"></span>
+                            </div>
                           </div>
-                        </div>
-                        <div class="text-right">
-                          <div class="text-lg font-bold text-sky-400">${n.total_gb}G</div>
-                          <div class="text-xs text-slate-500">今日流量</div>
+                          <div class="text-right">
+                            <div class="text-2xl font-bold ${textColor} drop-shadow-sm">${displayTraffic}</div>
+                            <div class="text-[10px] text-slate-500 uppercase tracking-wider">今日流量</div>
+                          </div>
                         </div>
                       </div>
                     `;
@@ -6010,14 +6047,38 @@ def _schedules_html() -> str:
             }
         }
 
-        // 2. Hide Schedule Badges (As requested)
-        const schedules = await (await apiFetch('/schedules')).json();
-        schedules.forEach(schedule => {
-             const badgeEl = document.getElementById(`traffic-badge-${schedule.id}`);
-             if (badgeEl) {
-                 badgeEl.style.display = 'none'; 
-             }
-        });
+        // 2. Fetch Schedule-specific traffic stats and update badges
+        const scheduleStatsRes = await fetch('/api/daily_schedule_traffic_stats');
+        const scheduleStats = await scheduleStatsRes.json();
+        
+        if (scheduleStats.status === 'ok') {
+            const stats = scheduleStats.stats || {};
+            
+            schedules.forEach(schedule => {
+                const badgeEl = document.getElementById(`traffic-badge-${schedule.id}`);
+                if (badgeEl) {
+                    const bytes = stats[schedule.id] || 0;
+                    if (bytes > 0) {
+                        // Format bytes to appropriate unit
+                        let displayValue;
+                        if (bytes >= 1024 * 1024 * 1024) {
+                            displayValue = (bytes / (1024 * 1024 * 1024)).toFixed(2) + 'G';
+                        } else if (bytes >= 1024 * 1024) {
+                            displayValue = (bytes / (1024 * 1024)).toFixed(1) + 'M';
+                        } else if (bytes >= 1024) {
+                            displayValue = (bytes / 1024).toFixed(0) + 'K';
+                        } else {
+                            displayValue = bytes + 'B';
+                        }
+                        badgeEl.textContent = `今日: ${displayValue}`;
+                        badgeEl.style.display = 'inline-block';
+                    } else {
+                        badgeEl.textContent = '今日: 0';
+                        badgeEl.style.display = 'inline-block';
+                    }
+                }
+            });
+        }
         
       } catch (err) {
         console.error('Failed to update traffic stats:', err);
@@ -6734,33 +6795,60 @@ async def daily_traffic_stats(db: Session = Depends(get_db)):
             continue
         
         raw = result.test_result.raw_result or {}
+        
+        # 正确解析数据结构：可能是 raw.end 或 raw.iperf_result.end
         end = raw.get("end") or {}
+        if not end and "iperf_result" in raw:
+            end = raw.get("iperf_result", {}).get("end", {})
         
-        # Calculate actual transfer size (avoiding double counting)
-        transfer_bytes = 0
+        # 获取发送和接收的字节数（可能不同，因为网络丢包等原因）
+        bytes_sent = 0
+        bytes_received = 0
         
-        # Priority: sum (UDP/Summary) > sum_sent (TCP Sender) > sum_received (TCP Receiver)
+        # UDP测试只有sum
         if "sum" in end:
-             transfer_bytes = end["sum"].get("bytes", 0)
-        elif "sum_sent" in end:
-             transfer_bytes = end["sum_sent"].get("bytes", 0)
-        elif "sum_received" in end:
-             transfer_bytes = end["sum_received"].get("bytes", 0)
+            # UDP模式下，发送和接收视为相同
+            bytes_sent = end["sum"].get("bytes", 0)
+            bytes_received = bytes_sent
+        else:
+            # TCP模式下，分别获取发送和接收
+            bytes_sent = end.get("sum_sent", {}).get("bytes", 0)
+            bytes_received = end.get("sum_received", {}).get("bytes", 0)
             
-        if not transfer_bytes:
+        if not bytes_sent and not bytes_received:
             continue
         
-        # Get schedule to find src/dst nodes
+        # Get schedule to find src/dst nodes and direction
         schedule = result.schedule
         if schedule:
             src_id = schedule.src_node_id
             dst_id = schedule.dst_node_id
+            direction = getattr(schedule, 'direction', 'upload') or 'upload'
             
-            # Add to both source and destination nodes
-            if src_id in traffic_by_node:
-                traffic_by_node[src_id]["bytes"] += transfer_bytes
-            if dst_id in traffic_by_node:
-                traffic_by_node[dst_id]["bytes"] += transfer_bytes
+            # 根据方向分配流量：
+            # - upload (默认): 源节点发送，目标节点接收
+            # - download (reverse): 目标节点发送，源节点接收
+            # - bidirectional: 两边都发送和接收
+            
+            if direction == 'download':
+                # Reverse模式：目标节点发送数据到源节点
+                if dst_id in traffic_by_node:
+                    traffic_by_node[dst_id]["bytes"] += bytes_sent
+                if src_id in traffic_by_node:
+                    traffic_by_node[src_id]["bytes"] += bytes_received
+            elif direction == 'bidirectional':
+                # 双向模式：两边都发送和接收，取两者之和
+                total_bytes = bytes_sent + bytes_received
+                if src_id in traffic_by_node:
+                    traffic_by_node[src_id]["bytes"] += total_bytes // 2  # 平分
+                if dst_id in traffic_by_node:
+                    traffic_by_node[dst_id]["bytes"] += total_bytes // 2  # 平分
+            else:
+                # Upload模式（默认）：源节点发送，目标节点接收
+                if src_id in traffic_by_node:
+                    traffic_by_node[src_id]["bytes"] += bytes_sent
+                if dst_id in traffic_by_node:
+                    traffic_by_node[dst_id]["bytes"] += bytes_received
     
     # Format response
     node_stats = []
@@ -7359,13 +7447,16 @@ def _load_schedules_on_startup():
 
 async def _execute_schedule_task(schedule_id: int):
     """执行定时任务"""
+    print(f">>> EXECUTING SCHEDULE {schedule_id} <<<", flush=True)
     
     db = SessionLocal()
     try:
         schedule = db.get(TestSchedule, schedule_id)
         if not schedule or not schedule.enabled:
+            print(f">>> SCHEDULE {schedule_id} NOT FOUND OR DISABLED <<<", flush=True)
             return
         
+        print(f">>> SCHEDULE {schedule_id} RUNNING: {schedule.name} <<<", flush=True)
         logger.info(f"Executing schedule {schedule_id}: {schedule.name}")
         
         # 更新执行时间
@@ -7651,6 +7742,25 @@ def toggle_schedule(schedule_id: int, db: Session = Depends(get_db)):
         "next_run_at": db_schedule.next_run_at.isoformat() if db_schedule.next_run_at else None
     }
 
+
+@app.get("/debug/scheduler")
+def debug_scheduler():
+    """调试端点：显示APScheduler中当前注册的任务"""
+    jobs = scheduler.get_jobs()
+    return {
+        "scheduler_running": scheduler.running,
+        "job_count": len(jobs),
+        "jobs": [
+            {
+                "id": job.id,
+                "name": job.name,
+                "next_run_time": job.next_run_time.isoformat() if job.next_run_time else None,
+                "trigger": str(job.trigger),
+                "func": str(job.func),
+            }
+            for job in jobs
+        ]
+    }
 
 @app.post("/schedules/{schedule_id}/execute")
 async def execute_schedule(
