@@ -6808,9 +6808,10 @@ async def _call_reverse_agent_test(src: Node, payload: dict, duration: int) -> d
     logger.info(f"[REVERSE-TEST] Queued task {task_id} for {src.name}: {task.get('target_ip')}")
     
     # Wait for result with timeout
-    # Agent polls every 10 seconds, so we need to wait long enough
+    # Agent polls every ~10 seconds, so we need to wait long enough
+    # Account for: polling delay (up to 15s) + test duration + result reporting
     poll_interval = 2  # seconds
-    max_wait = duration + 30  # Allow time for task pickup + execution + result
+    max_wait = duration + 60  # Generous timeout for NAT agents
     waited = 0
     
     while waited < max_wait:
@@ -7830,6 +7831,12 @@ def list_tests(db: Session = Depends(get_db)):
 
 @app.delete("/tests")
 def delete_all_tests(db: Session = Depends(get_db)):
+    # First, nullify references in schedule_results to avoid FK violation
+    db.execute(
+        text("UPDATE schedule_results SET test_result_id = NULL WHERE test_result_id IS NOT NULL")
+    )
+    
+    # Now delete all test results
     results = db.scalars(select(TestResult)).all()
     for test in results:
         db.delete(test)
