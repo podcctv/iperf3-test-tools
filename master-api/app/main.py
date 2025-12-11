@@ -8342,13 +8342,16 @@ async def _execute_schedule_task(schedule_id: int):
                         # NAT source node: queue task for agent to poll and execute
                         # IMPORTANT: Start iperf server on destination BEFORE queuing task
                         # so the NAT agent can connect when it picks up the task
-                        logger.info(f"[NAT-SCHEDULE-DEBUG] Schedule {schedule_id}: effective_src={effective_src.name} (IP: {effective_dst.ip}), effective_dst={effective_dst.name}, requested_port={current_port}")
+                        print(f"[NAT-SCHEDULE-DEBUG] Schedule {schedule_id}: effective_src={effective_src.name}, effective_dst={effective_dst.name} (IP: {effective_dst.ip}), requested_port={current_port}", flush=True)
+                        logger.info(f"[NAT-SCHEDULE-DEBUG] Schedule {schedule_id}: effective_src={effective_src.name}, effective_dst={effective_dst.name} (IP: {effective_dst.ip}), requested_port={current_port}")
                         try:
                             server_port = await _ensure_iperf_server_running(effective_dst, current_port)
                             # Update test_params with the actual port the server is running on
                             test_params["target_port"] = server_port
+                            print(f"[NAT-SCHEDULE] Started iperf server on {effective_dst.name}:{server_port} for NAT agent {effective_src.name}, task target_ip={test_params['target_ip']}", flush=True)
                             logger.info(f"[NAT-SCHEDULE] Started iperf server on {effective_dst.name}:{server_port} for NAT agent {effective_src.name}")
                         except Exception as e:
+                            print(f"[NAT-SCHEDULE] FAILED to start iperf server on {effective_dst.name}: {e}", flush=True)
                             logger.error(f"[NAT-SCHEDULE] Failed to start iperf server on {effective_dst.name}: {e}")
                             raise
                         
