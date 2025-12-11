@@ -2724,7 +2724,7 @@ def _login_html() -> str:
           }
           
           // Version Mismatch Badge - only show when agent reports a different version
-          const expectedVersion = '1.0.2';
+          const expectedVersion = '1.0.3';
           let versionBadge = '';
           if (node.agent_version && node.agent_version !== expectedVersion) {
               versionBadge = `<span class="inline-flex items-center rounded-md bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-400 ring-1 ring-inset ring-amber-500/20 cursor-help" title="Agent版本 ${node.agent_version} 与预期版本 ${expectedVersion} 不一致，请更新">⬆️ 需更新</span>`;
@@ -8257,6 +8257,7 @@ async def agent_get_tasks(
     """
     Get pending tasks for a reverse mode (NAT) agent.
     Agent polls this endpoint to receive tasks to execute.
+    Also returns the current whitelist for the agent to sync.
     """
     # Find pending tasks for this agent
     tasks = db.scalars(
@@ -8291,7 +8292,31 @@ async def agent_get_tasks(
     if task_list:
         logger.info(f"[REVERSE] Agent {node_name} claimed {len(task_list)} tasks")
     
-    return {"tasks": task_list}
+    # Include whitelist in response for reverse agents to sync
+    nodes = db.scalars(select(Node)).all()
+    whitelist = [n.ip for n in nodes if n.ip]
+    
+    # Add master's own IP
+    master_ip = os.getenv("MASTER_IP", "")
+    if not master_ip:
+        try:
+            import httpx
+            resp = httpx.get("https://api.ipify.org", timeout=5)
+            if resp.status_code == 200:
+                master_ip = resp.text.strip()
+        except Exception:
+            pass
+    if master_ip and master_ip not in whitelist:
+        whitelist.append(master_ip)
+    
+    # Update node's whitelist sync status
+    node = db.scalars(select(Node).where(Node.name == node_name)).first()
+    if node:
+        node.whitelist_sync_status = "synced"
+        node.whitelist_sync_at = now
+        db.commit()
+    
+    return {"tasks": task_list, "whitelist": whitelist}
 
 
 @app.post("/api/agent/result")

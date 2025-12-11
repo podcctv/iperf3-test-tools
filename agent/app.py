@@ -19,7 +19,7 @@ app = Flask(__name__)
 
 DEFAULT_IPERF_PORT = int(Path("/app").joinpath("IPERF_PORT").read_text().strip()) if Path("/app/IPERF_PORT").exists() else 62001
 AGENT_API_PORT = int(os.environ.get("AGENT_API_PORT", "8000"))
-AGENT_VERSION = "1.0.2"  # Update this when releasing new agent versions
+AGENT_VERSION = "1.0.3"  # Update this when releasing new agent versions
 
 # Reverse mode configuration for internal agents behind NAT
 AGENT_MODE = os.environ.get("AGENT_MODE", "normal").lower()
@@ -1806,7 +1806,7 @@ def _reverse_mode_register():
 
 
 def _reverse_mode_poll():
-    """Poll master for pending tasks."""
+    """Poll master for pending tasks and whitelist updates."""
     if not MASTER_URL or not NODE_NAME:
         return None
     
@@ -1817,11 +1817,22 @@ def _reverse_mode_poll():
         resp = requests.get(tasks_url, params=params, timeout=10)
         if resp.ok:
             data = resp.json()
+            
+            # Apply whitelist if provided
+            whitelist_ips = data.get("whitelist", [])
+            if whitelist_ips:
+                from ip_whitelist import whitelist
+                old_count = len(whitelist.get_all())
+                whitelist.update(whitelist_ips)
+                new_count = len(whitelist.get_all())
+                if old_count != new_count:
+                    print(f"[REVERSE] Whitelist synced: {new_count} IPs", flush=True)
+            
             tasks = data.get("tasks", [])
             return tasks
         return []
     except Exception as e:
-        app.logger.debug(f"[REVERSE] Poll error: {e}")
+        print(f"[REVERSE] Poll error: {e}", flush=True)
         return []
 
 
