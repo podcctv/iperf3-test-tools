@@ -6623,6 +6623,67 @@ def queue_task_for_internal_agent(node_name: str, task: dict) -> int:
     return _task_id_counter
 
 
+async def _call_reverse_agent_test(src: Node, payload: dict, duration: int) -> dict:
+    """
+    Execute test via reverse mode (NAT) agent using task queue.
+    
+    The NAT agent polls for tasks, so we:
+    1. Queue the task
+    2. Wait for agent to pick it up and report result
+    3. Return the result
+    """
+    global _task_results
+    
+    # Prepare task for the reverse agent
+    task = {
+        "type": "iperf_test",
+        "target_ip": payload.get("target"),
+        "target_port": payload.get("port"),
+        "duration": payload.get("duration", 10),
+        "protocol": payload.get("protocol", "tcp"),
+        "parallel": payload.get("parallel", 1),
+        "reverse": payload.get("reverse", False),
+        "bandwidth": payload.get("bandwidth"),
+    }
+    
+    task_id = queue_task_for_internal_agent(src.name, task)
+    logger.info(f"[REVERSE-TEST] Queued task {task_id} for {src.name}: {task.get('target_ip')}")
+    
+    # Wait for result with timeout
+    # Agent polls every 10 seconds, so we need to wait long enough
+    poll_interval = 2  # seconds
+    max_wait = duration + 30  # Allow time for task pickup + execution + result
+    waited = 0
+    
+    while waited < max_wait:
+        await asyncio.sleep(poll_interval)
+        waited += poll_interval
+        
+        # Check if result is available
+        if task_id in _task_results:
+            result_data = _task_results.pop(task_id)
+            result = result_data.get("result", {})
+            logger.info(f"[REVERSE-TEST] Received result for task {task_id}")
+            
+            if result.get("status") == "ok":
+                # Return in same format as direct agent call
+                return {"status": "ok", "iperf_result": result.get("iperf_result", {})}
+            else:
+                error_msg = result.get("error", "Unknown error from reverse agent")
+                raise HTTPException(status_code=502, detail=f"reverse agent test failed: {error_msg}")
+        
+        logger.debug(f"[REVERSE-TEST] Waiting for task {task_id}, {waited}s/{max_wait}s")
+    
+    # Timeout - clean up task if still pending
+    if src.name in _internal_agent_tasks:
+        _internal_agent_tasks[src.name] = [t for t in _internal_agent_tasks[src.name] if t.get("id") != task_id]
+    
+    raise HTTPException(
+        status_code=504, 
+        detail=f"Timeout waiting for reverse agent {src.name} to complete test (waited {max_wait}s)"
+    )
+
+
 @app.post("/nodes", response_model=NodeRead)
 def create_node(node: NodeCreate, db: Session = Depends(get_db)):
     obj = Node(
@@ -7336,6 +7397,13 @@ async def get_daily_schedule_traffic_stats(db: Session = Depends(get_db)):
 
 
 async def _call_agent_test(src: Node, payload: dict, duration: int) -> dict:
+    # Check if source node is reverse mode (NAT) - use task queue instead of direct HTTP
+    src_mode = getattr(src, "agent_mode", "normal") or "normal"
+    if src_mode == "reverse":
+        logger.info(f"[AGENT-TEST] Source {src.name} is reverse mode, using task queue")
+        return await _call_reverse_agent_test(src, payload, duration)
+    
+    # Normal mode - direct HTTP call to agent
     agent_url = f"http://{src.ip}:{src.agent_port}/run_test"
     try:
         async with httpx.AsyncClient(timeout=duration + settings.request_timeout) as client:
