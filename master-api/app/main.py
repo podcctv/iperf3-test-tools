@@ -7962,28 +7962,52 @@ async def _execute_schedule_task(schedule_id: int):
             # Use a shared timestamp for all tests in this schedule run (for Chart align)
             execution_time = datetime.now(timezone.utc)
             
-            # Check if source node is NAT (reverse mode) - queue task for agent to poll
+            # Check node modes
             src_mode = getattr(src_node, "agent_mode", "normal") or "normal"
-            is_nat_source = (src_mode == "reverse")
+            dst_mode = getattr(dst_node, "agent_mode", "normal") or "normal"
+            
+            # NAT DESTINATION SWAP LOGIC
+            # If destination is a reverse mode (NAT) agent, it cannot receive inbound connections.
+            # We need to swap the direction: run test FROM the NAT node TO the normal node,
+            # and toggle the reverse flag to maintain the correct traffic direction semantics.
+            effective_src = src_node
+            effective_dst = dst_node
+            effective_reverse = is_reverse
+            is_nat_swapped = False
+            
+            if dst_mode == "reverse" and src_mode != "reverse":
+                # Swap: NAT node becomes source, original source becomes destination
+                effective_src = dst_node
+                effective_dst = src_node
+                effective_reverse = not is_reverse  # Toggle to maintain traffic direction
+                is_nat_swapped = True
+                logger.info(f"[NAT-SWAP] Schedule {schedule_id}: Swapping direction because {dst_node.name} is NAT. "
+                           f"Effective: {effective_src.name} -> {effective_dst.name}, reverse={effective_reverse}")
+                
+                # Get port from the new destination
+                new_dst_status = await health_monitor.check_node(effective_dst)
+                current_port = new_dst_status.detected_iperf_port or effective_dst.iperf_port or schedule.port
+            
+            is_nat_source = (getattr(effective_src, "agent_mode", "normal") or "normal") == "reverse"
 
             for proto in protocols:
                 try:
                     # 构造测试参数
-                    # Always use detected port to handle dynamic port changes (e.g., after agent reinstall)
+                    # Use effective nodes after NAT swap logic
                     test_params = {
-                        "target_ip": dst_node.ip,
+                        "target_ip": effective_dst.ip,
                         "target_port": current_port,
                         "duration": schedule.duration,
                         "protocol": proto,
                         "parallel": schedule.parallel,
-                        "reverse": is_reverse,
+                        "reverse": effective_reverse,
                         "bidir": is_bidir,
                     }
                     
                     if is_nat_source:
                         # NAT source node: queue task for agent to poll and execute
                         pending_task = PendingTask(
-                            node_name=src_node.name,
+                            node_name=effective_src.name,
                             task_type="iperf_test",
                             task_data=test_params,
                             schedule_id=schedule_id,
@@ -7991,7 +8015,7 @@ async def _execute_schedule_task(schedule_id: int):
                         )
                         db.add(pending_task)
                         db.commit()
-                        logger.info(f"[REVERSE] Schedule {schedule_id} ({proto}) queued as PendingTask for NAT agent {src_node.name}")
+                        logger.info(f"[REVERSE] Schedule {schedule_id} ({proto}) queued as PendingTask for NAT agent {effective_src.name}")
                         # Don't wait for result - agent will report via /api/agent/result
                         continue
                     
@@ -8006,13 +8030,13 @@ async def _execute_schedule_task(schedule_id: int):
                         "reverse": test_params["reverse"],
                         "bidir": test_params.get("bidir", False),
                     }
-                    raw_data = await _call_agent_test(src_node, call_params, schedule.duration)
+                    raw_data = await _call_agent_test(effective_src, call_params, schedule.duration)
                     summary = _summarize_metrics(raw_data)
 
                     
                     # Fix: Filter metrics based on direction to prevent pollution
                     if not is_bidir and summary:
-                        if not is_reverse: # Upload only
+                        if not effective_reverse: # Upload only
                             summary["download_bits_per_second"] = 0
                         else: # Download only
                             summary["upload_bits_per_second"] = 0
