@@ -5,7 +5,7 @@ import os
 import socket
 import time
 import ipaddress
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List
 
@@ -89,20 +89,7 @@ def _save_whitelist_hash(hash_value: str) -> None:
 # ============================================================================
 
 scheduler = AsyncIOScheduler()
-
-# 添加调度器错误事件监听
-def scheduler_error_listener(event):
-    if event.exception:
-        logger.error(f"APScheduler job {event.job_id} failed: {event.exception}")
-        import traceback
-        logger.error(f"Traceback: {traceback.format_exception(type(event.exception), event.exception, event.exception.__traceback__)}")
-    else:
-        logger.info(f"APScheduler job {event.job_id} executed successfully")
-
-from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_ERROR
-scheduler.add_listener(scheduler_error_listener, EVENT_JOB_EXECUTED | EVENT_JOB_ERROR)
-
-# 注意：scheduler.start() 已移到 FastAPI lifespan 事件中
+scheduler.start()
 
 
 def _log_dashboard_password() -> None:
@@ -269,7 +256,7 @@ async def _resolve_geo_ip(ip_or_host: str) -> tuple[str | None, str]:
 ZHEJIANG_TARGETS = [
     {
         "key": "zj_cu",
-        "name": "浙江联通",
+        "name": "浙江联�?,
         "host": "zj-cu-v4.ip.zstaticcdn.com",
         "port": 443,
     },
@@ -301,34 +288,7 @@ def _bootstrap_state() -> None:
 
 _bootstrap_state()
 
-# FastAPI lifespan 上下文管理器
-from contextlib import asynccontextmanager
-
-@asynccontextmanager
-async def lifespan(app):
-    # Startup: 启动调度器和加载定时任务
-    print(">>> LIFESPAN STARTUP <<<", flush=True)
-    logger.info("Starting APScheduler...")
-    scheduler.start()
-    print(">>> SCHEDULER STARTED <<<", flush=True)
-    logger.info("APScheduler started successfully")
-    
-    # Load existing schedules
-    try:
-        _load_schedules_on_startup()
-        print(">>> SCHEDULES LOADED <<<", flush=True)
-        logger.info("Schedules loaded")
-    except Exception as e:
-        print(f">>> FAILED TO LOAD SCHEDULES: {e} <<<", flush=True)
-        logger.error(f"Failed to load schedules: {e}")
-    
-    yield
-    
-    # Shutdown: 关闭调度器
-    scheduler.shutdown()
-    logger.info("APScheduler shutdown")
-
-app = FastAPI(title="iperf3 master api", lifespan=lifespan)
+app = FastAPI(title="iperf3 master api")
 agent_store = AgentConfigStore(settings.agent_config_file)
 
 
@@ -529,7 +489,7 @@ def _summarize_metrics(raw: dict | None) -> dict | None:
 
 async def _probe_streaming_unlock(node: Node) -> StreamingTestResult:
     offline_status = StreamingServiceStatus(
-        service="节点离线", unlocked=False, detail="agent 未在线或不可达"
+        service="节点离线", unlocked=False, detail="agent 未在线或不可�?
     )
     node_status = await health_monitor.check_node(node)
     if node_status.status != "online":
@@ -550,7 +510,7 @@ async def _probe_streaming_unlock(node: Node) -> StreamingTestResult:
             node_name=node.name,
             services=[
                 StreamingServiceStatus(
-                    service="连通性检查", unlocked=False, detail=str(exc)
+                    service="连通性检�?, unlocked=False, detail=str(exc)
                 )
             ],
             elapsed_ms=0,
@@ -562,7 +522,7 @@ async def _probe_streaming_unlock(node: Node) -> StreamingTestResult:
             node_name=node.name,
             services=[
                 StreamingServiceStatus(
-                    service="连通性检查",
+                    service="连通性检�?,
                     unlocked=False,
                     status_code=response.status_code,
                     detail=response.text[:200],
@@ -603,7 +563,7 @@ async def _probe_streaming_unlock(node: Node) -> StreamingTestResult:
     if not services:
         services.append(
             StreamingServiceStatus(
-                service="未返回数据", unlocked=False, detail="未收到任何探测结果"
+                service="未返回数�?, unlocked=False, detail="未收到任何探测结�?
             )
         )
 
@@ -1045,7 +1005,7 @@ def _login_html() -> str:
 <body>
   <!-- Guest Mode Banner -->
   <div id="guest-banner" class="hidden" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(90deg,#f59e0b,#d97706);text-align:center;padding:8px 16px;font-size:14px;font-weight:600;color:#1e293b;box-shadow:0 2px 8px rgba(0,0,0,0.3);">
-    👁️ 访客模式 · 仅可查看，无法操作
+    👁�?访客模式 · 仅可查看，无法操�?
   </div>
   <script>
     if (document.cookie.includes('guest_session=readonly')) {
@@ -1088,12 +1048,12 @@ def _login_html() -> str:
               <div class="flex flex-wrap items-center gap-3">
                 <a href="/web/tests" class="rounded-lg border border-sky-500/40 bg-sky-500/15 px-4 py-2 text-sm font-semibold text-sky-100 shadow-sm transition hover:bg-sky-500/25">单次测试</a>
                 <a href="/web/schedules" class="rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-100 shadow-sm transition hover:bg-emerald-500/25">定时任务</a>
-                <a href="/web/whitelist" class="guest-hide rounded-lg border border-amber-500/40 bg-amber-500/15 px-4 py-2 text-sm font-semibold text-amber-100 shadow-sm transition hover:bg-amber-500/25">白名单管理</a>
+                <a href="/web/whitelist" class="guest-hide rounded-lg border border-amber-500/40 bg-amber-500/15 px-4 py-2 text-sm font-semibold text-amber-100 shadow-sm transition hover:bg-amber-500/25">白名单管�?/a>
                 <button id="open-settings" onclick="toggleSettingsModal(true)" class="guest-hide rounded-lg border border-indigo-500/40 bg-indigo-500/15 px-4 py-2 text-sm font-semibold text-indigo-100 shadow-sm transition hover:bg-indigo-500/25 inline-flex items-center gap-2">
                   <span class="text-base">⚙️</span>
                   <span>设置</span>
                 </button>
-                <button id="logout-btn" class="rounded-lg border border-rose-500/40 bg-rose-500/15 px-4 py-2 text-sm font-semibold text-rose-100 shadow-sm transition hover:bg-rose-500/25">退出登录</button>
+                <button id="logout-btn" class="rounded-lg border border-rose-500/40 bg-rose-500/15 px-4 py-2 text-sm font-semibold text-rose-100 shadow-sm transition hover:bg-rose-500/25">退出登�?/button>
               </div>
             </div>
 
@@ -1102,7 +1062,7 @@ def _login_html() -> str:
                 <div class="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <h3 class="text-lg font-semibold text-white">节点列表</h3>
-                    <p class="text-sm text-slate-400">实时状态与检测到的 iperf 端口。</p>
+                    <p class="text-sm text-slate-400">实时状态与检测到�?iperf 端口�?/p>
                   </div>
                   <div class="flex flex-wrap gap-2">
                     <button data-refresh-nodes onclick="refreshNodes()" class="rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200">刷新</button>
@@ -1111,14 +1071,14 @@ def _login_html() -> str:
                 </div>
                 <div id="streaming-progress" class="hidden space-y-2 rounded-xl border border-slate-800 bg-slate-900/50 p-3">
                   <div class="flex items-center justify-between text-xs text-slate-400">
-                    <span>流媒体解锁检测</span>
+                    <span>流媒体解锁检�?/span>
                     <span id="streaming-progress-label" class="font-medium text-slate-200"></span>
                   </div>
                   <div class="h-2 w-full rounded-full bg-slate-800/80">
                     <div id="streaming-progress-bar" class="h-2 w-0 rounded-full bg-gradient-to-r from-emerald-500 to-sky-500 transition-all duration-300"></div>
                   </div>
                 </div>
-                <div id="nodes-list" class="text-sm text-slate-400 space-y-3">暂无节点。</div>
+                <div id="nodes-list" class="text-sm text-slate-400 space-y-3">暂无节点�?/div>
               </div>
               <!-- Test Plan Panel - hidden on main page, shown on /web/tests -->
               <div id="test-plan-panel" class="panel-card rounded-2xl p-5 space-y-4 hidden">
@@ -1132,13 +1092,13 @@ def _login_html() -> str:
                     <button id="suite-test-tab" class="rounded-full px-4 py-1.5 text-xs font-semibold text-slate-300 transition hover:text-white">双向 TCP/UDP 测试</button>
                   </div>
                 </div>
-                <p id="test-panel-intro" class="text-sm text-slate-400">快速规划 iperf3 单程或双向链路测试，支持限速、并行与反向 (-R)。</p>
+                <p id="test-panel-intro" class="text-sm text-slate-400">快速规�?iperf3 单程或双向链路测试，支持限速、并行与反向 (-R)�?/p>
                 <div id="test-alert" class="hidden rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100"></div>
 
                 <div id="single-test-panel" class="space-y-4">
                   <div class="grid gap-3 sm:grid-cols-2">
                     <div class="space-y-2">
-                      <label class="text-sm font-medium text-slate-200">源节点</label>
+                      <label class="text-sm font-medium text-slate-200">源节�?/label>
                       <select id="src-select" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60"></select>
                     </div>
                     <div class="space-y-2">
@@ -1150,11 +1110,11 @@ def _login_html() -> str:
                       <select id="protocol" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60"><option value="tcp">TCP</option><option value="udp">UDP</option></select>
                     </div>
                     <div class="space-y-2">
-                      <label class="text-sm font-medium text-slate-200">时长（秒）</label>
+                      <label class="text-sm font-medium text-slate-200">时长（秒�?/label>
                       <input id="duration" type="number" value="10" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
                     </div>
                     <div class="space-y-2">
-                      <label class="text-sm font-medium text-slate-200">并行数</label>
+                      <label class="text-sm font-medium text-slate-200">并行�?/label>
                       <input id="parallel" type="number" value="1" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
                     </div>
                     <div class="space-y-2 hidden">
@@ -1168,8 +1128,8 @@ def _login_html() -> str:
                   </div>
                   <div id="tcp-options" class="grid gap-3 sm:grid-cols-2">
                     <div class="space-y-2">
-                      <label class="text-sm font-medium text-slate-200">TCP 限速带宽 (-b，可选)</label>
-                      <input id="tcp-bandwidth" type="text" placeholder="例如 0（不限）或 500M" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+                      <label class="text-sm font-medium text-slate-200">TCP 限速带�?(-b，可�?</label>
+                      <input id="tcp-bandwidth" type="text" placeholder="例如 0（不限）�?500M" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
                     </div>
                   </div>
                   <div id="udp-options" class="hidden grid gap-3 sm:grid-cols-3">
@@ -1183,7 +1143,7 @@ def _login_html() -> str:
                     </div>
                     <div class="space-y-2">
                       <label class="text-sm font-medium text-slate-200">UDP 备注</label>
-                      <p class="rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-2 text-xs text-slate-400">默认 100M/1400B，可根据链路容量调整。</p>
+                      <p class="rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-2 text-xs text-slate-400">默认 100M/1400B，可根据链路容量调整�?/p>
                     </div>
                   </div>
                   <div class="flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/50 px-3 py-2">
@@ -1191,16 +1151,16 @@ def _login_html() -> str:
                       <input id="reverse" type="checkbox" class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-sky-500 focus:ring-sky-500" />
                       反向测试 (-R)
                     </label>
-                    <p class="text-xs text-slate-500">在源节点上发起反向流量测试。</p>
+                    <p class="text-xs text-slate-500">在源节点上发起反向流量测试�?/p>
                   </div>
-                  <button id="run-test" class="w-full rounded-xl bg-gradient-to-r from-sky-500 to-indigo-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-sky-500/20 transition hover:scale-[1.01] hover:shadow-xl">开始测试</button>
+                  <button id="run-test" class="w-full rounded-xl bg-gradient-to-r from-sky-500 to-indigo-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-sky-500/20 transition hover:scale-[1.01] hover:shadow-xl">开始测�?/button>
                 </div>
 
                 <div id="suite-test-panel" class="hidden space-y-4">
-                  <p class="text-sm text-slate-400">一键完成 TCP/UDP 去回四项测试，适合基线验证与跨运营商链路对比。</p>
+                  <p class="text-sm text-slate-400">一键完�?TCP/UDP 去回四项测试，适合基线验证与跨运营商链路对比�?/p>
                   <div class="grid gap-3 sm:grid-cols-2">
                     <div class="space-y-2">
-                      <label class="text-sm font-medium text-slate-200">源节点</label>
+                      <label class="text-sm font-medium text-slate-200">源节�?/label>
                       <select id="suite-src-select" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60"></select>
                     </div>
                     <div class="space-y-2">
@@ -1208,11 +1168,11 @@ def _login_html() -> str:
                       <select id="suite-dst-select" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60"></select>
                     </div>
                     <div class="space-y-2">
-                      <label class="text-sm font-medium text-slate-200">时长（秒）</label>
+                      <label class="text-sm font-medium text-slate-200">时长（秒�?/label>
                       <input id="suite-duration" type="number" value="10" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
                     </div>
                     <div class="space-y-2">
-                      <label class="text-sm font-medium text-slate-200">并行数 (P)</label>
+                      <label class="text-sm font-medium text-slate-200">并行�?(P)</label>
                       <input id="suite-parallel" type="number" value="1" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
                     </div>
                     <div class="space-y-2 hidden">
@@ -1226,8 +1186,8 @@ def _login_html() -> str:
                   </div>
                   <div class="grid gap-3 sm:grid-cols-3">
                     <div class="space-y-2">
-                      <label class="text-sm font-medium text-slate-200">TCP 限速 (-b，可选)</label>
-                      <input id="suite-tcp-bandwidth" type="text" placeholder="例如 0 或 500M" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
+                      <label class="text-sm font-medium text-slate-200">TCP 限�?(-b，可�?</label>
+                      <input id="suite-tcp-bandwidth" type="text" placeholder="例如 0 �?500M" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60" />
                     </div>
                     <div class="space-y-2">
                       <label class="text-sm font-medium text-slate-200">UDP 带宽 (-b)</label>
@@ -1256,26 +1216,26 @@ def _login_html() -> str:
               <div id="recent-tests-panel" class="panel-card rounded-2xl p-5 space-y-4 hidden">
                 <div class="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <h3 class="text-lg font-semibold text-white">最近测试</h3>
-                    <p class="text-sm text-slate-400">按时间倒序展示，可展开查看原始输出。</p>
+                    <h3 class="text-lg font-semibold text-white">最近测�?/h3>
+                    <p class="text-sm text-slate-400">按时间倒序展示，可展开查看原始输出�?/p>
                   </div>
                   <div class="flex flex-wrap items-center gap-2">
                     <select id="tests-page-size" class="rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2 text-sm text-slate-100">
-                      <option value="5">5 条/页</option>
-                      <option value="10" selected>10 条/页</option>
-                      <option value="20">20 条/页</option>
-                      <option value="50">50 条/页</option>
+                      <option value="5">5 �?�?/option>
+                      <option value="10" selected>10 �?�?/option>
+                      <option value="20">20 �?�?/option>
+                      <option value="50">50 �?�?/option>
                     </select>
                     <button id="refresh-tests" class="rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200">刷新</button>
                     <button id="delete-all-tests" class="rounded-lg border border-rose-500/40 bg-rose-500/15 px-4 py-2 text-sm font-semibold text-rose-100 shadow-sm transition hover:bg-rose-500/25">清空记录</button>
                   </div>
                 </div>
-                <div id="tests-list" class="text-sm text-slate-400 space-y-3">暂无测试记录。</div>
+                <div id="tests-list" class="text-sm text-slate-400 space-y-3">暂无测试记录�?/div>
                 <!-- Pagination Controls -->
                 <div id="tests-pagination" class="flex flex-wrap items-center justify-center gap-2 pt-4 hidden">
-                  <button id="tests-prev" class="rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-sm font-medium text-slate-300 transition hover:border-sky-500 hover:text-sky-200 disabled:opacity-40 disabled:cursor-not-allowed">« 上一页</button>
-                  <span id="tests-page-info" class="text-sm text-slate-400 px-3">第 1 页 / 共 1 页</span>
-                  <button id="tests-next" class="rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-sm font-medium text-slate-300 transition hover:border-sky-500 hover:text-sky-200 disabled:opacity-40 disabled:cursor-not-allowed">下一页 »</button>
+                  <button id="tests-prev" class="rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-sm font-medium text-slate-300 transition hover:border-sky-500 hover:text-sky-200 disabled:opacity-40 disabled:cursor-not-allowed">« 上一�?/button>
+                  <span id="tests-page-info" class="text-sm text-slate-400 px-3">�?1 �?/ �?1 �?/span>
+                  <button id="tests-next" class="rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-sm font-medium text-slate-300 transition hover:border-sky-500 hover:text-sky-200 disabled:opacity-40 disabled:cursor-not-allowed">下一�?»</button>
                 </div>
               </div>
             </div>
@@ -1287,10 +1247,10 @@ def _login_html() -> str:
 
   <div id="add-node-modal" class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-950/80 px-4 py-6 backdrop-blur">
     <div class="relative w-full max-w-xl rounded-3xl border border-slate-800 bg-slate-900/80 p-6 shadow-2xl shadow-black/40">
-      <button id="close-add-node" class="absolute right-4 top-4 rounded-full border border-slate-700/80 bg-slate-800/80 p-2 text-slate-300 transition hover:bg-slate-700/80">✕</button>
+      <button id="close-add-node" class="absolute right-4 top-4 rounded-full border border-slate-700/80 bg-slate-800/80 p-2 text-slate-300 transition hover:bg-slate-700/80">�?/button>
       <div class="mb-4 flex items-center justify-between gap-2">
         <div>
-          <p class="text-xs uppercase tracking-[0.2em] text-sky-300/80">Agent 注册表</p>
+          <p class="text-xs uppercase tracking-[0.2em] text-sky-300/80">Agent 注册�?/p>
           <h3 id="add-node-title" class="text-xl font-semibold text-white">添加节点</h3>
         </div>
         <span class="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-200 ring-1 ring-emerald-500/40">本地弹窗</span>
@@ -1328,7 +1288,7 @@ def _login_html() -> str:
   <!-- Settings Modal -->
   <div id="settings-modal" class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-950/80 px-4 py-6 backdrop-blur">
     <div class="relative w-full max-w-2xl rounded-3xl border border-slate-800 bg-slate-900/80 p-6 shadow-2xl shadow-black/40">
-      <button id="close-settings" onclick="toggleSettingsModal(false)" class="absolute right-4 top-4 rounded-full border border-slate-700/80 bg-slate-800/80 p-2 text-slate-300 transition hover:bg-slate-700/80 z-10">✕</button>
+      <button id="close-settings" onclick="toggleSettingsModal(false)" class="absolute right-4 top-4 rounded-full border border-slate-700/80 bg-slate-800/80 p-2 text-slate-300 transition hover:bg-slate-700/80 z-10">�?/button>
       
       <div class="mb-6 flex items-center justify-between gap-2 pr-12">
         <div>
@@ -1345,13 +1305,28 @@ def _login_html() -> str:
         <button id="config-tab" onclick="setActiveSettingsTab('config')" class="rounded-full px-4 py-2 text-sm font-semibold text-slate-300 transition hover:text-white">
           📦 配置管理
         </button>
+        <button id="whitelist-tab" onclick="
+          try {
+            console.log('Whitelist tab inline click');
+            document.getElementById('password-panel')?.classList.add('hidden');
+            document.getElementById('config-panel')?.classList.add('hidden');
+            document.getElementById('whitelist-panel')?.classList.remove('hidden');
+            document.getElementById('password-tab').className = 'rounded-full px-4 py-2 text-sm font-semibold text-slate-300 transition hover:text-white';
+            document.getElementById('config-tab').className = 'rounded-full px-4 py-2 text-sm font-semibold text-slate-300 transition hover:text-white';
+            this.className = 'rounded-full bg-gradient-to-r from-indigo-500/80 to-purple-500/80 px-4 py-2 text-sm font-semibold text-slate-50 shadow-lg shadow-indigo-500/15 ring-1 ring-indigo-400/40 transition hover:brightness-110';
+            // Auto-refresh whitelist data
+            if (typeof refreshWhitelist === 'function') refreshWhitelist();
+          } catch(e) { console.error('Whitelist tab error:', e); alert('Error: ' + e.message); }
+        " class="rounded-full px-4 py-2 text-sm font-semibold text-slate-300 transition hover:text-white">
+          🛡�?IP 白名�?
+        </button>
       </div>
 
       <!-- Password Management Panel -->
       <div id="password-panel" class="space-y-4">
         <div class="rounded-xl border border-slate-800/60 bg-slate-950/40 p-4">
           <h4 class="mb-3 text-lg font-semibold text-white">修改密码</h4>
-          <p class="mb-4 text-sm text-slate-400">更新您的访问密码以保护系统安全。</p>
+          <p class="mb-4 text-sm text-slate-400">更新您的访问密码以保护系统安全�?/p>
           
           <div id="change-password-alert" class="alert hidden mb-4"></div>
           
@@ -1361,11 +1336,11 @@ def _login_html() -> str:
               <input id="current-password" type="password" class="form-input" placeholder="Current Password" />
             </div>
             <div class="space-y-2">
-              <label class="text-xs font-semibold text-slate-300" for="new-password">新密码</label>
-              <input id="new-password" type="password" class="form-input" placeholder="最少 6 位" />
+              <label class="text-xs font-semibold text-slate-300" for="new-password">新密�?/label>
+              <input id="new-password" type="password" class="form-input" placeholder="最�?6 �? />
             </div>
             <div class="space-y-2">
-              <label class="text-xs font-semibold text-slate-300" for="confirm-password">确认新密码</label>
+              <label class="text-xs font-semibold text-slate-300" for="confirm-password">确认新密�?/label>
               <input id="confirm-password" type="password" class="form-input" placeholder="再次输入" />
             </div>
           </div>
@@ -1382,7 +1357,7 @@ def _login_html() -> str:
       <div id="config-panel" class="hidden space-y-4">
         <div class="rounded-xl border border-slate-800/60 bg-slate-950/40 p-4">
           <h4 class="mb-3 text-lg font-semibold text-white">代理配置文件</h4>
-          <p class="mb-4 text-sm text-slate-400">导入或导出 agent_configs.json，便于在不同实例之间迁移配置。</p>
+          <p class="mb-4 text-sm text-slate-400">导入或导�?agent_configs.json，便于在不同实例之间迁移配置�?/p>
           
           <div id="config-alert" class="hidden mb-4 rounded-xl border border-slate-700 bg-slate-800/60 px-4 py-3 text-sm text-slate-100"></div>
           
@@ -1399,7 +1374,101 @@ def _login_html() -> str:
             </button>
           </div>
           
-          <p class="mt-4 text-xs text-slate-500">💡 提示: 配置文件包含所有节点信息，可用于备份或迁移到其他服务器。</p>
+          <p class="mt-4 text-xs text-slate-500">💡 提示: 配置文件包含所有节点信息，可用于备份或迁移到其他服务器�?/p>
+        </div>
+      </div>
+
+      <!-- IP Whitelist Management Panel -->
+      <div id="whitelist-panel" class="hidden space-y-4">
+        <div class="rounded-xl border border-slate-800/60 bg-slate-950/40 p-4">
+          <h4 class="mb-3 text-lg font-semibold text-white">IP 白名单管�?/h4>
+          <p class="mb-4 text-sm text-slate-400">管理允许访问 Agent �?IP 地址列表，支�?CIDR 网段�?/p>
+          
+          <div id="whitelist-alert" class="hidden mb-4 rounded-xl border px-4 py-3 text-sm"></div>
+          
+          <!-- Add IP Form -->
+          <div class="mb-6 rounded-lg border border-slate-700/50 bg-slate-900/40 p-4">
+            <h5 class="mb-3 text-sm font-semibold text-white">添加 IP 地址</h5>
+            <div class="flex gap-2">
+              <input 
+                id="whitelist-ip-input" 
+                type="text" 
+                placeholder="例如: 10.0.0.1 �?10.0.0.0/24"
+                class="flex-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none"
+              />
+              <button 
+                onclick="addWhitelistIp()"
+                class="px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-sky-500 text-sm font-semibold text-white shadow-lg hover:scale-105 transition whitespace-nowrap"
+              >
+                <span>�?添加</span>
+              </button>
+            </div>
+            <p class="mt-2 text-xs text-slate-500">支持 IPv4、IPv6 �?CIDR 网段格式</p>
+          </div>
+          
+          <!-- Whitelist Stats -->
+          <div id="whitelist-stats" class="mb-4 grid grid-cols-3 gap-3">
+            <div class="rounded-lg border border-slate-700/50 bg-slate-900/40 p-3">
+              <div class="text-xs text-slate-400">�?IP �?/div>
+              <div id="whitelist-total" class="text-2xl font-bold text-white">--</div>
+            </div>
+            <div class="rounded-lg border border-slate-700/50 bg-slate-900/40 p-3">
+              <div class="text-xs text-slate-400">同步状�?/div>
+              <div id="whitelist-sync-status" class="text-sm font-semibold text-emerald-400">�?已同�?/div>
+            </div>
+            <div class="rounded-lg border border-slate-700/50 bg-slate-900/40 p-3">
+              <div class="text-xs text-slate-400">CIDR 范围</div>
+              <div id="whitelist-cidr-count" class="text-2xl font-bold text-white">--</div>
+            </div>
+          </div>
+          
+          <!-- Whitelist Actions -->
+          <div class="flex flex-wrap items-center gap-3 mb-4">
+            <button id="refresh-whitelist-btn" onclick="refreshWhitelist()" class="rounded-xl border border-slate-700 bg-slate-800/60 px-5 py-2.5 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200 inline-flex items-center gap-2">
+              <span>🔄</span>
+              <span>刷新列表</span>
+            </button>
+            <button id="sync-whitelist-btn" onclick="syncWhitelist()" class="rounded-xl border border-emerald-500/40 bg-emerald-500/15 px-5 py-2.5 text-sm font-semibold text-emerald-100 shadow-sm transition hover:bg-emerald-500/25 inline-flex items-center gap-2">
+              <span>🔄</span>
+              <span>同步到所�?Agent</span>
+            </button>
+            <button id="check-whitelist-status-btn" onclick="checkWhitelistStatus()" class="rounded-xl border border-blue-500/40 bg-blue-500/15 px-5 py-2.5 text-sm font-semibold text-blue-100 shadow-sm transition hover:bg-blue-500/25 inline-flex items-center gap-2">
+              <span>📊</span>
+              <span>检查同步状�?/span>
+            </button>
+          </div>
+          
+          <!-- Whitelist Table -->
+          <div class="rounded-lg border border-slate-700 bg-slate-900/50 overflow-hidden">
+            <table class="w-full text-sm">
+              <thead class="bg-slate-800/60 text-slate-300 border-b border-slate-700">
+                <tr>
+                  <th class="text-left px-4 py-3 font-semibold">IP 地址</th>
+                  <th class="text-left px-4 py-3 font-semibold">来源</th>
+                  <th class="text-left px-4 py-3 font-semibold">同步状�?/th>
+                  <th class="text-left px-4 py-3 font-semibold">类型</th>
+                  <th class="text-right px-4 py-3 font-semibold">操作</th>
+                </tr>
+              </thead>
+              <tbody id="whitelist-table-body" class="divide-y divide-slate-800">
+                <tr>
+                  <td colspan="4" class="px-4 py-8 text-center text-slate-500">
+                    加载�?..
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          
+          <!-- Sync Results Display -->
+          <div id="whitelist-sync-result" class="hidden mt-4 rounded-lg border border-slate-700 bg-slate-900/50 p-4">
+            <h5 class="text-sm font-semibold text-white mb-2">同步结果</h5>
+            <div id="sync-result-content" class="text-xs text-slate-300">
+              <!-- Sync results will be displayed here -->
+            </div>
+          </div>
+          
+          <p class="mt-4 text-xs text-slate-500">💡 提示: 添加/删除节点时会自动同步白名单，也可手动触发同步�?/p>
         </div>
       </div>
     </div>
@@ -1455,22 +1524,24 @@ def _login_html() -> str:
       // Buttons
       const passwordTab = document.getElementById('password-tab');
       const configTab = document.getElementById('config-tab');
+      const whitelistTab = document.getElementById('whitelist-tab');
       
       // Panels
       const passwordPanel = document.getElementById('password-panel');
       const configPanel = document.getElementById('config-panel');
+      const whitelistPanel = document.getElementById('whitelist-panel');
       
-      console.log('Elements found:', { passwordTab, configTab, passwordPanel, configPanel });
+      console.log('Elements found:', { passwordTab, configTab, whitelistTab, passwordPanel, configPanel, whitelistPanel });
       
       // Reset all buttons style
-      [passwordTab, configTab].forEach(btn => {
+      [passwordTab, configTab, whitelistTab].forEach(btn => {
         if (btn) {
             btn.className = 'rounded-full px-4 py-2 text-sm font-semibold text-slate-300 transition hover:text-white';
         }
       });
       
       // Reset all panels visibility
-      [passwordPanel, configPanel].forEach(panel => {
+      [passwordPanel, configPanel, whitelistPanel].forEach(panel => {
         if (panel) panel.classList.add('hidden');
       });
       
@@ -1483,6 +1554,13 @@ def _login_html() -> str:
       } else if (tabName === 'config' && configTab && configPanel) {
         configTab.className = activeBtnClass;
         configPanel.classList.remove('hidden');
+      } else if (tabName === 'whitelist' && whitelistTab && whitelistPanel) { // Support for whitelist tab
+        console.log('Activating whitelist tab');
+        whitelistTab.className = activeBtnClass;
+        whitelistPanel.classList.remove('hidden');
+        // Initial fetch of stats and list when opening tab
+        checkWhitelistStatus();
+        refreshWhitelist();
       }
       console.log('setActiveSettingsTab completed');
     }
@@ -1526,7 +1604,7 @@ def _login_html() -> str:
           tbody.innerHTML = `
             <tr>
               <td colspan="4" class="px-4 py-8 text-center text-slate-500">
-                暂无白名单 IP，点击上方"添加"按钮开始
+                暂无白名�?IP，点击上�?添加"按钮开�?
               </td>
             </tr>
           `;
@@ -1565,21 +1643,21 @@ def _login_html() -> str:
                   
                   // Initial render - default to unknown/unchecked unless we have data
                   if (!nodeInfo.whitelist_sync_status || nodeInfo.whitelist_sync_status === 'unknown') {
-                    return '<span class="text-slate-500 flex items-center gap-1">❓ 未检查</span>';
+                    return '<span class="text-slate-500 flex items-center gap-1">�?未检�?/span>';
                   }
                   
                   if (nodeInfo.whitelist_sync_status === 'synced') {
                     const timeStr = nodeInfo.whitelist_sync_at ? new Date(nodeInfo.whitelist_sync_at).toLocaleTimeString() : '';
-                    return `<span class="text-emerald-400 flex items-center gap-1" title="已同步 ${timeStr}">✅ 已同步</span>`;
+                    return `<span class="text-emerald-400 flex items-center gap-1" title="已同�?${timeStr}">�?已同�?/span>`;
                   }
                   
                   if (nodeInfo.whitelist_sync_status === 'not_synced') {
-                    return '<span class="text-yellow-400 flex items-center gap-1" title="内容不一致">⚠️ 未同步</span>';
+                    return '<span class="text-yellow-400 flex items-center gap-1" title="内容不一�?>⚠️ 未同�?/span>';
                   }
                   
                   // Display specific error if available
                   const errorMsg = nodeInfo.whitelist_sync_message || '未知错误';
-                  return `<span class="text-rose-400 flex items-center gap-1" title="${errorMsg}">❌ ${errorMsg}</span>`;
+                  return `<span class="text-rose-400 flex items-center gap-1" title="${errorMsg}">�?${errorMsg}</span>`;
                 })()}
               </td>
               <td class="px-4 py-3">
@@ -1604,7 +1682,7 @@ def _login_html() -> str:
         }).join('');
         
       } catch (e) {
-        showWhitelistAlert(`获取白名单失败: ${e.message}`, 'error');
+        showWhitelistAlert(`获取白名单失�? ${e.message}`, 'error');
         tbody.innerHTML = `
           <tr>
             <td colspan="4" class="px-4 py-8 text-center text-rose-400">
@@ -1622,7 +1700,7 @@ def _login_html() -> str:
       
       const ip = input.value.trim();
       if (!ip) {
-        showWhitelistAlert('请输入 IP 地址', 'error');
+        showWhitelistAlert('请输�?IP 地址', 'error');
         return;
       }
       
@@ -1650,7 +1728,7 @@ def _login_html() -> str:
     
     // Remove IP from whitelist
     async function removeWhitelistIp(ip) {
-        if (!confirm(`确定要从白名单中移除 IP ${ip} 吗?`)) return;
+        if (!confirm(`确定要从白名单中移除 IP ${ip} �?`)) return;
         
         try {
             const res = await apiFetch('/admin/whitelist/remove', {
@@ -1678,7 +1756,7 @@ def _login_html() -> str:
         
         try {
             btn.disabled = true;
-            btn.innerHTML = '<span>🔄</span><span>同步中...</span>';
+            btn.innerHTML = '<span>🔄</span><span>同步�?..</span>';
             
             const res = await apiFetch('/admin/sync_whitelist', { method: 'POST' });
             
@@ -1689,7 +1767,7 @@ def _login_html() -> str:
             showWhitelistAlert(`同步请求失败: ${e.message}`, 'error');
         } finally {
              btn.disabled = false;
-             btn.innerHTML = '<span>🔄</span><span>同步到所有 Agent</span>';
+             btn.innerHTML = '<span>🔄</span><span>同步到所�?Agent</span>';
         }
     }
 
@@ -1730,7 +1808,7 @@ def _login_html() -> str:
         } finally {
             if (btn) {
                 btn.disabled = false;
-                btn.innerHTML = '<span>📊</span><span>检查同步状态</span>';
+                btn.innerHTML = '<span>📊</span><span>检查同步状�?/span>';
             }
         }
     }
@@ -1917,25 +1995,25 @@ def _login_html() -> str:
           text: '等待解锁',
           dot: 'warning',
           className: 'warning',
-          hint: '输入共享密码以进入运维面板。',
+          hint: '输入共享密码以进入运维面板�?,
         },
         unlocking: {
           text: '正在解锁...',
           dot: 'info',
           className: 'info',
-          hint: '正在验证密码，请稍候。',
+          hint: '正在验证密码，请稍候�?,
         },
         unlocked: {
-          text: '已解锁',
+          text: '已解�?,
           dot: 'success',
           className: 'success',
-          hint: '已通过认证，可管理节点与测速任务。',
+          hint: '已通过认证，可管理节点与测速任务�?,
         },
         error: {
           text: '验证失败',
           dot: 'danger',
           className: 'danger',
-          hint: '验证未通过，请重新输入。',
+          hint: '验证未通过，请重新输入�?,
         },
       };
 
@@ -1996,8 +2074,8 @@ def _login_html() -> str:
 
       if (testPanelIntro) {
         testPanelIntro.textContent = isSuite
-          ? '双向 TCP/UDP 测试一次完成四轮去回，方便基线和互联质量核验。'
-          : '快速发起单条 TCP/UDP 链路测试，支持限速、并行与反向 (-R)。';
+          ? '双向 TCP/UDP 测试一次完成四轮去回，方便基线和互联质量核验�?
+          : '快速发起单�?TCP/UDP 链路测试，支持限速、并行与反向 (-R)�?;
       }
     }
 
@@ -2152,7 +2230,7 @@ def _login_html() -> str:
         flagCache[cacheKey] = { flag, code, timestamp: now };
         return flagCache[cacheKey];
       } catch (error) {
-        console.warn('无法获取 IP 归属地国旗，将使用回退旗帜。', error);
+        console.warn('无法获取 IP 归属地国旗，将使用回退旗帜�?, error);
         return fallback;
       }
     }
@@ -2198,11 +2276,11 @@ def _login_html() -> str:
         return '<span class="text-xs text-emerald-300">流媒体测试中...</span>';
       }
       if (!cache) {
-        return '<span class="text-xs text-slate-500">未检测</span>';
+        return '<span class="text-xs text-slate-500">未检�?/span>';
       }
 
       if (cache.error) {
-        return `<span class=\"text-xs text-amber-300\">${cache.message || '检测异常'}</span>`;
+        return `<span class=\"text-xs text-amber-300\">${cache.message || '检测异�?}</span>`;
       }
 
       const mutedStyle = 'text-slate-500 border-slate-800 bg-slate-900/60';
@@ -2225,23 +2303,23 @@ def _login_html() -> str:
           const tags = [];
 
           let badgeColor = unlocked === true ? `${svc.color} ${svc.bg}` : mutedStyle;
-          let statusLabel = unlocked === true ? '可解锁' : unlocked === false ? '未解锁' : '未检测';
+          let statusLabel = unlocked === true ? '可解�? : unlocked === false ? '未解�? : '未检�?;
           let badgeLabel = svc.label;
 
           if (svc.key === 'netflix' && status) {
             const netflixTier = tier || (unlocked ? 'full' : 'none');
             if (netflixTier === 'full') {
-              statusLabel = '全解锁';
+              statusLabel = '全解�?;
               badgeColor = `${svc.color} ${svc.bg}`;
-              tags.push('全解锁');
+              tags.push('全解�?);
               unlocked = true;  // Ensure unlocked is true for full tier
             } else if (netflixTier === 'originals') {
               statusLabel = '仅解锁自制剧';
               badgeColor = mutedStyle;
-              tags.push('自制剧');
+              tags.push('自制�?);
               unlocked = false;  // Originals-only is not considered fully unlocked
             } else {
-              statusLabel = '未解锁';
+              statusLabel = '未解�?;
               badgeColor = mutedStyle;
               unlocked = false;
             }
@@ -2254,7 +2332,7 @@ def _login_html() -> str:
             .map((tag) => `<span class=\"rounded-sm bg-slate-800/60 px-1 text-[10px]\">[${tag}]</span>`)
             .join('');
 
-          const title = `${region ? `[${region}]` : ''}${badgeLabel}：${statusLabel}${detail ? ' · ' + detail : ''}`;
+          const title = `${region ? `[${region}]` : ''}${badgeLabel}�?{statusLabel}${detail ? ' · ' + detail : ''}`;
           return `<span class=\"inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold ${badgeColor}\" title=\"${title}\">${regionTag}<span>${badgeLabel}</span>${tagBadges}</span>`;
         })
         .join('');
@@ -2264,7 +2342,7 @@ def _login_html() -> str:
       clearAlert(configAlert);
       const res = await apiFetch('/agent-configs/export');
       if (!res.ok) {
-        setAlert(configAlert, '导出配置失败。');
+        setAlert(configAlert, '导出配置失败�?);
         return;
       }
 
@@ -2287,7 +2365,7 @@ def _login_html() -> str:
       try {
         payload = JSON.parse(await file.text());
       } catch (err) {
-        setAlert(configAlert, 'JSON 文件无效。');
+        setAlert(configAlert, 'JSON 文件无效�?);
         return;
       }
 
@@ -2299,12 +2377,12 @@ def _login_html() -> str:
 
       if (!res.ok) {
         const msg = await res.text();
-        setAlert(configAlert, msg || '导入配置失败。');
+        setAlert(configAlert, msg || '导入配置失败�?);
         return;
       }
 
       const imported = await res.json();
-      setAlert(configAlert, `已导入 ${imported.length} 条代理配置。`);
+      setAlert(configAlert, `已导�?${imported.length} 条代理配置。`);
     }
 
     function resetNodeForm() {
@@ -2326,7 +2404,7 @@ def _login_html() -> str:
 
       const res = await apiFetch(`/nodes/${nodeId}`, { method: 'DELETE' });
       if (!res.ok) {
-        setAlert(addNodeAlert, '删除节点失败。');
+        setAlert(addNodeAlert, '删除节点失败�?);
         return;
       }
 
@@ -2343,14 +2421,14 @@ def _login_html() -> str:
       try {
         const res = await apiFetch('/auth/status');
         if (!res.ok) {
-          let message = '无法验证登录状态。';
+          let message = '无法验证登录状态�?;
           try {
             const data = await res.json();
-            if (data?.detail) message = `认证失败：${data.detail}`;
+            if (data?.detail) message = `认证失败�?{data.detail}`;
           } catch (_) {
             try {
               const rawText = await res.text();
-              if (rawText) message = `认证失败：${rawText}`;
+              if (rawText) message = `认证失败�?{rawText}`;
             } catch (_) {}
           }
 
@@ -2369,13 +2447,13 @@ def _login_html() -> str:
           setLoginState('unlocked');
           
           if (isGuest) {
-            authHint.textContent = '👁️ 访客模式 - 仅可查看，无法操作';
+            authHint.textContent = '👁�?访客模式 - 仅可查看，无法操�?;
             authHint.className = 'text-sm text-amber-400';
             // Hide action buttons for guests
             document.querySelectorAll('.guest-hide').forEach(el => el.classList.add('hidden'));
             document.getElementById('logout-btn')?.classList.remove('hidden');
           } else {
-            authHint.textContent = '已通过认证，可管理节点与测速任务。';
+            authHint.textContent = '已通过认证，可管理节点与测速任务�?;
             authHint.className = 'text-sm text-slate-400';
             document.querySelectorAll('.guest-hide').forEach(el => el.classList.remove('hidden'));
           }
@@ -2387,14 +2465,14 @@ def _login_html() -> str:
           appCard.classList.add('hidden');
           loginCard.classList.remove('hidden');
           setLoginState('idle');
-          if (showFeedback) setAlert(loginAlert, '登录状态未建立，请重新登录。');
+          if (showFeedback) setAlert(loginAlert, '登录状态未建立，请重新登录�?);
           return false;
         }
       } catch (err) {
         console.error('Auth check failed:', err);
         appCard.classList.add('hidden');
         loginCard.classList.remove('hidden');
-        const errorMessage = '无法连接认证服务，请稍后重试。';
+        const errorMessage = '无法连接认证服务，请稍后重试�?;
         setLoginState('error', errorMessage);
         if (showFeedback) setAlert(loginAlert, errorMessage);
         return false;
@@ -2412,7 +2490,7 @@ def _login_html() -> str:
       const password = (passwordInput?.value || '').trim();
       if (!password) {
         console.warn('Login aborted: empty password');
-        setAlert(loginAlert, '请输入密码 (Password Required)');
+        setAlert(loginAlert, '请输入密�?(Password Required)');
         passwordInput?.focus();
         card.classList.add('animate-shake');
         setTimeout(() => card.classList.remove('animate-shake'), 400);
@@ -2472,7 +2550,7 @@ def _login_html() -> str:
         
         if (res.status === 401) {
             console.warn('Login failed: 401 Unauthorized');
-            message = '登录失败：密码错误 (Invalid Password)';
+            message = '登录失败：密码错�?(Invalid Password)';
         } else if (res.status === 408 || res.status === 504) {
              console.error('Login failed: Timeout');
              message = '登录超时 (Request Timeout)';
@@ -2481,8 +2559,8 @@ def _login_html() -> str:
                 const data = await res.json();
                 console.warn('Login failed with details:', data);
                 if (data?.detail === 'empty_password') message = '密码不能为空';
-                else if (data?.detail === 'invalid_password') message = '登录失败：密码错误 (Invalid Password)';
-                else if (data?.detail) message = `登录失败：${data.detail}`;
+                else if (data?.detail === 'invalid_password') message = '登录失败：密码错�?(Invalid Password)';
+                else if (data?.detail) message = `登录失败�?{data.detail}`;
             } catch (e) {
                 console.error('Failed to parse error response:', e);
                 message = `登录失败 (HTTP ${res.status})`;
@@ -2498,7 +2576,7 @@ def _login_html() -> str:
         setTimeout(() => card.classList.remove('animate-shake'), 400);
         
         loginAlert.className = 'alert alert-error';
-        const errorMsg = err.name === 'AbortError' ? '请求超时 (Timeout)' : '无法连接服务器 (Network Error)';
+        const errorMsg = err.name === 'AbortError' ? '请求超时 (Timeout)' : '无法连接服务�?(Network Error)';
         setAlert(loginAlert, errorMsg);
       } finally {
         setLoginButtonLoading(false);
@@ -2539,17 +2617,17 @@ def _login_html() -> str:
       };
 
       if (!payload.new_password) {
-        setAlert(changePasswordAlert, '请输入新密码。');
+        setAlert(changePasswordAlert, '请输入新密码�?);
         return;
       }
 
       if (payload.new_password.length < 6) {
-        setAlert(changePasswordAlert, '新密码长度需不少于 6 位。');
+        setAlert(changePasswordAlert, '新密码长度需不少�?6 位�?);
         return;
       }
 
       if (payload.new_password !== payload.confirm_password) {
-        setAlert(changePasswordAlert, '两次输入的新密码不一致。');
+        setAlert(changePasswordAlert, '两次输入的新密码不一致�?);
         return;
       }
 
@@ -2560,13 +2638,13 @@ def _login_html() -> str:
       });
 
       if (!res.ok) {
-        let feedback = '更新密码失败。';
+        let feedback = '更新密码失败�?;
         try {
           const data = await res.json();
-          if (data?.detail === 'invalid_password') feedback = '当前密码不正确或会话已过期。';
-          if (data?.detail === 'password_too_short') feedback = '新密码长度不足 6 位。';
-          if (data?.detail === 'password_mismatch') feedback = '两次输入的新密码不一致。';
-          if (data?.detail === 'empty_password') feedback = '请输入新密码。';
+          if (data?.detail === 'invalid_password') feedback = '当前密码不正确或会话已过期�?;
+          if (data?.detail === 'password_too_short') feedback = '新密码长度不�?6 位�?;
+          if (data?.detail === 'password_mismatch') feedback = '两次输入的新密码不一致�?;
+          if (data?.detail === 'empty_password') feedback = '请输入新密码�?;
         } catch (err) {
           feedback = feedback + ' ' + (err?.message || '');
         }
@@ -2575,7 +2653,7 @@ def _login_html() -> str:
       }
 
       changePasswordAlert.className = 'alert alert-success';
-      setAlert(changePasswordAlert, '✅ 密码已成功更新!当前会话已使用新密码。');
+      setAlert(changePasswordAlert, '�?密码已成功更�?当前会话已使用新密码�?);
       currentPasswordInput.value = '';
       newPasswordInput.value = '';
       confirmPasswordInput.value = '';
@@ -2643,7 +2721,7 @@ def _login_html() -> str:
         if (suiteDstSelect) suiteDstSelect.innerHTML = '';
 
         if (!nodes.length) {
-          nodesList.textContent = '暂无节点。';
+          nodesList.textContent = '暂无节点�?;
           return;
         }
 
@@ -2652,7 +2730,7 @@ def _login_html() -> str:
 
           const privacyEnabled = !!ipPrivacyState[node.id];
         const flagInfo = resolveLocalFlag(node);
-        const locationBadge = renderFlagSlot(node.id, flagInfo, 'text-base drop-shadow-sm', '服务器所在地区');
+        const locationBadge = renderFlagSlot(node.id, flagInfo, 'text-base drop-shadow-sm', '服务器所在地�?);
         const statusBadge = node.status === 'online'
           ? `<span class="${styles.badgeOnline}"><span class=\"h-2 w-2 rounded-full bg-emerald-400\"></span><span>在线</span></span>`
           : `<span class="${styles.badgeOffline}"><span class=\"h-2 w-2 rounded-full bg-rose-400\"></span><span>离线</span></span>`;
@@ -2663,27 +2741,27 @@ def _login_html() -> str:
           const errorMsg = node.whitelist_sync_message || '未知错误';
           
           if (node.whitelist_sync_status === 'synced') {
-              syncBadge = `<span class="inline-flex items-center rounded-md bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-400 ring-1 ring-inset ring-emerald-500/20 cursor-help" title="白名单已同步 (${syncTime})">🔄 白名单</span>`;
+              syncBadge = `<span class="inline-flex items-center rounded-md bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-400 ring-1 ring-inset ring-emerald-500/20 cursor-help" title="白名单已同步 (${syncTime})">🔄 白名�?/span>`;
           } else if (node.whitelist_sync_status === 'not_synced') {
-              syncBadge = `<span class="inline-flex items-center rounded-md bg-yellow-500/10 px-2 py-0.5 text-xs font-medium text-yellow-400 ring-1 ring-inset ring-yellow-500/20 cursor-help" title="白名单内容不一致 (${syncTime})">⚠️ 白名单</span>`;
+              syncBadge = `<span class="inline-flex items-center rounded-md bg-yellow-500/10 px-2 py-0.5 text-xs font-medium text-yellow-400 ring-1 ring-inset ring-yellow-500/20 cursor-help" title="白名单内容不一�?(${syncTime})">⚠️ 白名�?/span>`;
           } else if (node.whitelist_sync_status === 'failed') {
-             syncBadge = `<span class="inline-flex items-center rounded-md bg-rose-500/10 px-2 py-0.5 text-xs font-medium text-rose-400 ring-1 ring-inset ring-rose-500/20 cursor-help" title="同步失败: ${errorMsg} (${syncTime})">❌ 白名单</span>`;
+             syncBadge = `<span class="inline-flex items-center rounded-md bg-rose-500/10 px-2 py-0.5 text-xs font-medium text-rose-400 ring-1 ring-inset ring-rose-500/20 cursor-help" title="同步失败: ${errorMsg} (${syncTime})">�?白名�?/span>`;
           } else {
-             syncBadge = `<span class="inline-flex items-center rounded-md bg-slate-500/10 px-2 py-0.5 text-xs font-medium text-slate-400 ring-1 ring-inset ring-slate-500/20" title="白名单同步状态未知">❓ 白名单</span>`;
+             syncBadge = `<span class="inline-flex items-center rounded-md bg-slate-500/10 px-2 py-0.5 text-xs font-medium text-slate-400 ring-1 ring-inset ring-slate-500/20" title="白名单同步状态未�?>�?白名�?/span>`;
           }
           
           // Version Mismatch Badge - only show when agent reports a different version
           const expectedVersion = '1.0.2';
           let versionBadge = '';
           if (node.agent_version && node.agent_version !== expectedVersion) {
-              versionBadge = `<span class="inline-flex items-center rounded-md bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-400 ring-1 ring-inset ring-amber-500/20 cursor-help" title="Agent版本 ${node.agent_version} 与预期版本 ${expectedVersion} 不一致，请更新">⬆️ 需更新</span>`;
+              versionBadge = `<span class="inline-flex items-center rounded-md bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-400 ring-1 ring-inset ring-amber-500/20 cursor-help" title="Agent版本 ${node.agent_version} 与预期版�?${expectedVersion} 不一致，请更�?>⬆️ 需更新</span>`;
           }
           // Note: If agent_version is null/missing, we don't show the badge to avoid false positives
           
           // Internal Agent Badge - for NAT/reverse connection agents
           let internalBadge = '';
           if (node.is_internal) {
-              internalBadge = `<span class="inline-flex items-center rounded-md bg-violet-500/10 px-2 py-0.5 text-xs font-medium text-violet-400 ring-1 ring-inset ring-violet-500/20 cursor-help" title="内网设备 (反向穿透模式)">🔗 内网</span>`;
+              internalBadge = `<span class="inline-flex items-center rounded-md bg-violet-500/10 px-2 py-0.5 text-xs font-medium text-violet-400 ring-1 ring-inset ring-violet-500/20 cursor-help" title="内网设备 (反向穿透模�?">🔗 内网</span>`;
           }
 
 
@@ -2712,7 +2790,7 @@ def _login_html() -> str:
                 ${internalBadge}
                 <span class="text-base font-semibold text-white drop-shadow">${node.name}</span>
                 ${!window.isGuest ? `<button type="button" class="${styles.iconButton}" data-privacy-toggle="${node.id}" aria-label="切换 IP 隐藏">
-                  <span class="text-base">${ipPrivacyState[node.id] ? '🙈' : '👁️'}</span>
+                  <span class="text-base">${ipPrivacyState[node.id] ? '🙈' : '👁�?}</span>
                 </button>` : ''}
               </div>
               ${backboneBadges ? `<div class=\"flex flex-wrap items-center gap-2\">${backboneBadges}</div>` : ''}
@@ -2726,7 +2804,7 @@ def _login_html() -> str:
               </p>
             </div>
             ${!window.isGuest ? `<div class="flex flex-wrap items-center justify-start gap-2 lg:flex-col lg:items-end lg:justify-center lg:min-w-[170px] opacity-100 md:opacity-0 md:pointer-events-none md:transition md:duration-200 md:group-hover:opacity-100 md:group-hover:pointer-events-auto md:focus-within:opacity-100 md:focus-within:pointer-events-auto">
-              <button class="${styles.pillInfo}" onclick="runStreamingCheck(${node.id})">流媒体解锁测试</button>
+              <button class="${styles.pillInfo}" onclick="runStreamingCheck(${node.id})">流媒体解锁测�?/button>
               <button class="${styles.pillInfo}" onclick="editNode(${node.id})">编辑</button>
               <button class="${styles.pillDanger}" onclick="removeNode(${node.id})">删除</button>
             </div>` : ''}
@@ -2752,7 +2830,7 @@ def _login_html() -> str:
           if (iperfPortSpan) {
             iperfPortSpan.textContent = `· iperf ${maskPort(ports, nextState)}${node.description ? ' · ' + node.description : ''}`;
           }
-          toggleBtn.innerHTML = `<span class="text-base">${nextState ? '🙈' : '👁️'}</span>`;
+          toggleBtn.innerHTML = `<span class="text-base">${nextState ? '🙈' : '👁�?}</span>`;
           toggleBtn.setAttribute('aria-pressed', String(nextState));
         });
 
@@ -2871,14 +2949,14 @@ def _login_html() -> str:
       if (isStreamingTestRunning) return;
       const targetNode = nodeCache.find((n) => n.id === nodeId);
       if (!targetNode) {
-        setAlert(addNodeAlert, '节点不存在或尚未加载。');
+        setAlert(addNodeAlert, '节点不存在或尚未加载�?);
         return;
       }
 
       isStreamingTestRunning = true;
       streamingProgressLabel.textContent = '流媒体测试中...';
       const expectedMs = Math.max(3500, 2000);
-      const stopProgress = startProgressBar(streamingProgress, streamingProgressBar, streamingProgressLabel, expectedMs, '准备发起检测...', false);
+      const stopProgress = startProgressBar(streamingProgress, streamingProgressBar, streamingProgressLabel, expectedMs, '准备发起检�?..', false);
 
       try {
         streamingStatusCache[nodeId] = { inProgress: true };
@@ -2906,7 +2984,7 @@ def _login_html() -> str:
             });
             streamingServices.forEach((svc) => {
               if (!byService[svc.key]) {
-                byService[svc.key] = { unlocked: false, detail: '未检测' };
+                byService[svc.key] = { unlocked: false, detail: '未检�? };
               }
             });
             streamingStatusCache[nodeId] = byService;
@@ -2917,7 +2995,7 @@ def _login_html() -> str:
           updateNodeStreamingBadges(nodeId);
         }
 
-        stopProgress('检测完成');
+        stopProgress('检测完�?);
       } finally {
         isStreamingTestRunning = false;
       }
@@ -2944,7 +3022,7 @@ def _login_html() -> str:
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
-        alert('保存失败，请检查字段。');
+        alert('保存失败，请检查字段�?);
         return;
       }
       await refreshNodes();
@@ -2972,7 +3050,7 @@ def _login_html() -> str:
       }
       
       pagination?.classList.remove('hidden');
-      if (pageInfo) pageInfo.textContent = `第 ${testsCurrentPage} 页 / 共 ${totalPages} 页`;
+      if (pageInfo) pageInfo.textContent = `�?${testsCurrentPage} �?/ �?${totalPages} 页`;
       if (prevBtn) prevBtn.disabled = testsCurrentPage <= 1;
       if (nextBtn) nextBtn.disabled = testsCurrentPage >= totalPages;
     }
@@ -2984,7 +3062,7 @@ def _login_html() -> str:
       
       testsList.innerHTML = '';
       if (!pageData.length) {
-        testsList.textContent = '暂无测试记录。';
+        testsList.textContent = '暂无测试记录�?;
         document.getElementById('tests-pagination')?.classList.add('hidden');
         return;
       }
@@ -2997,7 +3075,7 @@ def _login_html() -> str:
       const res = await apiFetch('/tests');
       const tests = await res.json();
       if (!tests.length) {
-        testsList.textContent = '暂无测试记录。';
+        testsList.textContent = '暂无测试记录�?;
         document.getElementById('tests-pagination')?.classList.add('hidden');
         testsAllData = [];
         return;
@@ -3079,7 +3157,7 @@ def _login_html() -> str:
       };
 
       enrichedTests.forEach(({ test, metrics, rateSummary, latencyValue, jitterValue, suiteEntries }) => {
-        const pathLabel = `${formatNodeLabel(test.src_node_id)} → ${formatNodeLabel(test.dst_node_id)}`;
+        const pathLabel = `${formatNodeLabel(test.src_node_id)} �?${formatNodeLabel(test.dst_node_id)}`;
 
         if (metrics?.isSuite) {
           const card = document.createElement('div');
@@ -3130,7 +3208,7 @@ def _login_html() -> str:
             }
             const retransValue = entry.metrics?.retransStats?.avg;
             if (retransValue !== undefined && retransValue !== null) {
-              badgeRow.appendChild(createMiniStat('重传', formatMetric(retransValue, 0), '次', 'text-indigo-200', entry.metrics?.retransStats));
+              badgeRow.appendChild(createMiniStat('重传', formatMetric(retransValue, 0), '�?, 'text-indigo-200', entry.metrics?.retransStats));
             }
             if (badgeRow.childNodes.length) {
               labelGroup.appendChild(badgeRow);
@@ -3151,7 +3229,7 @@ def _login_html() -> str:
                 <div class="flex items-center justify-between"><span>接收</span><span class="font-semibold text-emerald-200">${entry.rateSummary.receiverRateMbps}</span></div>
               </div>
               <div class="rounded-lg border border-slate-800/60 bg-slate-900/60 p-2">
-                <div class="flex items-center justify-between"><span>发送</span><span class="font-semibold text-amber-200">${entry.rateSummary.senderRateMbps}</span></div>
+                <div class="flex items-center justify-between"><span>发�?/span><span class="font-semibold text-amber-200">${entry.rateSummary.senderRateMbps}</span></div>
               </div>`;
             tile.appendChild(rates);
             suiteGrid.appendChild(tile);
@@ -3214,7 +3292,7 @@ def _login_html() -> str:
         }
         const retransValue = metrics.retransStats?.avg;
         if (retransValue !== undefined && retransValue !== null) {
-          quickStats.appendChild(createMiniStat('重传', formatMetric(retransValue, 2), '次', 'text-indigo-200', metrics.retransStats));
+          quickStats.appendChild(createMiniStat('重传', formatMetric(retransValue, 2), '�?, 'text-indigo-200', metrics.retransStats));
         }
         if (quickStats.childNodes.length) {
           card.appendChild(quickStats);
@@ -3250,7 +3328,7 @@ def _login_html() -> str:
 
         const congestion = document.createElement('span');
         congestion.className = 'rounded-full bg-slate-800/80 px-3 py-1 text-xs font-semibold text-slate-300 ring-1 ring-slate-700';
-        congestion.textContent = `拥塞：${rateSummary.senderCongestion} / ${rateSummary.receiverCongestion}`;
+        congestion.textContent = `拥塞�?{rateSummary.senderCongestion} / ${rateSummary.receiverCongestion}`;
 
         actions.appendChild(buttons);
         actions.appendChild(congestion);
@@ -3268,7 +3346,7 @@ def _login_html() -> str:
       clearAlert(testAlert);
       const res = await apiFetch(`/tests/${testId}`, { method: 'DELETE' });
       if (!res.ok) {
-        setAlert(testAlert, '删除记录失败。');
+        setAlert(testAlert, '删除记录失败�?);
         return;
       }
       await refreshTests();
@@ -3278,7 +3356,7 @@ def _login_html() -> str:
       clearAlert(testAlert);
       const res = await apiFetch('/tests', { method: 'DELETE' });
       if (!res.ok) {
-        setAlert(testAlert, '清空失败。');
+        setAlert(testAlert, '清空失败�?);
         return;
       }
       await refreshTests();
@@ -3304,7 +3382,7 @@ def _login_html() -> str:
       });
 
       if (!res.ok) {
-        const msg = editingNodeId ? '更新节点失败，请检查字段。' : '保存节点失败，请检查字段。';
+        const msg = editingNodeId ? '更新节点失败，请检查字段�? : '保存节点失败，请检查字段�?;
         setAlert(addNodeAlert, msg);
         return;
       }
@@ -3346,7 +3424,7 @@ def _login_html() -> str:
         testProgressBar,
         testProgressLabel,
         payload.duration * 1000 + 1500,
-        '开始链路测试...'
+        '开始链路测�?..'
       );
 
       const res = await apiFetch('/tests', {
@@ -3357,7 +3435,7 @@ def _login_html() -> str:
 
       if (!res.ok) {
         const details = await res.text();
-        const message = details ? `启动测试失败：${details}` : '启动测试失败，请确认节点存在且参数有效。';
+        const message = details ? `启动测试失败�?{details}` : '启动测试失败，请确认节点存在且参数有效�?;
         setAlert(testAlert, message);
         finishProgress('测试失败');
         return;
@@ -3396,7 +3474,7 @@ def _login_html() -> str:
         testProgressBar,
         testProgressLabel,
         expectedMs,
-        '准备执行 4 轮双向测试...'
+        '准备执行 4 轮双向测�?..'
       );
 
       const res = await apiFetch('/tests/suite', {
@@ -3407,7 +3485,7 @@ def _login_html() -> str:
 
       if (!res.ok) {
         const details = await res.text();
-        const message = details ? `启动双向测试失败：${details}` : '启动双向测试失败，请确认节点存在且参数有效。';
+        const message = details ? `启动双向测试失败�?{details}` : '启动双向测试失败，请确认节点存在且参数有效�?;
         setAlert(testAlert, message);
         finishProgress('测试失败');
         return;
@@ -3449,7 +3527,7 @@ def _login_html() -> str:
         const primary = stats.avg ?? stats.mean ?? stats.max ?? stats.min;
         const unitLabel = unit ? ` ${unit}` : '';
         detail.innerHTML = `
-          <div class="text-[11px] font-semibold text-slate-300">${label} 均值${unit ? ` (${unit})` : ''}</div>
+          <div class="text-[11px] font-semibold text-slate-300">${label} 均�?{unit ? ` (${unit})` : ''}</div>
           <div class="mt-1 text-sm font-bold text-white">${formatMetric(primary)}${unitLabel}</div>
           <div class="mt-1 text-[10px] text-slate-500">max ${formatMetric(stats.max)}${unitLabel} · min ${formatMetric(stats.min)}${unitLabel}</div>
         `;
@@ -3610,7 +3688,7 @@ def _login_html() -> str:
           }
 
           return {
-            label: entry.label || '子测试',
+            label: entry.label || '子测�?,
             protocol: entry.protocol || 'tcp',
             reverse: !!entry.reverse,
             metrics: summarizeSingleMetrics(merged),
@@ -3648,7 +3726,7 @@ def _login_html() -> str:
         return {
           mode: 'suite',
           tests: raw.tests.map((entry) => ({
-            label: entry.label || '子测试',
+            label: entry.label || '子测�?,
             protocol: entry.protocol || 'tcp',
             reverse: !!entry.reverse,
             summary: summarizeSingleRateTable(entry.raw || entry),
@@ -3668,7 +3746,7 @@ def _login_html() -> str:
       });
 
       return (metrics.entries || []).map((entry, idx) => {
-        const key = entry.label || `子测试 ${idx + 1}`;
+        const key = entry.label || `子测�?${idx + 1}`;
         return {
           label: key,
           protocol: entry.protocol,
@@ -3707,10 +3785,10 @@ def _login_html() -> str:
       grid.className = 'grid gap-2 sm:grid-cols-2 lg:grid-cols-4';
 
       [
-        renderMetricStat('RTT 均值 (ms)', metrics.latencyStats, 'ms'),
-        renderMetricStat('抖动均值 (ms)', metrics.jitterStats, 'ms'),
-        renderMetricStat('丢包均值 (%)', metrics.lossStats, '%'),
-        renderMetricStat('重传次数', metrics.retransStats, '次'),
+        renderMetricStat('RTT 均�?(ms)', metrics.latencyStats, 'ms'),
+        renderMetricStat('抖动均�?(ms)', metrics.jitterStats, 'ms'),
+        renderMetricStat('丢包均�?(%)', metrics.lossStats, '%'),
+        renderMetricStat('重传次数', metrics.retransStats, '�?),
       ]
         .filter(Boolean)
         .forEach((node) => grid.appendChild(node));
@@ -3729,7 +3807,7 @@ def _login_html() -> str:
           const chipStyle = hasLatency
             ? 'bg-sky-500/10 text-sky-100 border-sky-500/40'
             : 'bg-rose-500/15 text-rose-200 border-rose-500/40';
-          const latencyLabel = hasLatency ? `${formatMetric(item.latency_ms, 0)} ms` : '不可达';
+          const latencyLabel = hasLatency ? `${formatMetric(item.latency_ms, 0)} ms` : '不可�?;
           return `<span class="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${chipStyle}">${label}<span class=\"text-[10px] text-slate-300\">${latencyLabel}</span></span>`;
         })
         .join('');
@@ -3746,7 +3824,7 @@ def _login_html() -> str:
       wrap.className = 'overflow-auto rounded-xl border border-slate-800/70 bg-slate-950/60 p-3';
 
       if (!raw) {
-        wrap.textContent = '无原始结果。';
+        wrap.textContent = '无原始结果�?;
         return wrap;
       }
 
@@ -3771,10 +3849,10 @@ def _login_html() -> str:
         summaryTable.appendChild(row);
       };
 
-      addSummaryRow('状态', raw.status || 'unknown');
+      addSummaryRow('状�?, raw.status || 'unknown');
       addSummaryRow('发送速率 (Mbps)', sumSent.bits_per_second ? formatMetric(sumSent.bits_per_second / 1e6) : 'N/A');
       addSummaryRow('接收速率 (Mbps)', sumReceived.bits_per_second ? formatMetric(sumReceived.bits_per_second / 1e6) : 'N/A');
-      addSummaryRow('发送拥塞控制', end.sender_tcp_congestion || 'N/A');
+      addSummaryRow('发送拥塞控�?, end.sender_tcp_congestion || 'N/A');
       addSummaryRow('接收拥塞控制', end.receiver_tcp_congestion || 'N/A');
       wrap.appendChild(summaryTable);
 
@@ -4014,7 +4092,7 @@ def _tests_page_html() -> str:
 <body class="text-slate-100">
   <!-- Guest Mode Banner -->
   <div id="guest-banner" class="hidden" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(90deg,#f59e0b,#d97706);text-align:center;padding:8px 16px;font-size:14px;font-weight:600;color:#1e293b;box-shadow:0 2px 8px rgba(0,0,0,0.3);">
-    👁️ 访客模式 · 仅可查看，无法操作
+    👁�?访客模式 · 仅可查看，无法操�?
   </div>
   <script>
     if (document.cookie.includes('guest_session=readonly')) {
@@ -4031,7 +4109,7 @@ def _tests_page_html() -> str:
       </div>
       <div class="flex gap-3">
         <a href="/web" class="px-4 py-2 rounded-lg border border-slate-700 bg-slate-800/60 text-sm font-semibold text-slate-100 hover:border-sky-500 transition">
-          ← 返回主页
+          �?返回主页
         </a>
       </div>
     </div>
@@ -4048,13 +4126,13 @@ def _tests_page_html() -> str:
           <button id="suite-test-tab" class="rounded-full px-4 py-1.5 text-xs font-semibold text-slate-300 transition hover:text-white">双向 TCP/UDP 测试</button>
         </div>
       </div>
-      <p id="test-panel-intro" class="text-sm text-slate-400">快速规划 iperf3 单程或双向链路测试，支持限速、并行与反向 (-R)。</p>
+      <p id="test-panel-intro" class="text-sm text-slate-400">快速规�?iperf3 单程或双向链路测试，支持限速、并行与反向 (-R)�?/p>
       <div id="test-alert" class="hidden rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100"></div>
 
       <div id="single-test-panel" class="space-y-4">
         <div class="grid gap-3 sm:grid-cols-2">
           <div class="space-y-2">
-            <label class="text-sm font-medium text-slate-200">源节点</label>
+            <label class="text-sm font-medium text-slate-200">源节�?/label>
             <select id="src-select" class="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60"></select>
           </div>
           <div class="space-y-2">
@@ -4066,11 +4144,11 @@ def _tests_page_html() -> str:
             <select id="protocol" class="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60"><option value="tcp">TCP</option><option value="udp">UDP</option></select>
           </div>
           <div class="space-y-2">
-            <label class="text-sm font-medium text-slate-200">时长（秒）</label>
+            <label class="text-sm font-medium text-slate-200">时长（秒�?/label>
             <input id="duration" type="number" value="10" class="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60">
           </div>
           <div class="space-y-2">
-            <label class="text-sm font-medium text-slate-200">并行数</label>
+            <label class="text-sm font-medium text-slate-200">并行�?/label>
             <input id="parallel" type="number" value="1" class="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60">
           </div>
           <div class="space-y-2">
@@ -4079,33 +4157,33 @@ def _tests_page_html() -> str:
           </div>
         </div>
         <div id="tcp-options" class="space-y-2">
-          <label class="text-sm font-medium text-slate-200">TCP 限速带宽(-b，可选) <span class="text-slate-500 font-normal">例如 0（不限）或 500M</span></label>
-          <input id="tcp-bandwidth" type="text" placeholder="例如 0（不限）或 500M" class="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60">
+          <label class="text-sm font-medium text-slate-200">TCP 限速带�?-b，可�? <span class="text-slate-500 font-normal">例如 0（不限）�?500M</span></label>
+          <input id="tcp-bandwidth" type="text" placeholder="例如 0（不限）�?500M" class="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60">
         </div>
         <div id="udp-options" class="hidden space-y-4">
           <div class="space-y-2">
-            <label class="text-sm font-medium text-slate-200">UDP 带宽 (-b) <span class="text-slate-500 font-normal">如 100M</span></label>
+            <label class="text-sm font-medium text-slate-200">UDP 带宽 (-b) <span class="text-slate-500 font-normal">�?100M</span></label>
             <input id="udp-bandwidth" type="text" value="100M" class="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60">
           </div>
           <div class="space-y-2">
-            <label class="text-sm font-medium text-slate-200">UDP 长度 (-l，可选) <span class="text-slate-500 font-normal">例如 1400</span></label>
+            <label class="text-sm font-medium text-slate-200">UDP 长度 (-l，可�? <span class="text-slate-500 font-normal">例如 1400</span></label>
             <input id="udp-len" type="text" placeholder="默认" class="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/60">
           </div>
         </div>
         <div class="flex items-center gap-3 pt-2">
           <input type="checkbox" id="reverse" class="rounded border-slate-700 bg-slate-900/60">
           <label for="reverse" class="text-sm text-slate-300">反向测试 (-R)</label>
-          <span class="text-xs text-slate-500">在源节点上发起反向流量测试。</span>
+          <span class="text-xs text-slate-500">在源节点上发起反向流量测试�?/span>
         </div>
         <button id="run-test" class="w-full rounded-xl bg-gradient-to-r from-sky-500 to-indigo-500 px-4 py-3 text-sm font-semibold text-white shadow-lg transition hover:scale-[1.01]">
-          🚀 开始测试
+          🚀 开始测�?
         </button>
       </div>
 
       <div id="suite-test-panel" class="hidden space-y-4">
         <div class="grid gap-3 sm:grid-cols-2">
           <div class="space-y-2">
-            <label class="text-sm font-medium text-slate-200">源节点</label>
+            <label class="text-sm font-medium text-slate-200">源节�?/label>
             <select id="suite-src-select" class="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500"></select>
           </div>
           <div class="space-y-2">
@@ -4113,22 +4191,22 @@ def _tests_page_html() -> str:
             <select id="suite-dst-select" class="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500"></select>
           </div>
           <div class="space-y-2">
-            <label class="text-sm font-medium text-slate-200">时长（秒）</label>
+            <label class="text-sm font-medium text-slate-200">时长（秒�?/label>
             <input id="suite-duration" type="number" value="10" class="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500">
           </div>
           <div class="space-y-2">
-            <label class="text-sm font-medium text-slate-200">并行数</label>
+            <label class="text-sm font-medium text-slate-200">并行�?/label>
             <input id="suite-parallel" type="number" value="1" class="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500">
           </div>
         </div>
         <button id="run-suite-test" class="w-full rounded-xl bg-gradient-to-r from-emerald-500 to-sky-500 px-4 py-3 text-sm font-semibold text-white shadow-lg transition hover:scale-[1.01]">
-          🚀 开始双向 TCP/UDP 测试
+          🚀 开始双�?TCP/UDP 测试
         </button>
       </div>
 
       <div id="test-progress" class="hidden space-y-2 rounded-xl border border-slate-800 bg-slate-900/50 p-4">
         <div class="flex items-center justify-between text-sm">
-          <span class="text-slate-400">测试进行中...</span>
+          <span class="text-slate-400">测试进行�?..</span>
           <span id="test-progress-label" class="font-semibold text-sky-300">0%</span>
         </div>
         <div class="h-2 w-full rounded-full bg-slate-800/80">
@@ -4141,25 +4219,25 @@ def _tests_page_html() -> str:
     <div class="panel-card rounded-2xl p-5 space-y-4">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 class="text-lg font-semibold text-white">最近测试</h3>
-          <p class="text-sm text-slate-400">按时间倒序展示，可展开查看原始输出。</p>
+          <h3 class="text-lg font-semibold text-white">最近测�?/h3>
+          <p class="text-sm text-slate-400">按时间倒序展示，可展开查看原始输出�?/p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <select id="tests-page-size" class="rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2 text-sm text-slate-100">
-            <option value="5">5 条/页</option>
-            <option value="10" selected>10 条/页</option>
-            <option value="20">20 条/页</option>
-            <option value="50">50 条/页</option>
+            <option value="5">5 �?�?/option>
+            <option value="10" selected>10 �?�?/option>
+            <option value="20">20 �?�?/option>
+            <option value="50">50 �?�?/option>
           </select>
           <button id="refresh-tests" class="rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200">刷新</button>
           <button id="delete-all-tests" class="rounded-lg border border-rose-500/40 bg-rose-500/15 px-4 py-2 text-sm font-semibold text-rose-100 shadow-sm transition hover:bg-rose-500/25">清空记录</button>
         </div>
       </div>
-      <div id="tests-list" class="text-sm text-slate-400 space-y-3">加载中...</div>
+      <div id="tests-list" class="text-sm text-slate-400 space-y-3">加载�?..</div>
       <div id="tests-pagination" class="flex flex-wrap items-center justify-center gap-2 pt-4 hidden">
-        <button id="tests-prev" class="rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-sm font-medium text-slate-300 transition hover:border-sky-500 hover:text-sky-200 disabled:opacity-40 disabled:cursor-not-allowed">« 上一页</button>
-        <span id="tests-page-info" class="text-sm text-slate-400 px-3">第 1 页 / 共 1 页</span>
-        <button id="tests-next" class="rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-sm font-medium text-slate-300 transition hover:border-sky-500 hover:text-sky-200 disabled:opacity-40 disabled:cursor-not-allowed">下一页 »</button>
+        <button id="tests-prev" class="rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-sm font-medium text-slate-300 transition hover:border-sky-500 hover:text-sky-200 disabled:opacity-40 disabled:cursor-not-allowed">« 上一�?/button>
+        <span id="tests-page-info" class="text-sm text-slate-400 px-3">�?1 �?/ �?1 �?/span>
+        <button id="tests-next" class="rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-sm font-medium text-slate-300 transition hover:border-sky-500 hover:text-sky-200 disabled:opacity-40 disabled:cursor-not-allowed">下一�?»</button>
       </div>
     </div>
   </div>
@@ -4194,7 +4272,7 @@ def _tests_page_html() -> str:
       }
       
       pagination?.classList.remove('hidden');
-      if (pageInfo) pageInfo.textContent = `第 ${testsCurrentPage} 页 / 共 ${totalPages} 页`;
+      if (pageInfo) pageInfo.textContent = `�?${testsCurrentPage} �?/ �?${totalPages} 页`;
       if (prevBtn) prevBtn.disabled = testsCurrentPage <= 1;
       if (nextBtn) nextBtn.disabled = testsCurrentPage >= totalPages;
     }
@@ -4228,7 +4306,7 @@ def _tests_page_html() -> str:
         const tests = await res.json();
         
         if (!tests.length) {
-          testsList.textContent = '暂无测试记录。';
+          testsList.textContent = '暂无测试记录�?;
           document.getElementById('tests-pagination')?.classList.add('hidden');
           return;
         }
@@ -4340,7 +4418,7 @@ def _tests_page_html() -> str:
               <div class="flex items-center justify-between">
                 <div>
                   <span class="text-xs text-sky-300/70 uppercase">#${test.id} · ${isSuite ? 'SUITE' : protocol}${timeStr ? ' · ' + timeStr : ''}</span>
-                  <p class="text-base font-semibold text-white">${srcName} → ${dstName}</p>
+                  <p class="text-base font-semibold text-white">${srcName} �?${dstName}</p>
                 </div>
                 <button onclick="deleteTest(${test.id})" class="text-xs text-rose-400 hover:text-rose-300 ${window.isGuest ? 'hidden' : ''}">删除</button>
               </div>
@@ -4511,7 +4589,7 @@ def _whitelist_html() -> str:
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>白名单管理 - iperf3 Master</title>
+  <title>白名单管�?- iperf3 Master</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); min-height: 100vh; }
@@ -4523,364 +4601,249 @@ def _whitelist_html() -> str:
     <!-- Header -->
     <div class="mb-8 flex items-center justify-between">
       <div>
-        <h1 class="text-3xl font-bold text-white">白名单管理</h1>
-        <p class="text-slate-400 mt-1">IP Whitelist Management - 支持 IPv4、IPv6 和 CIDR 网段</p>
+        <h1 class="text-3xl font-bold text-white">白名单管�?/h1>
+        <p class="text-slate-400 mt-1">IP Whitelist Management</p>
       </div>
       <div class="flex gap-3">
         <a href="/web" class="px-4 py-2 rounded-lg border border-slate-700 bg-slate-800/60 text-sm font-semibold text-slate-100 hover:border-sky-500 transition">
-          ← 返回主页
+          �?返回主页
         </a>
-        <button id="check-status-btn" class="px-4 py-2 rounded-lg border border-amber-600 bg-amber-900/20 text-sm font-semibold text-amber-300 hover:bg-amber-900/40 transition">
-          📊 检查同步状态
-        </button>
         <button id="sync-btn" class="px-4 py-2 rounded-lg bg-gradient-to-r from-sky-500 to-indigo-500 text-sm font-semibold text-white shadow-lg hover:scale-105 transition">
-          🔄 同步到所有Agent
+          🔄 同步白名�?
         </button>
       </div>
     </div>
 
-    <!-- Alert Box -->
-    <div id="alert-box" class="hidden mb-6 p-4 rounded-lg border"></div>
-
-    <!-- Stats Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-      <div class="glass-card rounded-2xl p-6">
-        <p class="text-slate-400 text-sm mb-1">总 IP 数</p>
-        <p id="whitelist-total" class="text-3xl font-bold text-white">0</p>
-      </div>
-      <div class="glass-card rounded-2xl p-6">
-        <p class="text-slate-400 text-sm mb-1">同步状态</p>
-        <p id="sync-status" class="text-xl font-semibold text-emerald-400">● 检查中...</p>
-      </div>
-      <div class="glass-card rounded-2xl p-6">
-        <p class="text-slate-400 text-sm mb-1">CIDR 范围</p>
-        <p id="whitelist-cidr-count" class="text-3xl font-bold text-purple-400">0</p>
+    <!-- Master IP Card -->
+    <div class="glass-card rounded-2xl p-6 mb-6">
+      <h2 class="text-xl font-semibold text-amber-400 mb-4">Master API 信息</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <p class="text-slate-400 text-sm mb-1">Master IP</p>
+          <p id="master-ip" class="text-white font-mono text-lg">加载�?..</p>
+        </div>
+        <div>
+          <p class="text-slate-400 text-sm mb-1">状�?/p>
+          <p id="master-status" class="text-emerald-400">正常运行</p>
+        </div>
       </div>
     </div>
 
     <!-- Add IP Card -->
     <div class="glass-card rounded-2xl p-6 mb-6">
-      <h2 class="text-xl font-semibold text-sky-400 mb-4">添加 IP 地址</h2>
+      <h2 class="text-xl font-semibold text-sky-400 mb-4">添加 IP 到白名单</h2>
       <div class="flex gap-3">
         <input 
           id="ip-input" 
           type="text" 
-          placeholder="例如: 10.0.0.1 或 10.0.0.0/24" 
+          placeholder="输入 IP 地址 (e.g., 192.168.1.100)" 
+          class="flex-1 px-4 py-2 rounded-lg bg-slate-800/60 border border-slate-700 text-white focus:border-sky-500 focus:outline-none"
+        />
+        <input 
+          id="description-input" 
+          type="text" 
+          placeholder="描述 (可�?" 
           class="flex-1 px-4 py-2 rounded-lg bg-slate-800/60 border border-slate-700 text-white focus:border-sky-500 focus:outline-none"
         />
         <button 
           id="add-ip-btn" 
           class="px-6 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-sky-500 text-sm font-semibold text-white shadow-lg hover:scale-105 transition">
-          + 添加
+          添加
         </button>
       </div>
-      <p class="text-xs text-slate-500 mt-2">支持 IPv4、IPv6 和 CIDR 网段格式</p>
+      <p id="add-status" class="mt-2 text-sm"></p>
     </div>
 
     <!-- Whitelist Table -->
     <div class="glass-card rounded-2xl p-6">
       <div class="flex items-center justify-between mb-4">
-        <h2 class="text-xl font-semibold text-white">白名单列表</h2>
+        <h2 class="text-xl font-semibold text-white">当前白名�?(<span id="ip-count">0</span>)</h2>
         <button id="refresh-btn" class="px-4 py-2 rounded-lg border border-slate-700 bg-slate-800/60 text-sm font-semibold text-slate-100 hover:border-sky-500 transition">
-          🔄 刷新列表
+          刷新
         </button>
       </div>
-      
-      <!-- Table -->
-      <div class="overflow-x-auto">
-        <table class="w-full">
-          <thead>
-            <tr class="border-b border-slate-700">
-              <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">IP 地址</th>
-              <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">来源</th>
-              <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">同步状态</th>
-              <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">类型</th>
-              <th class="px-4 py-3 text-right text-xs font-semibold text-slate-400 uppercase">操作</th>
-            </tr>
-          </thead>
-          <tbody id="whitelist-table-body">
-            <!-- Populated by JS -->
-          </tbody>
-        </table>
+      <div id="whitelist-container" class="space-y-2">
+        <!-- Populated by JS -->
       </div>
-      
-      <p class="text-xs text-amber-400 mt-4">💡 提示: 添加/删除节点时会自动同步白名单，也可手动触发同步。</p>
     </div>
   </div>
 
   <script>
     const API_BASE = '';
     
-    async function apiFetch(url, options = {}) {
-      const response = await fetch(API_BASE + url, {
+    async function apiFetch(url, options = {}) {{
+      const response = await fetch(API_BASE + url, {{
         ...options,
         credentials: 'include'
-      });
-      if (!response.ok && response.status === 401) {
+      }});
+      if (!response.ok && response.status === 401) {{
         window.location.href = '/web';
         return null;
-      }
+      }}
       return response;
-    }
+    }}
 
-    function showAlert(message, type = 'info') {
-      const alert = document.getElementById('alert-box');
-      alert.className = 'mb-6 p-4 rounded-lg border';
-      
-      if (type === 'success') {
-        alert.classList.add('border-emerald-500', 'bg-emerald-500/10', 'text-emerald-100');
-      } else if (type === 'error') {
-        alert.classList.add('border-rose-500', 'bg-rose-500/10', 'text-rose-100');
-      } else {
-        alert.classList.add('border-blue-500', 'bg-blue-500/10', 'text-blue-100');
-      }
-      
-      alert.textContent = message;
-      alert.classList.remove('hidden');
-      
-      setTimeout(() => alert.classList.add('hidden'), 5000);
-    }
-
-    async function loadWhitelist() {
-      const tbody = document.getElementById('whitelist-table-body');
-      if (!tbody) return;
-      
-      try {
+    async function loadWhitelist() {{
+      try {{
         const res = await apiFetch('/admin/whitelist');
         const data = await res.json();
         
-        if (!data.whitelist || data.whitelist.length === 0) {
-          tbody.innerHTML = `
-            <tr>
-              <td colspan="5" class="px-4 py-8 text-center text-slate-500">
-                暂无白名单 IP，点击上方"添加"按钮开始
-              </td>
-            </tr>
-          `;
-          document.getElementById('whitelist-total').textContent = '0';
-          document.getElementById('whitelist-cidr-count').textContent = '0';
-          return;
-        }
-        
-        // Update stats
-        document.getElementById('whitelist-total').textContent = data.count || data.whitelist.length;
-        const cidrCount = data.whitelist.filter(ip => ip.includes('/')).length;
-        document.getElementById('whitelist-cidr-count').textContent = cidrCount;
-        
-        // Render table rows
-        tbody.innerHTML = data.whitelist.map(ip => {
-          const nodeInfo = data.nodes?.find(n => n.ip === ip);
-          const isCIDR = ip.includes('/');
-          const isIPv6 = ip.includes(':');
-          
-          let ipType = 'IPv4';
-          if (isCIDR) ipType = 'CIDR';
-          else if (isIPv6) ipType = 'IPv6';
-          
-          let source = nodeInfo ? `节点: ${nodeInfo.name}` : '手动添加';
-          
-          let syncStatusHtml = '<span class="text-slate-500">-</span>';
-          if (nodeInfo) {
-            if (!nodeInfo.whitelist_sync_status || nodeInfo.whitelist_sync_status === 'unknown') {
-              syncStatusHtml = '<span class="text-slate-500 flex items-center gap-1">❓ 未检查</span>';
-            } else if (nodeInfo.whitelist_sync_status === 'synced') {
-              syncStatusHtml = '<span class="text-emerald-400 flex items-center gap-1">✅ 已同步</span>';
-            } else if (nodeInfo.whitelist_sync_status === 'not_synced') {
-              syncStatusHtml = '<span class="text-yellow-400 flex items-center gap-1">⚠️ 未同步</span>';
-            } else {
-              const errorMsg = nodeInfo.whitelist_sync_message || '未知错误';
-              syncStatusHtml = `<span class="text-rose-400 flex items-center gap-1">❌ ${errorMsg}</span>`;
-            }
-          }
-          
-          const typeClass = isCIDR ? 'bg-purple-500/20 text-purple-300' :
-                            isIPv6 ? 'bg-blue-500/20 text-blue-300' :
-                            'bg-emerald-500/20 text-emerald-300';
-          
-          return `
-            <tr class="hover:bg-slate-800/40 transition border-b border-slate-800">
-              <td class="px-4 py-3">
-                <code class="text-sm font-mono text-sky-300">${ip}</code>
-              </td>
-              <td class="px-4 py-3 text-slate-400 text-xs">${source}</td>
-              <td class="px-4 py-3 text-xs">${syncStatusHtml}</td>
-              <td class="px-4 py-3">
-                <span class="inline-flex items-center px-2 py-1 rounded-md text-xs font-semibold ${typeClass}">${ipType}</span>
-              </td>
-              <td class="px-4 py-3 text-right">
-                <button 
-                  onclick="removeIP('${ip}')" 
-                  class="px-3 py-1 rounded-lg border border-rose-700 bg-rose-900/20 text-xs font-semibold text-rose-300 hover:bg-rose-900/40 transition">
-                  删除
-                </button>
-              </td>
-            </tr>
-          `;
-        }).join('');
-        
-      } catch (e) {
-        showAlert(`获取白名单失败: ${e.message}`, 'error');
-        tbody.innerHTML = `
-          <tr>
-            <td colspan="5" class="px-4 py-8 text-center text-rose-400">
-              加载失败: ${e.message}
-            </td>
-          </tr>
-        `;
-      }
-    }
+        if (data.status === 'ok') {{
+          displayWhitelist(data);
+        }}
+      }} catch (e) {{
+        console.error('Failed to load whitelist:', e);
+      }}
+    }}
 
-    async function addIP() {
-      const input = document.getElementById('ip-input');
-      if (!input) return;
+    function displayWhitelist(data) {{
+      const container = document.getElementById('whitelist-container');
+      const ipCount = document.getElementById('ip-count');
       
-      const ip = input.value.trim();
-      if (!ip) {
-        showAlert('请输入 IP 地址', 'error');
+      ipCount.textContent = data.count || 0;
+      
+      if (!data.nodes || data.nodes.length === 0) {{
+        container.innerHTML = '<p class="text-slate-400 text-center py-4">暂无白名单IP</p>';
         return;
-      }
+      }}
       
-      try {
-        const res = await apiFetch('/admin/whitelist/add', {
+      container.innerHTML = data.nodes.map(node => `
+        <div class="flex items-center justify-between p-4 rounded-lg bg-slate-800/40 border border-slate-700 hover:border-sky-500/40 transition">
+          <div class="flex-1">
+            <div class="flex items-center gap-3">
+              <span class="font-mono text-white">${{node.ip}}</span>
+              <span class="text-xs px-2 py-1 rounded-full bg-slate-700 text-slate-300">${{node.name}}</span>
+              ${{node.description ? `<span class="text-sm text-slate-400">${{node.description}}</span>` : ''}}
+            </div>
+            ${{node.whitelist_sync_status ? `
+              <div class="mt-1 text-xs">
+                <span class="text-slate-500">同步状�?</span>
+                <span class="${{node.whitelist_sync_status === 'synced' ? 'text-emerald-400' : 'text-amber-400'}}">${{node.whitelist_sync_message || node.whitelist_sync_status}}</span>
+              </div>
+            ` : ''}}
+          </div>
+          <button 
+            onclick="removeIP('${{node.ip}}')" 
+            class="px-3 py-1 rounded-lg border border-rose-500/40 bg-rose-500/15 text-sm font-semibold text-rose-100 hover:bg-rose-500/25 transition">
+            删除
+          </button>
+        </div>
+      `).join('');
+    }}
+
+    async function addIP() {{
+      const ip = document.getElementById('ip-input').value.trim();
+      const description = document.getElementById('description-input').value.trim();
+      const status = document.getElementById('add-status');
+      
+      if (!ip) {{
+        status.className = 'mt-2 text-sm text-rose-400';
+        status.textContent = '请输�?IP 地址';
+        return;
+      }}
+      
+      try {{
+        const res = await apiFetch('/admin/whitelist/add', {{
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ip })
-        });
+          headers: {{ 'Content-Type': 'application/json' }},
+          body: JSON.stringify({{ ip, description }})
+        }});
         
         const data = await res.json();
         
-        if (res.ok) {
-          showAlert(`IP ${ip} 已添加到白名单`, 'success');
-          input.value = '';
-          await loadWhitelist();
-          await checkSyncStatus();
-        } else {
-          showAlert(data.detail || '添加失败', 'error');
-        }
-      } catch (e) {
-        showAlert(`添加失败: ${e.message}`, 'error');
-      }
-    }
+        if (data.status === 'ok') {{
+          status.className = 'mt-2 text-sm text-emerald-400';
+          status.textContent = data.message;
+          document.getElementById('ip-input').value = '';
+          document.getElementById('description-input').value = '';
+          setTimeout(() => loadWhitelist(), 1000);
+        }} else {{
+          status.className = 'mt-2 text-sm text-rose-400';
+          status.textContent = data.detail || '添加失败';
+        }}
+      }} catch (e) {{
+        status.className = 'mt-2 text-sm text-rose-400';
+        status.textContent = '添加失败: ' + e.message;
+      }}
+    }}
 
-    async function removeIP(ip) {
-      if (!confirm(`确定要从白名单中移除 IP ${ip} 吗?`)) return;
+    async function removeIP(ip) {{
+      if (!confirm(`确定要删�?IP: ${{ip}} 吗？`)) return;
       
-      try {
-        const res = await apiFetch('/admin/whitelist/remove', {
+      try {{
+        const res = await apiFetch('/admin/whitelist/remove', {{
           method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ip })
-        });
+          headers: {{ 'Content-Type': 'application/json' }},
+          body: JSON.stringify({{ ip }})
+        }});
         
-        if (res.ok) {
-          showAlert(`IP ${ip} 已从白名单移除`, 'success');
-          await loadWhitelist();
-          await checkSyncStatus();
-        } else {
-          const data = await res.json();
-          showAlert(data.detail || '移除失败', 'error');
-        }
-      } catch (e) {
-        showAlert(`移除失败: ${e.message}`, 'error');
-      }
-    }
-
-    async function syncWhitelist() {
-      const btn = document.getElementById('sync-btn');
-      
-      try {
-        btn.disabled = true;
-        btn.innerHTML = '<span>🔄</span><span>同步中...</span>';
-        
-        const res = await apiFetch('/admin/sync_whitelist', { method: 'POST' });
         const data = await res.json();
         
-        if (data.status === 'ok') {
-          showAlert(data.message || '同步完成', 'success');
-        } else {
-          showAlert(data.detail || '同步失败', 'error');
-        }
-        
-        await checkSyncStatus();
-        
-      } catch (e) {
-        showAlert(`同步请求失败: ${e.message}`, 'error');
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = '🔄 同步到所有Agent';
-      }
-    }
+        if (data.status === 'ok') {{
+          alert(data.message);
+          loadWhitelist();
+        }} else {{
+          alert(data.detail || '删除失败');
+        }}
+      }} catch (e) {{
+        alert('删除失败: ' + e.message);
+      }}
+    }}
 
-    async function checkSyncStatus() {
-      const btn = document.getElementById('check-status-btn');
-      const statusEl = document.getElementById('sync-status');
+    async function syncWhitelist() {{
+      const btn = document.getElementById('sync-btn');
+      btn.disabled = true;
+      btn.textContent = '同步�?..';
       
-      if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '📊 检查中...';
-      }
-      
-      try {
+      try {{
+        const res = await apiFetch('/admin/sync_whitelist', {{
+          method: 'POST'
+        }});
+        
+        const data = await res.json();
+        
+        if (data.status === 'ok') {{
+          alert(data.message);
+          loadWhitelist();
+        }} else {{
+          alert('同步失败: ' + (data.detail || '未知错误'));
+        }}
+      }} catch (e) {{
+        alert('同步失败: ' + e.message);
+      }} finally {{
+        btn.disabled = false;
+        btn.textContent = '🔄 同步白名�?;
+      }}
+    }}
+
+    async function loadMasterIP() {{
+      try {{
         const res = await apiFetch('/admin/whitelist');
         const data = await res.json();
         
-        if (data.whitelist) {
-          document.getElementById('whitelist-total').textContent = data.whitelist.length;
-          const cidrCount = data.whitelist.filter(ip => ip.includes('/')).length;
-          document.getElementById('whitelist-cidr-count').textContent = cidrCount;
-        }
-        
-        // Calculate sync status from nodes data
-        const nodes = data.nodes || [];
-        const syncedCount = nodes.filter(n => n.whitelist_sync_status === 'synced').length;
-        const totalCount = nodes.length;
-        
-        // Update sync status display
-        if (totalCount > 0 && syncedCount === totalCount) {
-          statusEl.textContent = '● 已同步';
-          statusEl.className = 'text-xl font-semibold text-emerald-400';
-        } else if (syncedCount > 0) {
-          statusEl.textContent = `● 部分同步 (${syncedCount}/${totalCount})`;
-          statusEl.className = 'text-xl font-semibold text-yellow-400';
-        } else if (totalCount > 0) {
-          statusEl.textContent = '● 未同步';
-          statusEl.className = 'text-xl font-semibold text-rose-400';
-        } else {
-          statusEl.textContent = '● 无节点';
-          statusEl.className = 'text-xl font-semibold text-slate-500';
-        }
-        
-        // Refresh table to show updated sync status
-        await loadWhitelist();
-        
-      } catch (e) {
-        statusEl.textContent = '● 检查失败';
-        statusEl.className = 'text-xl font-semibold text-slate-500';
-        console.error('Failed to check sync status:', e);
-      } finally {
-        if (btn) {
-          btn.disabled = false;
-          btn.innerHTML = '📊 检查同步状态';
-        }
-      }
-    }
+        // Try to detect master IP from whitelist
+        const masterIPEl = document.getElementById('master-ip');
+        const masterIP = data.whitelist && data.whitelist.length > 0 ? data.whitelist[data.whitelist.length - 1] : '未检测到';
+        masterIPEl.textContent = masterIP;
+      }} catch (e) {{
+        console.error('Failed to load master IP:', e);
+      }}
+    }}
 
-    function init() {
+    function init() {{
       loadWhitelist();
+      loadMasterIP();
       
       document.getElementById('add-ip-btn').addEventListener('click', addIP);
       document.getElementById('sync-btn').addEventListener('click', syncWhitelist);
       document.getElementById('refresh-btn').addEventListener('click', loadWhitelist);
-      document.getElementById('check-status-btn').addEventListener('click', checkSyncStatus);
       
       // Allow Enter key to add IP
-      document.getElementById('ip-input').addEventListener('keypress', (e) => {
+      document.getElementById('ip-input').addEventListener('keypress', (e) => {{
         if (e.key === 'Enter') addIP();
-      });
-      
-      // Initial sync status check
-      checkSyncStatus();
-    }
+      }});
+    }}
+
 
     init();
   </script>
@@ -4909,13 +4872,13 @@ def _schedules_html() -> str:
 <body class="text-slate-100">
   <!-- Guest Mode Banner -->
   <div id="guest-banner" class="hidden" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(90deg,#f59e0b,#d97706);text-align:center;padding:8px 16px;font-size:14px;font-weight:600;color:#1e293b;box-shadow:0 2px 8px rgba(0,0,0,0.3);">
-    👁️ 访客模式 · 仅可查看，无法操作
+    👁�?访客模式 · 仅可查看，无法操�?
   </div>
   <script>
-    if (document.cookie.includes('guest_session=readonly')) {
+    if (document.cookie.includes('guest_session=readonly')) {{
       document.getElementById('guest-banner').classList.remove('hidden');
       document.body.style.paddingTop = '40px';
-    }
+    }}
   </script>
   <div class="container mx-auto px-4 py-8 max-w-7xl">
     <!-- Header -->
@@ -4926,7 +4889,7 @@ def _schedules_html() -> str:
       </div>
       <div class="flex gap-3">
         <a href="/web" class="px-4 py-2 rounded-lg border border-slate-700 bg-slate-800/60 text-sm font-semibold text-slate-100 hover:border-sky-500 transition">
-          ← 返回主页
+          �?返回主页
         </a>
         <button id="create-schedule-btn" class="px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-sky-500 text-sm font-semibold text-white shadow-lg hover:scale-105 transition">
           + 新建任务
@@ -4944,14 +4907,14 @@ def _schedules_html() -> str:
 
     <!-- Schedules List -->
     <div id="schedules-container" class="space-y-6">
-      <div class="text-center text-slate-400 py-12">加载中...</div>
+      <div class="text-center text-slate-400 py-12">加载�?..</div>
     </div>
   </div>
 
   <!-- Create/Edit Modal -->
   <div id="schedule-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/80 px-4 backdrop-blur">
     <div class="glass-card relative w-full max-w-2xl rounded-2xl p-6 shadow-2xl">
-      <button id="close-modal" class="absolute right-4 top-4 rounded-full border border-slate-700 bg-slate-800 p-2 text-slate-300 hover:bg-slate-700">✕</button>
+      <button id="close-modal" class="absolute right-4 top-4 rounded-full border border-slate-700 bg-slate-800 p-2 text-slate-300 hover:bg-slate-700">�?/button>
       
       <h3 id="modal-title" class="text-xl font-bold text-white mb-6">新建定时任务</h3>
       
@@ -4964,12 +4927,12 @@ def _schedules_html() -> str:
       <div class="space-y-4">
         <div>
           <label class="text-sm font-medium text-slate-200">任务名称</label>
-          <input id="schedule-name" type="text" placeholder="例如: 北京→上海链路监控" class="w-full mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none">
+          <input id="schedule-name" type="text" placeholder="例如: 北京→上海链路监�? class="w-full mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none">
         </div>
         
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <label class="text-sm font-medium text-slate-200">源节点</label>
+            <label class="text-sm font-medium text-slate-200">源节�?/label>
             <select id="schedule-src" class="w-full mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none"></select>
           </div>
           <div>
@@ -4996,11 +4959,11 @@ def _schedules_html() -> str:
         
         <div class="grid grid-cols-3 gap-4">
           <div>
-            <label class="text-sm font-medium text-slate-200">时长(秒)</label>
+            <label class="text-sm font-medium text-slate-200">时长(�?</label>
             <input id="schedule-duration" type="number" value="10" min="1" class="w-full mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none">
           </div>
           <div>
-            <label class="text-sm font-medium text-slate-200">并行数</label>
+            <label class="text-sm font-medium text-slate-200">并行�?/label>
             <input id="schedule-parallel" type="number" value="1" min="1" class="w-full mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none">
           </div>
           <div>
@@ -5010,11 +4973,11 @@ def _schedules_html() -> str:
         </div>
         
         <div>
-           <p class="text-xs text-slate-500">建议: 30分钟 = 每天48次测试</p>
+           <p class="text-xs text-slate-500">建议: 30分钟 = 每天48次测�?/p>
         </div>
         
         <div>
-          <label class="text-sm font-medium text-slate-200">备注(可选)</label>
+          <label class="text-sm font-medium text-slate-200">备注(可�?</label>
           <textarea id="schedule-notes" rows="2" placeholder="任务说明..." class="w-full mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none"></textarea>
         </div>
       </div>
@@ -5027,89 +4990,89 @@ def _schedules_html() -> str:
   </div>
 
   <script>
-    const apiFetch = (url, options = {}) => fetch(url, { credentials: 'include', ...options });
+    const apiFetch = (url, options = {{}}) => fetch(url, {{ credentials: 'include', ...options }});
     let nodes = [];
     let schedules = [];
     let editingScheduleId = null;
-    let charts = {};
+    let charts = {{}};
 
     // 加载节点列表
-    async function loadNodes() {
+    async function loadNodes() {{
       const res = await apiFetch('/nodes');
       nodes = await res.json();
       updateNodeSelects();
-    }
+    }}
 
-    function updateNodeSelects() {
+    function updateNodeSelects() {{
       const srcSelect = document.getElementById('schedule-src');
       const dstSelect = document.getElementById('schedule-dst');
       
-      const options = nodes.map(n => `<option value="${n.id}">${n.name} (${n.ip})</option>`).join('');
+      const options = nodes.map(n => `<option value="${{n.id}}">${{n.name}} (${{n.ip}})</option>`).join('');
       srcSelect.innerHTML = options;
       dstSelect.innerHTML = options;
-    }
+    }}
 
     // 加载定时任务列表
     // Masking Helper (Global for Schedules)
-    function maskAddress(addr, hidden) {
+    function maskAddress(addr, hidden) {{
         if (!hidden || !addr) return addr;
         // Check if IP
-        if (addr.match(/^\d+\.\d+\.\d+\.\d+$/)) {
+        if (addr.match(/^\d+\.\d+\.\d+\.\d+$/)) {{
              const p = addr.split('.');
-             return `${p[0]}.${p[1]}.*.*`;
-        }
+             return `${{p[0]}}.${{p[1]}}.*.*`;
+        }}
         // Check if Domain (at least one dot)
-        if (addr.includes('.')) {
+        if (addr.includes('.')) {{
             const parts = addr.split('.');
-            if (parts.length > 2) {
+            if (parts.length > 2) {{
                 // aa.bb.cc -> aa.**.**
                 // aa.bb.cc.dd -> aa.bb.**.**
                 // Strategy: Keep first part, mask specific suffix or just last two parts
                 // User requirement: aa.bb.cc -> mask bb.cc
                 // So keep part[0], mask rest
                 return parts[0] + '.*.' + parts.slice(2).map(() => '*').join('.');
-            } else if (parts.length === 2) {
+            }} else if (parts.length === 2) {{
                 return parts[0] + '.*';
-            }
-        }
+            }}
+        }}
         return addr.substring(0, addr.length/2) + '*'.repeat(Math.ceil(addr.length/2));
-    }
+    }}
 
-    async function loadSchedules() {
+    async function loadSchedules() {{
       const res = await apiFetch('/schedules');
       schedules = await res.json();
       renderSchedules();
-      updateScheduleTrafficBadges();
+      updateTrafficBadges();
       
       // Fetch ISPs
-      schedules.forEach(s => {
+      schedules.forEach(s => {{
          const src = nodes.find(n => n.id === s.src_node_id);
          const dst = nodes.find(n => n.id === s.dst_node_id);
          
-         const fetchIsp = (ip, elemId) => {
+         const fetchIsp = (ip, elemId) => {{
              if (!ip) return;
-             fetch(`/geo?ip=${ip}`)
+             fetch(`/geo?ip=${{ip}}`)
                .then(r => r.json())
-               .then(d => {
+               .then(d => {{
                    const el = document.getElementById(elemId);
                    if (el && d.isp) el.textContent = d.isp;
-               }).catch(()=>void 0);
-         };
+               }}).catch(()=>void 0);
+         }};
          
-         if (src) fetchIsp(src.ip, `sched-src-isp-${s.id}`);
-         if (dst) fetchIsp(dst.ip, `sched-dst-isp-${s.id}`);
-      });
-    }
+         if (src) fetchIsp(src.ip, `sched-src-isp-${{s.id}}`);
+         if (dst) fetchIsp(dst.ip, `sched-dst-isp-${{s.id}}`);
+      }});
+    }}
 
     // 渲染定时任务列表
     // Optimized renderSchedules to prevent chart flickering
-    function renderSchedules() {
+    function renderSchedules() {{
       const container = document.getElementById('schedules-container');
       
-      if (schedules.length === 0) {
-        container.innerHTML = '<div class="text-center text-slate-400 py-12">暂无定时任务,点击"新建任务"开始</div>';
+      if (schedules.length === 0) {{
+        container.innerHTML = '<div class="text-center text-slate-400 py-12">暂无定时任务,点击"新建任务"开�?/div>';
         return;
-      }
+      }}
       
       // Clear initial loading text if present
       const loadingText = container.querySelector('.text-center.text-slate-400');
@@ -5118,48 +5081,48 @@ def _schedules_html() -> str:
       // Incremental Update Strategy
       // 1. Remove Deleted Cards
       const currentIds = schedules.map(s => s.id);
-      Array.from(container.children).forEach(child => {
+      Array.from(container.children).forEach(child => {{
           const id = parseInt(child.id.replace('schedule-card-', ''));
-          if (!isNaN(id) && !currentIds.includes(id)) {
+          if (!isNaN(id) && !currentIds.includes(id)) {{
               child.remove();
-          }
-      });
+          }}
+      }});
       
       // 2. Update or Create Cards
-      schedules.forEach(schedule => {
-        let card = document.getElementById(`schedule-card-${schedule.id}`);
+      schedules.forEach(schedule => {{
+        let card = document.getElementById(`schedule-card-${{schedule.id}}`);
         const srcNode = nodes.find(n => n.id === schedule.src_node_id);
         const dstNode = nodes.find(n => n.id === schedule.dst_node_id);
         
         // Status Badge Logic
         const statusBadge = schedule.enabled 
-          ? '<span class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-semibold"><span class="h-2 w-2 rounded-full bg-emerald-400"></span>运行中</span>'
-          : '<span class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-slate-700 text-slate-400 text-xs font-semibold"><span class="h-2 w-2 rounded-full bg-slate-500"></span>已暂停</span>';
+          ? '<span class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-semibold"><span class="h-2 w-2 rounded-full bg-emerald-400"></span>运行�?/span>'
+          : '<span class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-slate-700 text-slate-400 text-xs font-semibold"><span class="h-2 w-2 rounded-full bg-slate-500"></span>已暂�?/span>';
 
         const runBtnText = schedule.enabled ? '暂停' : '启用';
         
         // Direction Arrow
-        const arrow = schedule.direction === 'download' ? '←' : 
-                      schedule.direction === 'bidirectional' ? '↔' : '→';
+        const arrow = schedule.direction === 'download' ? '�? : 
+                      schedule.direction === 'bidirectional' ? '�? : '�?;
 
         const htmlContent = `
             <!-- Schedule Header -->
             <div class="flex items-center justify-between">
               <div class="flex-1">
-                <h3 class="text-lg font-bold text-white">${schedule.name}</h3>
+                <h3 class="text-lg font-bold text-white">${{schedule.name}}</h3>
                 <div class="mt-2 flex items-center gap-4 text-sm text-slate-300">
-                  <span id="sched-route-${schedule.id}">${srcNode?.name || 'Unknown'} <span class="w-6 inline-block text-center text-slate-500">${
-                    schedule.direction === 'download' ? '←' : 
-                    schedule.direction === 'bidirectional' ? '↔' : '→'
-                  }</span> ${dstNode?.name || 'Unknown'}</span>
+                  <span id="sched-route-${{schedule.id}}">${{srcNode?.name || 'Unknown'}} <span class="w-6 inline-block text-center text-slate-500">${{
+                    schedule.direction === 'download' ? '�? : 
+                    schedule.direction === 'bidirectional' ? '�? : '�?
+                  }}</span> ${{dstNode?.name || 'Unknown'}}</span>
                   <span class="text-slate-500">|</span>
-                  <span>${schedule.protocol.toUpperCase()}</span>
+                  <span>${{schedule.protocol.toUpperCase()}}</span>
                   <span class="text-slate-500">|</span>
-                  <span>${schedule.duration}秒</span>
+                  <span>${{schedule.duration}}�?/span>
                   <span class="text-slate-500">|</span>
-                  <span>每${Math.floor(schedule.interval_seconds / 60)}分钟</span>
+                  <span>�?{{Math.floor(schedule.interval_seconds / 60)}}分钟</span>
                   <!-- Traffic Badge -->
-                  <span class="px-2 py-0.5 rounded-md bg-gradient-to-r from-blue-500/20 to-cyan-500/20 border border-blue-500/30 text-xs font-semibold text-blue-200" id="traffic-badge-${schedule.id}">
+                  <span class="px-2 py-0.5 rounded-md bg-gradient-to-r from-blue-500/20 to-cyan-500/20 border border-blue-500/30 text-xs font-semibold text-blue-200" id="traffic-badge-${{schedule.id}}">
                     --
                   </span>
                 </div>
@@ -5168,17 +5131,17 @@ def _schedules_html() -> str:
               <div class="flex items-center gap-4">
                 <div class="hidden md:block text-xs text-right space-y-0.5">
                    <div class="text-slate-400">Next Run</div>
-                   <div class="font-mono text-emerald-400" data-countdown="${schedule.next_run_at || ''}" data-schedule-id="${schedule.id}">Calculating...</div>
+                   <div class="font-mono text-emerald-400" data-countdown="${{schedule.next_run_at || ''}}" data-schedule-id="${{schedule.id}}">Calculating...</div>
                 </div>
-                ${statusBadge}
-                ${!window.isGuest ? `<div class="flex items-center gap-2">
-                    <button onclick="toggleSchedule(${schedule.id})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:border-sky-500 transition whitespace-nowrap" id="btn-toggle-${schedule.id}">
-                    ${schedule.enabled ? '暂停' : '启用'}
+                ${{statusBadge}}
+                ${{!window.isGuest ? `<div class="flex items-center gap-2">
+                    <button onclick="toggleSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:border-sky-500 transition whitespace-nowrap" id="btn-toggle-${{schedule.id}}">
+                    ${{schedule.enabled ? '暂停' : '启用'}}
                     </button>
-                    <button onclick="runSchedule(${schedule.id})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:emerald-500 transition whitespace-nowrap">立即运行</button>
-                    <button onclick="editSchedule(${schedule.id})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:border-sky-500 transition whitespace-nowrap">编辑</button>
-                    <button onclick="deleteSchedule(${schedule.id})" class="px-3 py-1 rounded-lg border border-rose-700 bg-rose-900/20 text-xs font-semibold text-rose-300 hover:bg-rose-900/40 transition whitespace-nowrap">删除</button>
-                </div>` : ''}
+                    <button onclick="runSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:emerald-500 transition whitespace-nowrap">立即运行</button>
+                    <button onclick="editSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:border-sky-500 transition whitespace-nowrap">编辑</button>
+                    <button onclick="deleteSchedule(${{schedule.id}})" class="px-3 py-1 rounded-lg border border-rose-700 bg-rose-900/20 text-xs font-semibold text-rose-300 hover:bg-rose-900/40 transition whitespace-nowrap">删除</button>
+                </div>` : ''}}
               </div>
             </div>
             
@@ -5187,15 +5150,15 @@ def _schedules_html() -> str:
                 <div class="glass-card p-2 rounded-lg bg-slate-900/30 flex flex-col gap-1">
                     <div class="text-slate-400">Source</div>
                     <div class="font-mono text-sky-300">
-                        ${srcNode ? maskAddress(srcNode.ip, true) : 'Unknown'}
-                        <span id="sched-src-isp-${schedule.id}" class="ml-1 text-[10px] text-slate-500 border-l border-slate-700 pl-1"></span>
+                        ${{srcNode ? maskAddress(srcNode.ip, true) : 'Unknown'}}
+                        <span id="sched-src-isp-${{schedule.id}}" class="ml-1 text-[10px] text-slate-500 border-l border-slate-700 pl-1"></span>
                     </div>
                 </div>
                  <div class="glass-card p-2 rounded-lg bg-slate-900/30 flex flex-col gap-1">
                     <div class="text-slate-400">Destination</div>
                     <div class="font-mono text-emerald-300">
-                        ${dstNode ? maskAddress(dstNode.ip, true) : 'Unknown'}
-                        <span id="sched-dst-isp-${schedule.id}" class="ml-1 text-[10px] text-slate-500 border-l border-slate-700 pl-1"></span>
+                        ${{dstNode ? maskAddress(dstNode.ip, true) : 'Unknown'}}
+                        <span id="sched-dst-isp-${{schedule.id}}" class="ml-1 text-[10px] text-slate-500 border-l border-slate-700 pl-1"></span>
                     </div>
                 </div>
             </div>
@@ -5205,33 +5168,33 @@ def _schedules_html() -> str:
               <div class="flex items-center justify-between mb-4">
                 <h4 class="text-sm font-bold text-slate-200">24小时带宽监控</h4>
                 <div class="flex items-center gap-2">
-                   <button onclick="toggleHistory(${schedule.id})" class="flex items-center gap-1 px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-xs">
+                   <button onclick="toggleHistory(${{schedule.id}})" class="flex items-center gap-1 px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-xs">
                      <span class="text-lg leading-none">📊</span> 历史记录
                    </button>
                    <div class="flex items-center bg-slate-800 rounded-lg p-0.5 border border-slate-700">
-                      <button onclick="changeDate(${schedule.id}, -1)" class="w-6 h-6 flex items-center justify-center hover:bg-slate-700 rounded text-slate-400 hover:text-white transition">◀</button>
-                      <span id="date-${schedule.id}" class="text-xs font-mono px-2 min-w-[80px] text-center text-slate-300">今天</span>
-                      <button onclick="changeDate(${schedule.id}, 1)" class="w-6 h-6 flex items-center justify-center hover:bg-slate-700 rounded text-slate-400 hover:text-white transition">▶</button>
+                      <button onclick="changeDate(${{schedule.id}}, -1)" class="w-6 h-6 flex items-center justify-center hover:bg-slate-700 rounded text-slate-400 hover:text-white transition">◀</button>
+                      <span id="date-${{schedule.id}}" class="text-xs font-mono px-2 min-w-[80px] text-center text-slate-300">今天</span>
+                      <button onclick="changeDate(${{schedule.id}}, 1)" class="w-6 h-6 flex items-center justify-center hover:bg-slate-700 rounded text-slate-400 hover:text-white transition">�?/button>
                    </div>
                 </div>
               </div>
               <div class="w-full" style="position: relative; height: 16rem;">
-                <canvas id="chart-${schedule.id}" style="width: 100% !important; height: 100% !important;"></canvas>
+                <canvas id="chart-${{schedule.id}}" style="width: 100% !important; height: 100% !important;"></canvas>
               </div>
-              <div id="stats-${schedule.id}"></div>
+              <div id="stats-${{schedule.id}}"></div>
               
               <!-- History Panel -->
-              <div id="history-panel-${schedule.id}" class="hidden mt-4 pt-4 border-t border-slate-700/50">
-                  <div class="bg-slate-900/50 rounded-lg p-3 max-h-40 overflow-y-auto custom-scrollbar" id="history-list-${schedule.id}">
+              <div id="history-panel-${{schedule.id}}" class="hidden mt-4 pt-4 border-t border-slate-700/50">
+                  <div class="bg-slate-900/50 rounded-lg p-3 max-h-40 overflow-y-auto custom-scrollbar" id="history-list-${{schedule.id}}">
                       <div class="text-center text-xs text-slate-500 py-2">加载历史记录...</div>
                   </div>
               </div>
             </div>`;
 
-        if (!card) {
+        if (!card) {{
             // New Card
             const div = document.createElement('div');
-            div.id = `schedule-card-${schedule.id}`;
+            div.id = `schedule-card-${{schedule.id}}`;
             div.className = "glass-card rounded-2xl p-6 space-y-4 mb-6";
             div.innerHTML = htmlContent;
             container.appendChild(div);
@@ -5243,113 +5206,113 @@ def _schedules_html() -> str:
             
             // Mask/ISP update for new card
              // Fetch ISPs
-             const fetchIsp = (ip, elemId) => {
+             const fetchIsp = (ip, elemId) => {{
                  if (!ip) return;
-                 fetch(`/geo?ip=${ip}`)
+                 fetch(`/geo?ip=${{ip}}`)
                    .then(r => r.json())
-                   .then(d => {
+                   .then(d => {{
                        const el = document.getElementById(elemId);
                        if (el && d.isp) el.textContent = d.isp;
-                   }).catch(()=>void 0);
-             };
+                   }}).catch(()=>void 0);
+             }};
              
-             if (srcNode) fetchIsp(srcNode.ip, `sched-src-isp-${schedule.id}`);
-             if (dstNode) fetchIsp(dstNode.ip, `sched-dst-isp-${schedule.id}`);
+             if (srcNode) fetchIsp(srcNode.ip, `sched-src-isp-${{schedule.id}}`);
+             if (dstNode) fetchIsp(dstNode.ip, `sched-dst-isp-${{schedule.id}}`);
             
-        } else {
+        }} else {{
             // Existing Card - Diff Updates
             // Update Status Badge
-            const statusEl = document.getElementById(`status-badge-${schedule.id}`);
+            const statusEl = document.getElementById(`status-badge-${{schedule.id}}`);
             if (statusEl && statusEl.innerHTML !== statusBadge) statusEl.innerHTML = statusBadge;
             
             // Update Countdown Attribute
             const countdownEl = card.querySelector(`[data-countdown]`);
-            if (countdownEl && schedule.next_run_at) {
-                 if (countdownEl.dataset.countdown !== schedule.next_run_at) {
+            if (countdownEl && schedule.next_run_at) {{
+                 if (countdownEl.dataset.countdown !== schedule.next_run_at) {{
                      countdownEl.dataset.countdown = schedule.next_run_at;
                      updateCountdowns(); // Refresh text immediately
-                 }
-            }
+                 }}
+            }}
             
             // Update Toggle Button Text
-            const btnToggle = document.getElementById(`btn-toggle-${schedule.id}`);
+            const btnToggle = document.getElementById(`btn-toggle-${{schedule.id}}`);
             if (btnToggle && btnToggle.innerText.trim() !== runBtnText) btnToggle.innerText = runBtnText;
-        }
-      });
+        }}
+      }});
       
       // Global Countdown Timer (Ensure only one)
-      if (!window.countdownInterval) {
+      if (!window.countdownInterval) {{
           window.countdownInterval = setInterval(updateCountdowns, 1000);
-      }
-    }
+      }}
+    }}
 
 
 
-    function toggleHistory(scheduleId) {
-        const panel = document.getElementById(`history-panel-${scheduleId}`);
-        if (panel) {
+    function toggleHistory(scheduleId) {{
+        const panel = document.getElementById(`history-panel-${{scheduleId}}`);
+        if (panel) {{
             panel.classList.toggle('hidden');
-        }
-    }
+        }}
+    }}
 
     // 加载图表数据
-    async function loadChartData(scheduleId, date = null) {
-      const dateEl = document.getElementById(`date-${scheduleId}`);
+    async function loadChartData(scheduleId, date = null) {{
+      const dateEl = document.getElementById(`date-${{scheduleId}}`);
       // 如果没有指定date，且当前也没显示日期，则默认今天
-      if (!date && (!dateEl || dateEl.textContent === '今天')) {
+      if (!date && (!dateEl || dateEl.textContent === '今天')) {{
          const d = new Date();
-         date = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-      } else if (!date) {
-         // 使用当前显示的日期
+         date = `${{d.getFullYear()}}-${{String(d.getMonth()+1).padStart(2,'0')}}-${{String(d.getDate()).padStart(2,'0')}}`;
+      }} else if (!date) {{
+         // 使用当前显示的日�?
          const currentDate = new Date(dateEl.textContent);
-         date = `${currentDate.getFullYear()}-${String(currentDate.getMonth()+1).padStart(2,'0')}-${String(currentDate.getDate()).padStart(2,'0')}`;
-      }
+         date = `${{currentDate.getFullYear()}}-${{String(currentDate.getMonth()+1).padStart(2,'0')}}-${{String(currentDate.getDate()).padStart(2,'0')}}`;
+      }}
       
       const tzOffset = new Date().getTimezoneOffset();
-      const res = await apiFetch(`/schedules/${scheduleId}/results?date=${date}&tz_offset=${tzOffset}`);
+      const res = await apiFetch(`/schedules/${{scheduleId}}/results?date=${{date}}&tz_offset=${{tzOffset}}`);
       const data = await res.json();
       
       renderChart(scheduleId, data.results, date);
       renderHistoryTable(scheduleId, data.results);
-    }
+    }}
     
     // 渲染历史表格
-    function renderHistoryTable(scheduleId, results) {
-      const tbody = document.getElementById(`history-${scheduleId}`);
+    function renderHistoryTable(scheduleId, results) {{
+      const tbody = document.getElementById(`history-${{scheduleId}}`);
       if (!tbody) return;
       
-      if (results.length === 0) {
+      if (results.length === 0) {{
         tbody.innerHTML = '<tr><td colspan="6" class="py-2 text-center text-slate-500">暂无数据</td></tr>';
         return;
-      }
+      }}
       
       // 按时间倒序
-      const sorted = [...results].reverse().slice(0, 10); // 显示最近10条
+      const sorted = [...results].reverse().slice(0, 10); // 显示最�?0�?
       
-      tbody.innerHTML = sorted.map(r => {
+      tbody.innerHTML = sorted.map(r => {{
           const time = new Date(r.executed_at).toLocaleTimeString('zh-CN');
           const statusColor = r.status === 'success' ? 'text-emerald-400' : 'text-rose-400';
-          const s = r.test_result?.summary || {};
+          const s = r.test_result?.summary || {{}};
           const protocol = r.test_result?.protocol || 'tcp';
           
           // Determine upload/download speeds
           let up = '-';
           let down = '-';
           
-          if (s.upload_bits_per_second) {
+          if (s.upload_bits_per_second) {{
               up = (s.upload_bits_per_second / 1000000).toFixed(2);
-          }
-          if (s.download_bits_per_second) {
+          }}
+          if (s.download_bits_per_second) {{
               down = (s.download_bits_per_second / 1000000).toFixed(2);
-          }
+          }}
           
           // Fallback compatibility
-          if (up === '-' && down === '-' && s.bits_per_second) {
+          if (up === '-' && down === '-' && s.bits_per_second) {{
               const bps = (s.bits_per_second / 1000000).toFixed(2);
               const isReverse = r.test_result.params?.reverse || r.test_result.raw_result?.start?.test_start?.reverse;
               if (isReverse) down = bps;
               else up = bps;
-          }
+          }}
           
           // TCP 不显示丢包，UDP 才有丢包数据
           const lostPercent = protocol === 'udp' 
@@ -5358,66 +5321,66 @@ def _schedules_html() -> str:
           
           return `
             <tr>
-              <td class="py-2">${time}</td>
-              <td class="py-2 text-sky-400">${up}</td>
-              <td class="py-2 text-emerald-400">${down}</td>
-              <td class="py-1">${s.latency_ms?.toFixed(2) || '-'}</td>
-              <td class="py-1">${lostPercent}</td>
-              <td class="py-1 ${statusColor} text-xs" title="${r.error_message || ''}">
-                ${r.status}
-                ${r.status === 'failed' ? '<span class="ml-1 cursor-help">ⓘ</span>' : ''}
+              <td class="py-2">${{time}}</td>
+              <td class="py-2 text-sky-400">${{up}}</td>
+              <td class="py-2 text-emerald-400">${{down}}</td>
+              <td class="py-1">${{s.latency_ms?.toFixed(2) || '-'}}</td>
+              <td class="py-1">${{lostPercent}}</td>
+              <td class="py-1 ${{statusColor}} text-xs" title="${{r.error_message || ''}}">
+                ${{r.status}}
+                ${{r.status === 'failed' ? '<span class="ml-1 cursor-help">�?/span>' : ''}}
               </td>
             </tr>
           `;
-      }).join('');
-    }
+      }}).join('');
+    }}
 
 
 
     // 渲染Chart.js图表
-    function renderChart(scheduleId, results, date) {
-      const canvas = document.getElementById(`chart-${scheduleId}`);
+    function renderChart(scheduleId, results, date) {{
+      const canvas = document.getElementById(`chart-${{scheduleId}}`);
       if (!canvas) return;
       
       // 销毁旧图表
-      if (charts[scheduleId]) {
+      if (charts[scheduleId]) {{
         charts[scheduleId].destroy();
-      }
+      }}
       
       // 准备数据
       // Use map to group by timestamp
       const timeMap = new Map();
-      const formatTime = (iso) => {
+      const formatTime = (iso) => {{
           const d = new Date(new Date(iso).getTime() + 8*60*60*1000); // UTC+8
           return d.toISOString().substring(11, 16);
-      };
+      }};
 
-      results.forEach(r => {
+      results.forEach(r => {{
           // Round to nearest minute to grouping
           const t = formatTime(r.executed_at);
-          if (!timeMap.has(t)) {
-              timeMap.set(t, { 
+          if (!timeMap.has(t)) {{
+              timeMap.set(t, {{ 
                   tcp_up: null, tcp_down: null, 
                   udp_up: null, udp_down: null 
-              });
-          }
+              }});
+          }}
           
           const entry = timeMap.get(t);
-          const s = r.test_result?.summary || {};
+          const s = r.test_result?.summary || {{}};
           const proto = (r.test_result?.protocol || 'tcp').toLowerCase();
           
           // Values in Mbps
           const up = s.upload_bits_per_second ? (s.upload_bits_per_second / 1000000).toFixed(2) : 0;
           const down = s.download_bits_per_second ? (s.download_bits_per_second / 1000000).toFixed(2) : 0;
           
-          if (proto === 'tcp') {
+          if (proto === 'tcp') {{
              if (parseFloat(up) > 0) entry.tcp_up = up;
              if (parseFloat(down) > 0) entry.tcp_down = down;
-          } else if (proto === 'udp') {
+          }} else if (proto === 'udp') {{
              if (parseFloat(up) > 0) entry.udp_up = up;
              if (parseFloat(down) > 0) entry.udp_down = down;
-          }
-      });
+          }}
+      }});
       
       // Sort keys
       const labels = Array.from(timeMap.keys()).sort();
@@ -5427,30 +5390,30 @@ def _schedules_html() -> str:
       const udpDownData = labels.map(t => timeMap.get(t).udp_down || 0);
       
       // Stats Calculation Helper
-      const calcStats = (data) => {
+      const calcStats = (data) => {{
           const values = data.map(v => parseFloat(v)||0).filter(v => v > 0);
           if (!values.length) return null;
           const max = Math.max(...values);
           const avg = values.reduce((a, b) => a + b, 0) / values.length;
           const cur = values[values.length - 1];
-          return { max: max.toFixed(2), avg: avg.toFixed(2), cur: cur.toFixed(2) };
-      };
+          return {{ max: max.toFixed(2), avg: avg.toFixed(2), cur: cur.toFixed(2) }};
+      }};
 
       const statsData = [
-         { label: 'TCP 上传', color: 'sky', val: calcStats(tcpUpData) },
-         { label: 'TCP 下载', color: 'emerald', val: calcStats(tcpDownData) },
-         { label: 'UDP 上传', color: 'yellow', val: calcStats(udpUpData) },
-         { label: 'UDP 下载', color: 'purple', val: calcStats(udpDownData) }
+         {{ label: 'TCP 上传', color: 'sky', val: calcStats(tcpUpData) }},
+         {{ label: 'TCP 下载', color: 'emerald', val: calcStats(tcpDownData) }},
+         {{ label: 'UDP 上传', color: 'yellow', val: calcStats(udpUpData) }},
+         {{ label: 'UDP 下载', color: 'purple', val: calcStats(udpDownData) }}
       ].filter(item => item.val);
       
       // 创建图表
       const ctx = canvas.getContext('2d');
-      charts[scheduleId] = new Chart(ctx, {
+      charts[scheduleId] = new Chart(ctx, {{
         type: 'line',
-        data: {
+        data: {{
           labels: labels,
           datasets: [
-            {
+            {{
               label: 'TCP 上传',
               data: tcpUpData,
               borderColor: '#38bdf8', // sky-400
@@ -5459,8 +5422,8 @@ def _schedules_html() -> str:
               pointRadius: 0,
               tension: 0.4,
               fill: true
-            },
-            {
+            }},
+            {{
               label: 'TCP 下载',
               data: tcpDownData,
               borderColor: '#34d399', // emerald-400
@@ -5469,8 +5432,8 @@ def _schedules_html() -> str:
               pointRadius: 0,
               tension: 0.4,
               fill: true
-            },
-             {
+            }},
+             {{
               label: 'UDP 上传',
               data: udpUpData,
               borderColor: '#facc15', // yellow-400
@@ -5479,8 +5442,8 @@ def _schedules_html() -> str:
               pointRadius: 0,
               tension: 0.4,
               fill: true
-            },
-            {
+            }},
+            {{
               label: 'UDP 下载',
               data: udpDownData,
               borderColor: '#c084fc', // purple-400
@@ -5489,28 +5452,28 @@ def _schedules_html() -> str:
               pointRadius: 0,
               tension: 0.4,
               fill: true
-            }
+            }}
           ].filter(ds => ds.data.some(v => parseFloat(v) > 0))
-        },
-        options: {
+        }},
+        options: {{
           responsive: true,
           maintainAspectRatio: false,
-          interaction: {
+          interaction: {{
             mode: 'index',
             intersect: false,
-          },
-          plugins: {
-            legend: {
+          }},
+          plugins: {{
+            legend: {{
               display: true,
               position: 'top',
-              labels: { 
+              labels: {{ 
                 color: '#cbd5e1',
                 usePointStyle: true,
                 padding: 15,
-                font: { size: 11 }
-              }
-            },
-            tooltip: {
+                font: {{ size: 11 }}
+              }}
+            }},
+            tooltip: {{
               backgroundColor: 'rgba(15, 23, 42, 0.9)',
               titleColor: '#cbd5e1',
               bodyColor: '#94a3b8',
@@ -5518,105 +5481,105 @@ def _schedules_html() -> str:
               borderWidth: 1,
               padding: 12,
               displayColors: true,
-              callbacks: {
-                afterLabel: function(context) {
+              callbacks: {{
+                afterLabel: function(context) {{
                   const result = results[context.dataIndex];
                   if (!result.test_result?.summary) return '';
                   const s = result.test_result.summary;
                   return [
-                    `延迟: ${s.latency_ms?.toFixed(2) || 'N/A'} ms`,
-                    `丢包: ${s.lost_percent?.toFixed(2) || 'N/A'} %`
+                    `延迟: ${{s.latency_ms?.toFixed(2) || 'N/A'}} ms`,
+                    `丢包: ${{s.lost_percent?.toFixed(2) || 'N/A'}} %`
                   ];
-                }
-              }
-            }
-          },
-          scales: {
-            x: { 
-              grid: {
+                }}
+              }}
+            }}
+          }},
+          scales: {{
+            x: {{ 
+              grid: {{
                 display: true,
                 color: 'rgba(148, 163, 184, 0.15)',
                 drawBorder: false,
                 lineWidth: 0.5,
-              },
-              ticks: { 
+              }},
+              ticks: {{ 
                 color: '#94a3b8',
-                font: { size: 9 },
+                font: {{ size: 9 }},
                 maxRotation: 0,
                 autoSkip: true,
                 maxTicksLimit: 24,
-              }
-            },
-            y: { 
-              grid: {
+              }}
+            }},
+            y: {{ 
+              grid: {{
                 display: true,
                 color: 'rgba(148, 163, 184, 0.15)',
                 drawBorder: false,
                 lineWidth: 0.5,
-              },
-              ticks: { 
+              }},
+              ticks: {{ 
                 color: '#94a3b8',
-                font: { size: 9 }
-              },
+                font: {{ size: 9 }}
+              }},
               beginAtZero: true,
-              title: { 
+              title: {{ 
                 display: true, 
                 text: 'Mbps', 
                 color: '#cbd5e1',
-                font: { size: 10, weight: 'bold' }
-              }
-            }
-          }
-        }
-      });
+                font: {{ size: 10, weight: 'bold' }}
+              }}
+            }}
+          }}
+        }}
+      }});
       
       // Force resize after creation to fix width issues
-      setTimeout(() => {
-        if (charts[scheduleId]) {
+      setTimeout(() => {{
+        if (charts[scheduleId]) {{
           charts[scheduleId].resize();
-        }
-      }, 100);
+        }}
+      }}, 100);
       
       // 显示统计信息
-      const statsEl = document.getElementById(`stats-${scheduleId}`);
-      if (statsEl) {
-          if (statsData.length === 0) {
+      const statsEl = document.getElementById(`stats-${{scheduleId}}`);
+      if (statsEl) {{
+          if (statsData.length === 0) {{
               statsEl.innerHTML = '<div class="text-xs text-slate-500 mt-2 text-center">暂无数据</div>';
-          } else {
+          }} else {{
               statsEl.innerHTML = `<div class="mt-4 grid grid-cols-2 lg:grid-cols-4 gap-3">` + 
               statsData.map(s => `
-                <div class="rounded-xl border border-${s.color}-500/20 bg-${s.color}-500/5 p-3 text-xs shadow-sm">
-                  <div class="flex items-center gap-2 mb-2 pb-2 border-b border-${s.color}-500/10">
-                    <div class="w-1.5 h-1.5 rounded-full bg-${s.color}-400 shadow shadow-${s.color}-400/50"></div>
-                    <span class="font-bold text-${s.color}-400">${s.label}</span>
+                <div class="rounded-xl border border-${{s.color}}-500/20 bg-${{s.color}}-500/5 p-3 text-xs shadow-sm">
+                  <div class="flex items-center gap-2 mb-2 pb-2 border-b border-${{s.color}}-500/10">
+                    <div class="w-1.5 h-1.5 rounded-full bg-${{s.color}}-400 shadow shadow-${{s.color}}-400/50"></div>
+                    <span class="font-bold text-${{s.color}}-400">${{s.label}}</span>
                   </div>
                   <div class="space-y-1">
-                    <div class="flex justify-between items-center text-${s.color}-100/70"><span>Max</span><span class="font-mono text-${s.color}-100 font-medium">${s.val.max}<span class="text-[10px] opacity-60 ml-0.5">Mb</span></span></div>
-                    <div class="flex justify-between items-center text-${s.color}-100/70"><span>Avg</span><span class="font-mono text-${s.color}-100 font-medium">${s.val.avg}<span class="text-[10px] opacity-60 ml-0.5">Mb</span></span></div>
-                    <div class="flex justify-between items-center text-${s.color}-100/70"><span>Cur</span><span class="font-mono text-${s.color}-100 font-medium">${s.val.cur}<span class="text-[10px] opacity-60 ml-0.5">Mb</span></span></div>
+                    <div class="flex justify-between items-center text-${{s.color}}-100/70"><span>Max</span><span class="font-mono text-${{s.color}}-100 font-medium">${{s.val.max}}<span class="text-[10px] opacity-60 ml-0.5">Mb</span></span></div>
+                    <div class="flex justify-between items-center text-${{s.color}}-100/70"><span>Avg</span><span class="font-mono text-${{s.color}}-100 font-medium">${{s.val.avg}}<span class="text-[10px] opacity-60 ml-0.5">Mb</span></span></div>
+                    <div class="flex justify-between items-center text-${{s.color}}-100/70"><span>Cur</span><span class="font-mono text-${{s.color}}-100 font-medium">${{s.val.cur}}<span class="text-[10px] opacity-60 ml-0.5">Mb</span></span></div>
                   </div>
                 </div>
               `).join('') + 
               `</div>`;
-          }
-      }
+          }}
+      }}
       
       // 更新日期显示
-      document.getElementById(`date-${scheduleId}`).textContent = date;
-    }
+      document.getElementById(`date-${{scheduleId}}`).textContent = date;
+    }}
 
     // 切换日期
-    function changeDate(scheduleId, offset) {
-      const dateEl = document.getElementById(`date-${scheduleId}`);
+    function changeDate(scheduleId, offset) {{
+      const dateEl = document.getElementById(`date-${{scheduleId}}`);
       const currentDate = new Date(dateEl.textContent === '今天' ? new Date() : dateEl.textContent);
       currentDate.setDate(currentDate.getDate() + offset);
       const newDate = currentDate.toISOString().split('T')[0];
       loadChartData(scheduleId, newDate);
-    }
+    }}
 
     let currentTab = 'uni'; // 'uni' | 'bidir'
 
-    function switchScheduleTab(tab) {
+    function switchScheduleTab(tab) {{
         currentTab = tab;
         const uniBtn = document.getElementById('tab-uni');
         const bidirBtn = document.getElementById('tab-bidir');
@@ -5624,7 +5587,7 @@ def _schedules_html() -> str:
         const dirWrapper = document.getElementById('direction-wrapper');
         
         // Update Tabs
-        if (tab === 'uni') {
+        if (tab === 'uni') {{
             uniBtn.classList.replace('text-slate-400', 'text-sky-400');
             uniBtn.classList.replace('border-transparent', 'border-sky-400');
             bidirBtn.classList.replace('text-sky-400', 'text-slate-400');
@@ -5636,7 +5599,7 @@ def _schedules_html() -> str:
             if (['tcp', 'udp'].includes(currentProto)) protoSelect.value = currentProto;
             
             dirWrapper.classList.remove('hidden');
-        } else {
+        }} else {{
             bidirBtn.classList.replace('text-slate-400', 'text-sky-400');
             bidirBtn.classList.replace('border-transparent', 'border-sky-400');
             uniBtn.classList.replace('text-sky-400', 'text-slate-400');
@@ -5647,51 +5610,23 @@ def _schedules_html() -> str:
             protoSelect.value = currentProto || 'tcp';
             
             dirWrapper.classList.add('hidden');
-        }
-    }
+        }}
+    }}
 
     // Modal操作
-    function openModal(scheduleId = null) {
+    function openModal(scheduleId = null) {{
       editingScheduleId = scheduleId;
       const modal = document.getElementById('schedule-modal');
       const title = document.getElementById('modal-title');
-      
-      // 获取需要控制的字段
-      const nameInput = document.getElementById('schedule-name');
-      const srcSelect = document.getElementById('schedule-src');
-      const dstSelect = document.getElementById('schedule-dst');
-      const protocolSelect = document.getElementById('schedule-protocol');
-      const directionSelect = document.getElementById('schedule-direction');
-      const uniTab = document.getElementById('uni-tab');
-      const bidirTab = document.getElementById('bidir-tab');
       
       // Default reset
       switchScheduleTab('uni');
       document.getElementById('schedule-direction').value = 'upload';
       document.getElementById('schedule-protocol').value = 'tcp';
       
-      // 重置字段启用状态
-      const resetFieldState = (disabled) => {
-        [nameInput, srcSelect, dstSelect, protocolSelect, directionSelect].forEach(el => {
-          if (el) {
-            el.disabled = disabled;
-            el.classList.toggle('opacity-50', disabled);
-            el.classList.toggle('cursor-not-allowed', disabled);
-          }
-        });
-        [uniTab, bidirTab].forEach(el => {
-          if (el) {
-            el.disabled = disabled;
-            el.classList.toggle('pointer-events-none', disabled);
-            el.classList.toggle('opacity-50', disabled);
-          }
-        });
-      };
-      
-      if (scheduleId) {
+      if (scheduleId) {{
         const schedule = schedules.find(s => s.id === scheduleId);
         title.textContent = '编辑定时任务';
-        title.innerHTML = '编辑定时任务 <span class="text-xs text-amber-400 font-normal ml-2">（仅可修改时长/并行数/间隔）</span>';
         document.getElementById('schedule-name').value = schedule.name;
         document.getElementById('schedule-src').value = schedule.src_node_id;
         document.getElementById('schedule-dst').value = schedule.dst_node_id;
@@ -5702,19 +5637,16 @@ def _schedules_html() -> str:
         
         // Restore Tab state
         const direction = schedule.direction || 'upload';
-        if (direction === 'bidirectional') {
+        if (direction === 'bidirectional') {{
             switchScheduleTab('bidir');
-        } else {
+        }} else {{
             switchScheduleTab('uni');
             document.getElementById('schedule-direction').value = direction;
-        }
+        }}
         // Restore protocol AFTER switching tab (so options exist)
         document.getElementById('schedule-protocol').value = schedule.protocol;
         
-        // 编辑模式：禁用核心配置字段
-        resetFieldState(true);
-        
-      } else {
+      }} else {{
         title.textContent = '新建定时任务';
         document.getElementById('schedule-name').value = '';
         document.getElementById('schedule-duration').value = 10;
@@ -5722,31 +5654,28 @@ def _schedules_html() -> str:
         document.getElementById('schedule-interval').value = 30;
         document.getElementById('schedule-notes').value = '';
         switchScheduleTab('uni');
-        
-        // 新建模式：启用所有字段
-        resetFieldState(false);
-      }
+      }}
       
       modal.classList.remove('hidden');
       modal.classList.add('flex');
-    }
+    }}
 
-    function closeModal() {
+    function closeModal() {{
       document.getElementById('schedule-modal').classList.add('hidden');
       editingScheduleId = null;
-    }
+    }}
 
     // 保存定时任务
-    async function saveSchedule() {
+    async function saveSchedule() {{
       // Determine direction based on tab
       let direction = 'upload';
-      if (currentTab === 'bidir') {
+      if (currentTab === 'bidir') {{
           direction = 'bidirectional';
-      } else {
+      }} else {{
           direction = document.getElementById('schedule-direction').value;
-      }
+      }}
 
-      const data = {
+      const data = {{
         name: document.getElementById('schedule-name').value,
         src_node_id: parseInt(document.getElementById('schedule-src').value),
         dst_node_id: parseInt(document.getElementById('schedule-dst').value),
@@ -5758,206 +5687,108 @@ def _schedules_html() -> str:
         enabled: true,
         direction: direction,
         notes: document.getElementById('schedule-notes').value || null,
-      };
+      }};
       
-      try {
-        if (editingScheduleId) {
-          await apiFetch(`/schedules/${editingScheduleId}`, {
+      try {{
+        if (editingScheduleId) {{
+          await apiFetch(`/schedules/${{editingScheduleId}}`, {{
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {{ 'Content-Type': 'application/json' }},
             body: JSON.stringify(data),
-          });
-        } else {
-          await apiFetch('/schedules', {
+          }});
+        }} else {{
+          await apiFetch('/schedules', {{
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {{ 'Content-Type': 'application/json' }},
             body: JSON.stringify(data),
-          });
-        }
+          }});
+        }}
         
         closeModal();
         await loadSchedules();
-      } catch (err) {
+      }} catch (err) {{
         alert('保存失败: ' + err.message);
-      }
-    }
+      }}
+    }}
 
-    // 切换启用/禁用 - 动态更新状态徽章，不刷新整页
-    async function toggleSchedule(scheduleId) {
-      const btn = document.getElementById(`btn-toggle-${scheduleId}`);
-      const originalText = btn?.textContent;
-      
-      try {
-        if (btn) {
-          btn.disabled = true;
-          btn.textContent = '处理中...';
-        }
-        
-        const res = await apiFetch(`/schedules/${scheduleId}/toggle`, { method: 'POST' });
-        const data = await res.json();
-        
-        // 更新本地数据
-        const schedule = schedules.find(s => s.id === scheduleId);
-        if (schedule) {
-          schedule.enabled = data.enabled;
-          schedule.next_run_at = data.next_run_at;
-        }
-        
-        // 动态更新状态徽章
-        updateScheduleCardStatus(scheduleId, data.enabled, data.next_run_at);
-        
-      } catch (err) {
-        alert('操作失败: ' + err.message);
-        if (btn) btn.textContent = originalText;
-      } finally {
-        if (btn) btn.disabled = false;
-      }
-    }
-    
-    // 动态更新单个卡片的状态（不刷新整页）
-    function updateScheduleCardStatus(scheduleId, enabled, nextRunAt) {
-      const card = document.getElementById(`schedule-card-${scheduleId}`);
-      if (!card) return;
-      
-      // 更新按钮文本
-      const btn = document.getElementById(`btn-toggle-${scheduleId}`);
-      if (btn) btn.textContent = enabled ? '暂停' : '启用';
-      
-      // 更新状态徽章
-      const badgeHtml = enabled 
-        ? '<span class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-semibold"><span class="h-2 w-2 rounded-full bg-emerald-400"></span>运行中</span>'
-        : '<span class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-slate-700 text-slate-400 text-xs font-semibold"><span class="h-2 w-2 rounded-full bg-slate-500"></span>已暂停</span>';
-      
-      // 找到状态徽章并替换
-      const existingBadge = card.querySelector('.inline-flex.items-center.gap-1.px-2.py-1.rounded-full');
-      if (existingBadge) {
-        existingBadge.outerHTML = badgeHtml;
-      }
-      
-      // 更新倒计时元素
-      const countdownEl = card.querySelector('[data-countdown]');
-      if (countdownEl) {
-        if (enabled && nextRunAt) {
-          countdownEl.dataset.countdown = nextRunAt;
-        } else {
-          countdownEl.dataset.countdown = '';
-          countdownEl.textContent = enabled ? 'Pending...' : '--';
-        }
-      }
-    }
+    // 切换启用/禁用
+    async function toggleSchedule(scheduleId) {{
+      await apiFetch(`/schedules/${{scheduleId}}/toggle`, {{ method: 'POST' }});
+      await loadSchedules();
+    }}
 
     // 编辑
-    function editSchedule(scheduleId) {
+    function editSchedule(scheduleId) {{
       openModal(scheduleId);
-    }
+    }}
 
     // 删除
-    async function deleteSchedule(scheduleId) {
+    async function deleteSchedule(scheduleId) {{
       if (!confirm('确定要删除这个定时任务吗?')) return;
-      await apiFetch(`/schedules/${scheduleId}`, { method: 'DELETE' });
+      await apiFetch(`/schedules/${{scheduleId}}`, {{ method: 'DELETE' }});
       await loadSchedules();
-    }
+    }}
 
     // 立即执行
     // 立即执行
-    async function runSchedule(scheduleId) {
-      if (!confirm('确定要立即执行此任务吗?')) return;
-      try {
-        await apiFetch(`/schedules/${scheduleId}/execute`, { method: 'POST' });
-        alert('任务已触发, 请稍后刷新查看结果');
-      } catch (err) {
+    async function runSchedule(scheduleId) {{
+      if (!confirm('确定要立即执行此任务�?')) return;
+      try {{
+        await apiFetch(`/schedules/${{scheduleId}}/execute`, {{ method: 'POST' }});
+        alert('任务已触�? 请稍后刷新查看结�?);
+      }} catch (err) {{
         alert('执行失败: ' + err.message);
-      }
-    }
+      }}
+    }}
 
     // Toggle history panel visibility
-    function toggleHistory(scheduleId) {
-      const panel = document.getElementById(`history-panel-${scheduleId}`);
-      if (panel) {
+    function toggleHistory(scheduleId) {{
+      const panel = document.getElementById(`history-panel-${{scheduleId}}`);
+      if (panel) {{
         panel.classList.toggle('hidden');
-      }
-    }
+      }}
+    }}
 
-    function updateCountdowns() {
+    function updateCountdowns() {{
       const now = new Date();
-      document.querySelectorAll('[data-countdown]').forEach(el => {
+      document.querySelectorAll('[data-countdown]').forEach(el => {{
         const nextRun = el.dataset.countdown;
-        if (!nextRun) {
+        if (!nextRun) {{
           el.textContent = '';
           return;
-        }
-        
-        // 解析ISO格式时间，支持 Z 和 +00:00 两种UTC格式
-        let target;
-        try {
-          target = new Date(nextRun);
-          // 如果解析失败或无效时间
-          if (isNaN(target.getTime())) {
-            el.textContent = '--';
-            return;
-          }
-        } catch (e) {
-          el.textContent = '--';
-          return;
-        }
-        
+        }}
+        const target = new Date(nextRun + (nextRun.endsWith('Z') ? '' : 'Z'));
         const diff = target - now;
         
-        if (diff <= 0) {
+        if (diff <= 0) {{
           el.textContent = 'Running...';
           return;
-        }
+        }}
         
         const h = Math.floor(diff / 3600000);
         const m = Math.floor((diff % 3600000) / 60000);
         const s = Math.floor((diff % 60000) / 1000);
-        el.textContent = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-      });
+        el.textContent = `${{h.toString().padStart(2, '0')}}:${{m.toString().padStart(2, '0')}}:${{s.toString().padStart(2, '0')}}`;
+      }});
       
-      // 智能检测Running状态变化，只在状态变化时刷新
-      document.querySelectorAll('[data-countdown]').forEach(el => {
-        const scheduleId = el.dataset.scheduleId;
-        if (!scheduleId) return;
-        
-        const wasRunning = el.dataset.wasRunning === 'true';
-        const isRunning = el.textContent === 'Running...';
-        
-        if (wasRunning && !isRunning) {
-          // 任务刚完成，刷新这个卡片的图表
-          console.log(`Schedule ${scheduleId} completed, refreshing chart...`);
-          loadChartData(parseInt(scheduleId));
-          // 静默刷新这个任务的数据（不刷新整个列表）
-          refreshSingleSchedule(parseInt(scheduleId));
-        }
-        
-        el.dataset.wasRunning = isRunning ? 'true' : 'false';
-      });
-    }
-    
-    // 静默刷新单个任务数据（避免页面抖动）
-    async function refreshSingleSchedule(scheduleId) {
-      try {
-        const res = await apiFetch('/schedules');
-        const allSchedules = await res.json();
-        const newData = allSchedules.find(s => s.id === scheduleId);
-        
-        if (newData) {
-          // 更新本地数据
-          const idx = schedules.findIndex(s => s.id === scheduleId);
-          if (idx >= 0) {
-            schedules[idx] = newData;
-          }
-          
-          // 更新倒计时元素
-          const countdownEl = document.querySelector(`[data-schedule-id="${scheduleId}"]`);
-          if (countdownEl && newData.next_run_at) {
-            countdownEl.dataset.countdown = newData.next_run_at;
-          }
-        }
-      } catch (e) {
-        console.error('Failed to refresh single schedule:', e);
-      }
-    }
+      // Auto-refresh schedules if 'Running...' to detect completion
+      const runningEls = document.querySelectorAll('span[class*="Running"]'); // This regex might be fragile if class changes. 
+      // Better: check if any element text content is 'Running...'
+      let isAnyRunning = false;
+      document.querySelectorAll('[data-countdown]').forEach(el => {{
+          if (el.textContent === 'Running...') isAnyRunning = true;
+      }});
+      
+      if (isAnyRunning) {{
+          // Poll faster if something is running
+             const now = Date.now();
+             if (!window.lastFastPoll || (now - window.lastFastPoll) > 5000) {{
+                 loadSchedules().then(() => {{
+                     window.lastFastPoll = now;
+                 }});
+             }}
+      }}
+    }}
 
     // 事件绑定
     document.getElementById('create-schedule-btn').addEventListener('click', () => openModal());
@@ -5966,88 +5797,88 @@ def _schedules_html() -> str:
     document.getElementById('save-schedule').addEventListener('click', saveSchedule);
     document.getElementById('refresh-btn').addEventListener('click', loadSchedules);
 
-    // 更新定时任务卡片的流量徽章
-    async function updateScheduleTrafficBadges() {
-      try {
+    // 更新定时任务卡片的流量徽�?
+    async function updateScheduleTrafficBadges() {{
+      try {{
         // 1. Fetch Global Stats for VPS Summary
         const res = await fetch('/api/daily_traffic_stats');
         const data = await res.json();
         
-        if (data.status === 'ok') {
+        if (data.status === 'ok') {{
             const vpsContainer = document.getElementById('vps-daily-summary');
-            if (vpsContainer) {
-                vpsContainer.innerHTML = data.nodes.map(n => {
+            if (vpsContainer) {{
+                vpsContainer.innerHTML = data.nodes.map(n => {{
                     return `
                       <div class="glass-card p-4 rounded-xl flex items-center justify-between">
                         <div>
-                          <h4 class="text-sm font-semibold text-slate-200">${n.name}</h4>
+                          <h4 class="text-sm font-semibold text-slate-200">${{n.name}}</h4>
                           <div class="text-xs text-slate-500 font-mono">
-                             ${maskAddress(n.ip, true)}
-                             <span id="vps-isp-${n.node_id}" class="ml-2 pl-2 border-l border-slate-700 text-slate-600"></span>
+                             ${{maskAddress(n.ip, true)}}
+                             <span id="vps-isp-${{n.node_id}}" class="ml-2 pl-2 border-l border-slate-700 text-slate-600"></span>
                           </div>
                         </div>
                         <div class="text-right">
-                          <div class="text-lg font-bold text-sky-400">${n.total_gb}G</div>
+                          <div class="text-lg font-bold text-sky-400">${{n.total_gb}}G</div>
                           <div class="text-xs text-slate-500">今日流量</div>
                         </div>
                       </div>
                     `;
-                }).join('');
+                }}).join('');
 
                 // Fetch ISPs for these nodes
-                data.nodes.forEach(n => {
-                    fetch(`/geo?ip=${n.ip}`)
+                data.nodes.forEach(n => {{
+                    fetch(`/geo?ip=${{n.ip}}`)
                       .then(r => r.json())
-                      .then(d => {
-                          const el = document.getElementById(`vps-isp-${n.node_id}`);
-                          if (el && d.isp) {
+                      .then(d => {{
+                          const el = document.getElementById(`vps-isp-${{n.node_id}}`);
+                          if (el && d.isp) {{
                               el.textContent = d.isp;
                               el.title = d.country_code || '';
-                          }
-                      })
+                          }}
+                      }})
                       .catch(() => void 0);
-                });
-            }
-        }
+                }});
+            }}
+        }}
 
         // 2. Hide Schedule Badges (As requested)
         const schedules = await (await apiFetch('/schedules')).json();
-        schedules.forEach(schedule => {
-             const badgeEl = document.getElementById(`traffic-badge-${schedule.id}`);
-             if (badgeEl) {
+        schedules.forEach(schedule => {{
+             const badgeEl = document.getElementById(`traffic-badge-${{schedule.id}}`);
+             if (badgeEl) {{
                  badgeEl.style.display = 'none'; 
-             }
-        });
+             }}
+        }});
         
-      } catch (err) {
+      }} catch (err) {{
         console.error('Failed to update traffic stats:', err);
-      }
-    }
+      }}
+    }}
 
 
-    // 初始化
-    (async () => {
+    // 初始�?
+    (async () => {{
       // Check guest status first
-      try {
+      try {{
         const authRes = await apiFetch('/auth/status');
         const authData = await authRes.json();
         window.isGuest = authData.isGuest === true;
         
-        if (window.isGuest) {
+        if (window.isGuest) {{
           // Hide create schedule button for guests
           document.getElementById('create-schedule-btn')?.classList.add('hidden');
-        }
-      } catch (e) {
+        }}
+      }} catch (e) {{
         console.error('Auth check failed:', e);
-      }
+      }}
       
       await loadNodes();
       await loadSchedules();
       await updateScheduleTrafficBadges();
       
-      // 每5分钟更新一次流量统计
+      // �?分钟更新一次流量统�?
       setInterval(updateScheduleTrafficBadges, 5 * 60 * 1000);
-    })();
+    }})();
   </script>
 </body>
 </html>
@@ -6073,7 +5904,7 @@ async def schedules_page(request: Request):
 
 @app.get("/web/whitelist")
 async def whitelist_page(request: Request):
-    """白名单管理页面"""
+    """白名单管理页�?""
     if not auth_manager().is_authenticated(request):
         return HTMLResponse(content="<script>window.location.href='/web';</script>")
     
@@ -6083,7 +5914,7 @@ async def whitelist_page(request: Request):
 
 @app.get("/web/tests")
 async def tests_page(request: Request):
-    """单次测试页面 - 显示测试计划和最近测试"""
+    """单次测试页面 - 显示测试计划和最近测�?""
     if not auth_manager().is_authenticated(request) and not _is_guest(request):
         return HTMLResponse(content="<script>window.location.href='/web';</script>")
     
@@ -6304,7 +6135,7 @@ async def register_reverse_agent(
         existing.ip = client_ip
         existing.iperf_port = registration.iperf_port
         existing.is_internal = True
-        existing.description = f"内网 agent (反向穿透)"
+        existing.description = f"内网 agent (反向穿�?"
         db.commit()
         db.refresh(existing)
         return {
@@ -6321,7 +6152,7 @@ async def register_reverse_agent(
         agent_port=8000,
         iperf_port=registration.iperf_port,
         is_internal=True,
-        description=f"内网 agent (反向穿透)"
+        description=f"内网 agent (反向穿�?"
     )
     db.add(new_node)
     db.commit()
@@ -6964,7 +6795,7 @@ async def get_whitelist_status(db: Session = Depends(get_db)):
                     
                     # Update DB status
                     node.whitelist_sync_status = "synced" if in_sync else "not_synced"
-                    node.whitelist_sync_message = "正常" if in_sync else "内容不一致"
+                    node.whitelist_sync_message = "正常" if in_sync else "内容不一�?
                     node.whitelist_sync_at = datetime.utcnow()
                     
                     agent_statuses.append({
@@ -7305,11 +7136,11 @@ def _add_schedule_to_scheduler(schedule: TestSchedule, next_run_time: datetime |
     """添加任务到调度器"""
     job_id = f"schedule_{schedule.id}"
     
-    # 移除旧任务(如果存在)
+    # 移除旧任�?如果存在)
     if scheduler.get_job(job_id):
         scheduler.remove_job(job_id)
     
-    # 添加新任务
+    # 添加新任�?
     # if next_run_time is provided, we set it as the next_run_time for the job
     scheduler.add_job(
         func=_execute_schedule_task,
@@ -7330,31 +7161,6 @@ def _remove_schedule_from_scheduler(schedule_id: int):
     if scheduler.get_job(job_id):
         scheduler.remove_job(job_id)
         logger.info(f"Removed schedule {schedule_id} from scheduler")
-
-
-def _load_schedules_on_startup():
-    """应用启动时加载所有启用的定时任务"""
-    db = SessionLocal()
-    try:
-        schedules = db.scalars(
-            select(TestSchedule).where(TestSchedule.enabled == True)
-        ).all()
-        
-        for schedule in schedules:
-            # Check for missed run or invalid next_run_at
-            run_at = schedule.next_run_at
-            now = datetime.now(timezone.utc)
-            
-            # If never run or next run is in the past (missed run due to downtime), run immediately
-            if not run_at or run_at <= now:
-                logger.warning(f"Schedule {schedule.id} ({schedule.name}) missed execution or not set. Scheduling immediately.")
-                run_at = now + timedelta(seconds=5)  # Add small buffer
-                # Note: We don't update DB here, the execution task will update next_run_at
-            
-            _add_schedule_to_scheduler(schedule, next_run_time=run_at)
-            logger.info(f"Loaded schedule {schedule.id}: {schedule.name}, next run scheduled at {run_at}")
-    finally:
-        db.close()
 
 
 async def _execute_schedule_task(schedule_id: int):
@@ -7405,7 +7211,7 @@ async def _execute_schedule_task(schedule_id: int):
 
             for proto in protocols:
                 try:
-                    # 构造测试参数
+                    # 构造测试参�?
                     # Always use detected port to handle dynamic port changes (e.g., after agent reinstall)
                     test_params = {
                         "target": dst_node.ip,
@@ -7553,7 +7359,7 @@ def create_schedule(schedule: TestScheduleCreate, db: Session = Depends(get_db))
 
 @app.get("/schedules", response_model=List[TestScheduleRead])
 def list_schedules(db: Session = Depends(get_db)):
-    """获取所有定时任务"""
+    """获取所有定时任�?""
     schedules = db.scalars(select(TestSchedule)).all()
     return schedules
 
@@ -7606,7 +7412,7 @@ def delete_schedule(schedule_id: int, db: Session = Depends(get_db)):
     _remove_schedule_from_scheduler(schedule_id)
     
     # 删除相关结果
-    # 注意: SQLAlchemy session.delete 不会级联删除 schedule_results, 需手动或配置 cascade
+    # 注意: SQLAlchemy session.delete 不会级联删除 schedule_results, 需手动或配�?cascade
     # 这里手动删除
     db.execute(
         text("DELETE FROM schedule_results WHERE schedule_id = :sid"),
@@ -7630,26 +7436,18 @@ def toggle_schedule(schedule_id: int, db: Session = Depends(get_db)):
     db_schedule.enabled = not db_schedule.enabled
     
     if db_schedule.enabled:
-        # 计算下次执行时间
-        next_run_at = datetime.now(timezone.utc) + timedelta(seconds=db_schedule.interval_seconds)
-        db_schedule.next_run_at = next_run_at
-        # 关键修复：传递next_run_time参数到调度器
-        _add_schedule_to_scheduler(db_schedule, next_run_time=next_run_at)
-        logger.info(f"Enabled schedule {schedule_id}, next run at {next_run_at}")
+        from datetime import timedelta
+        db_schedule.next_run_at = datetime.now(timezone.utc) + timedelta(seconds=db_schedule.interval_seconds)
+        _add_schedule_to_scheduler(db_schedule)
     else:
         db_schedule.next_run_at = None
         _remove_schedule_from_scheduler(schedule_id)
-        logger.info(f"Disabled schedule {schedule_id}")
     
     db.commit()
     db.refresh(db_schedule)
     _persist_state(db)
     
-    return {
-        "enabled": db_schedule.enabled, 
-        "schedule_id": schedule_id,
-        "next_run_at": db_schedule.next_run_at.isoformat() if db_schedule.next_run_at else None
-    }
+    return {"enabled": db_schedule.enabled, "schedule_id": schedule_id}
 
 
 @app.post("/schedules/{schedule_id}/execute")
@@ -7674,7 +7472,7 @@ def get_schedule_results(
     tz_offset: int = Query(0, description="Timezone offset in minutes (JS getTimezoneOffset)"),
     db: Session = Depends(get_db)
 ):
-    """获取定时任务的测试结果"""
+    """获取定时任务的测试结�?""
     from datetime import datetime as dt, timedelta
     
     db_schedule = db.get(TestSchedule, schedule_id)
@@ -7688,10 +7486,10 @@ def get_schedule_results(
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid date format, use YYYY-MM-DD")
     else:
-        # 默认为 UTC 当前日期，后续会结合 offset 修正
+        # 默认�?UTC 当前日期，后续会结合 offset 修正
         target_date = dt.now(timezone.utc).date()
     
-    # 计算查询的时间范围 (根据客户端时区)
+    # 计算查询的时间范�?(根据客户端时�?
     # Start (Local) = YYYY-MM-DD 00:00:00
     # UTC = Local + offset (minutes) (JS definition: UTC - Local)
     # Local = UTC - offset
@@ -7897,3 +7695,4 @@ def debug_failures(db: Session = Depends(get_db)):
         .limit(10)
     ).all()
     return [{"id": r.id, "schedule_id": r.schedule_id, "time": r.executed_at, "error": r.error_message} for r in results]
+
