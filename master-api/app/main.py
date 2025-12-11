@@ -1396,6 +1396,9 @@ def _login_html() -> str:
         <button id="config-tab" onclick="setActiveSettingsTab('config')" class="rounded-full px-4 py-2 text-sm font-semibold text-slate-300 transition hover:text-white">
           📦 配置管理
         </button>
+        <button id="admin-tab" onclick="setActiveSettingsTab('admin')" class="rounded-full px-4 py-2 text-sm font-semibold text-slate-300 transition hover:text-white">
+          🔧 系统管理
+        </button>
       </div>
 
       <!-- Password Management Panel -->
@@ -1451,6 +1454,39 @@ def _login_html() -> str:
           </div>
           
           <p class="mt-4 text-xs text-slate-500">💡 提示: 配置文件包含所有节点信息，可用于备份或迁移到其他服务器。</p>
+        </div>
+      </div>
+
+      <!-- Admin Management Panel -->
+      <div id="admin-panel" class="hidden space-y-4">
+        <div class="rounded-xl border border-slate-800/60 bg-slate-950/40 p-4">
+          <h4 class="mb-3 text-lg font-semibold text-white">🗄️ 数据库管理</h4>
+          <p class="mb-4 text-sm text-slate-400">清空测试数据。<span class="text-rose-400 font-semibold">节点配置和定时任务设置不会被删除。</span></p>
+          
+          <div id="admin-alert" class="hidden mb-4 rounded-xl px-4 py-3 text-sm"></div>
+          
+          <div class="grid gap-3 md:grid-cols-2">
+            <button onclick="clearAllTestData()" class="rounded-xl bg-rose-600 hover:bg-rose-500 px-5 py-3 text-sm font-semibold text-white shadow-lg transition">
+              🧹 清空所有测试数据
+            </button>
+            <button onclick="clearScheduleResults()" class="rounded-xl bg-amber-600 hover:bg-amber-500 px-5 py-3 text-sm font-semibold text-white shadow-lg transition">
+              📊 仅清空定时任务历史
+            </button>
+          </div>
+        </div>
+        
+        <div class="rounded-xl border border-slate-800/60 bg-slate-950/40 p-4">
+          <h4 class="mb-3 text-lg font-semibold text-white">🌐 Traceroute 路由追踪</h4>
+          <p class="mb-4 text-sm text-slate-400">从指定节点到目标地址进行路由追踪，分析网络路径和延迟。</p>
+          <div class="flex items-center justify-between rounded-xl bg-slate-900/60 p-3 border border-slate-700">
+            <div>
+              <span class="font-semibold text-white">🚧 即将推出</span>
+              <p class="text-xs text-slate-400">此功能正在开发中...</p>
+            </div>
+            <button disabled class="px-4 py-2 bg-slate-600 text-slate-400 rounded-lg text-sm font-bold cursor-not-allowed">
+              开发中
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1510,18 +1546,20 @@ def _login_html() -> str:
       // Panels
       const passwordPanel = document.getElementById('password-panel');
       const configPanel = document.getElementById('config-panel');
+      const adminTab = document.getElementById('admin-tab');
+      const adminPanel = document.getElementById('admin-panel');
       
-      console.log('Elements found:', { passwordTab, configTab, passwordPanel, configPanel });
+      console.log('Elements found:', { passwordTab, configTab, adminTab, passwordPanel, configPanel, adminPanel });
       
       // Reset all buttons style
-      [passwordTab, configTab].forEach(btn => {
+      [passwordTab, configTab, adminTab].forEach(btn => {
         if (btn) {
             btn.className = 'rounded-full px-4 py-2 text-sm font-semibold text-slate-300 transition hover:text-white';
         }
       });
       
       // Reset all panels visibility
-      [passwordPanel, configPanel].forEach(panel => {
+      [passwordPanel, configPanel, adminPanel].forEach(panel => {
         if (panel) panel.classList.add('hidden');
       });
       
@@ -1534,8 +1572,56 @@ def _login_html() -> str:
       } else if (tabName === 'config' && configTab && configPanel) {
         configTab.className = activeBtnClass;
         configPanel.classList.remove('hidden');
+      } else if (tabName === 'admin') {
+        const adminTab = document.getElementById('admin-tab');
+        const adminPanel = document.getElementById('admin-panel');
+        if (adminTab && adminPanel) {
+          adminTab.className = activeBtnClass;
+          adminPanel.classList.remove('hidden');
+        }
       }
       console.log('setActiveSettingsTab completed');
+    }
+
+    // Admin Functions
+    function showAdminAlert(message, isError = false) {
+      const el = document.getElementById('admin-alert');
+      if (!el) return;
+      el.className = `mb-4 rounded-xl px-4 py-3 text-sm font-semibold ${isError ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'}`;
+      el.textContent = message;
+      el.classList.remove('hidden');
+    }
+
+    async function clearAllTestData() {
+      if (!confirm('⚠️ 确定要清空所有测试数据吗？\\n\\n这将删除：\\n- 所有单次测试记录\\n- 所有定时任务执行历史\\n\\n此操作不可撤销！')) return;
+      
+      try {
+        const res = await apiFetch('/admin/clear_all_test_data', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok) {
+          showAdminAlert(`✓ 成功清空数据：删除了 ${data.test_results_deleted || 0} 条测试记录，${data.schedule_results_deleted || 0} 条定时任务历史`);
+        } else {
+          showAdminAlert(`✗ 失败: ${data.detail || '未知错误'}`, true);
+        }
+      } catch (e) {
+        showAdminAlert(`✗ 请求失败: ${e.message}`, true);
+      }
+    }
+
+    async function clearScheduleResults() {
+      if (!confirm('⚠️ 确定要清空定时任务历史吗？\\n\\n这将删除所有定时任务的执行记录。\\n\\n此操作不可撤销！')) return;
+      
+      try {
+        const res = await apiFetch('/admin/clear_schedule_results', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok) {
+          showAdminAlert(`✓ 成功清空定时任务历史：删除了 ${data.count || 0} 条记录`);
+        } else {
+          showAdminAlert(`✗ 失败: ${data.detail || '未知错误'}`, true);
+        }
+      } catch (e) {
+        showAdminAlert(`✗ 请求失败: ${e.message}`, true);
+      }
     }
 
     // IP Whitelist Functions
