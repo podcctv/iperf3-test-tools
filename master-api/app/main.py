@@ -4899,6 +4899,9 @@ def _whitelist_html() -> str:
       statusEl.innerHTML = '<span class="spin">🔄</span> 检查中...';
       statusEl.className = 'text-xl font-semibold text-sky-400';
       
+      // Set table rows to checking state
+      setTableSyncingState(true);
+      
       try {
         const res = await apiFetch('/admin/whitelist');
         const data = await res.json();
@@ -5157,6 +5160,7 @@ def _schedules_html() -> str:
     async function loadSchedules() {
       const res = await apiFetch('/schedules');
       schedules = await res.json();
+      window.schedulesData = schedules;  // Store globally for VPS card task counts
       renderSchedules();
       updateScheduleTrafficBadges();
       
@@ -6099,9 +6103,9 @@ def _schedules_html() -> str:
                         <!-- Header: Flag + Status + Name -->
                         <div class="flex items-center gap-2 mb-3">
                           ${statusDot}
-                          <span id="vps-flag-${n.node_id}" class="text-lg">🌐</span>
+                          <span id="vps-flag-${n.node_id}" class="text-xs font-bold text-slate-400 bg-slate-700/50 px-1.5 py-0.5 rounded">--</span>
                           <h4 class="text-sm font-bold text-white truncate flex-1">${n.name}</h4>
-                          <span id="vps-tasks-${n.node_id}" class="px-2 py-0.5 rounded-full bg-slate-700/50 text-[10px] text-slate-400 font-medium" title="运行中的任务数">0 任务</span>
+                          <span id="vps-tasks-${n.node_id}" class="px-2 py-0.5 rounded-full bg-slate-700/50 text-xs text-slate-400 font-bold" title="运行中的任务数">0 任务</span>
                         </div>
                         
                         <!-- Traffic Display -->
@@ -6131,16 +6135,10 @@ def _schedules_html() -> str:
                               ispEl.title = d.isp;
                           }
                           
-                          // Update flag emoji
+                          // Update flag with text country code (Windows compatible)
                           const flagEl = document.getElementById(`vps-flag-${n.node_id}`);
                           if (flagEl && d.country_code) {
-                              // Convert country code to flag emoji
-                              const flag = d.country_code
-                                  .toUpperCase()
-                                  .split('')
-                                  .map(c => String.fromCodePoint(0x1F1E6 + c.charCodeAt(0) - 65))
-                                  .join('');
-                              flagEl.textContent = flag;
+                              flagEl.textContent = d.country_code.toUpperCase();
                               flagEl.title = d.country_code;
                           }
                       })
