@@ -7381,6 +7381,28 @@ async def create_test(test: TestCreate, db: Session = Depends(get_db)):
     if not src or not dst:
         raise HTTPException(status_code=404, detail="node not found")
 
+    # Check if we need to swap direction for NAT/reverse mode nodes
+    # When dst is reverse mode, swap src/dst and toggle -R flag
+    direction_swapped = False
+    original_src_id = src.id
+    original_dst_id = dst.id
+    effective_reverse = test.reverse
+    
+    dst_mode = getattr(dst, "agent_mode", "normal") or "normal"
+    src_mode = getattr(src, "agent_mode", "normal") or "normal"
+    
+    if dst_mode == "reverse":
+        # Destination is behind NAT, so we need to swap
+        # The NAT node will initiate connection to the public node
+        logger.info(f"[NAT-SWAP] Destination {dst.name} is reverse mode, swapping direction")
+        src, dst = dst, src  # Swap nodes
+        effective_reverse = not test.reverse  # Toggle reverse flag
+        direction_swapped = True
+        logger.info(f"[NAT-SWAP] New: src={src.name}, dst={dst.name}, reverse={effective_reverse}")
+    elif src_mode == "reverse":
+        # Source is behind NAT - this is the expected case, no swap needed
+        logger.info(f"[NAT] Source {src.name} is reverse mode, using as-is")
+
     src_status = await health_monitor.check_node(src)
     if src_status.status != "online":
         raise HTTPException(status_code=503, detail="source node is offline or unreachable")
@@ -7402,7 +7424,7 @@ async def create_test(test: TestCreate, db: Session = Depends(get_db)):
         "duration": test.duration,
         "protocol": test.protocol,
         "parallel": test.parallel,
-        "reverse": test.reverse,
+        "reverse": effective_reverse,  # Use potentially toggled reverse flag
     }
     if test.bandwidth:
         payload["bandwidth"] = test.bandwidth
@@ -7427,9 +7449,11 @@ async def create_test(test: TestCreate, db: Session = Depends(get_db)):
             status_code=502,
             detail=f"agent response JSON could not be processed: {snippet}",
         ) from exc
+    
+    # Store with ORIGINAL user-specified src/dst for proper display
     obj = TestResult(
-        src_node_id=src.id,
-        dst_node_id=dst.id,
+        src_node_id=original_src_id,
+        dst_node_id=original_dst_id,
         protocol=test.protocol,
         params=payload,
         raw_result=raw_data,
@@ -7450,6 +7474,23 @@ async def create_dual_suite(test: DualSuiteTestCreate, db: Session = Depends(get
     if not src or not dst:
         raise HTTPException(status_code=404, detail="node not found")
 
+    # Check if we need to swap direction for NAT/reverse mode nodes
+    direction_swapped = False
+    original_src_id = src.id
+    original_dst_id = dst.id
+    
+    dst_mode = getattr(dst, "agent_mode", "normal") or "normal"
+    src_mode = getattr(src, "agent_mode", "normal") or "normal"
+    
+    if dst_mode == "reverse":
+        # Destination is behind NAT, so we need to swap
+        logger.info(f"[NAT-SWAP] Suite: Destination {dst.name} is reverse mode, swapping direction")
+        src, dst = dst, src  # Swap nodes
+        direction_swapped = True
+        logger.info(f"[NAT-SWAP] Suite: New src={src.name}, dst={dst.name}")
+    elif src_mode == "reverse":
+        logger.info(f"[NAT] Suite: Source {src.name} is reverse mode, using as-is")
+
     src_status = await health_monitor.check_node(src)
     if src_status.status != "online":
         raise HTTPException(status_code=503, detail="source node is offline or unreachable")
@@ -7465,11 +7506,14 @@ async def create_dual_suite(test: DualSuiteTestCreate, db: Session = Depends(get
     server_started = False
     try:
         server_started = await _ensure_iperf_server_running(dst, requested_port)
+        
+        # When direction is swapped, we need to toggle the reverse flags
+        # so that "去程" and "回程" maintain their original meaning
         plan = [
-            ("TCP 去程", "tcp", False, test.tcp_bandwidth),
-            ("TCP 回程", "tcp", True, test.tcp_bandwidth),
-            ("UDP 去程", "udp", False, test.udp_bandwidth),
-            ("UDP 回程", "udp", True, test.udp_bandwidth),
+            ("TCP 去程", "tcp", direction_swapped, test.tcp_bandwidth),       # Normal: False, Swapped: True
+            ("TCP 回程", "tcp", not direction_swapped, test.tcp_bandwidth),   # Normal: True, Swapped: False
+            ("UDP 去程", "udp", direction_swapped, test.udp_bandwidth),       # Normal: False, Swapped: True
+            ("UDP 回程", "udp", not direction_swapped, test.udp_bandwidth),   # Normal: True, Swapped: False
         ]
 
         results: list[dict] = []
@@ -7518,9 +7562,10 @@ async def create_dual_suite(test: DualSuiteTestCreate, db: Session = Depends(get
         ],
     }
 
+    # Store with ORIGINAL user-specified src/dst for proper display
     obj = TestResult(
-        src_node_id=src.id,
-        dst_node_id=dst.id,
+        src_node_id=original_src_id,
+        dst_node_id=original_dst_id,
         protocol="suite",
         params={"mode": "tcp_udp_bidir", **test.model_dump()},
         raw_result={"mode": "suite", "tests": results},
