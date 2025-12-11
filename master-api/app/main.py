@@ -6390,9 +6390,9 @@ async def _check_node_health(node: Node) -> NodeWithStatus:
     # For NAT/reverse mode nodes, check heartbeat instead of HTTP
     node_mode = getattr(node, "agent_mode", "normal") or "normal"
     
-    # Debug: Log what mode we're seeing for this node
+    # Debug: Print to stdout for guaranteed visibility
     last_heartbeat = getattr(node, "last_heartbeat", None)
-    logger.info(f"[HEALTH] Checking {node.name}: agent_mode='{node_mode}', last_heartbeat={last_heartbeat}")
+    print(f"[HEALTH] Checking {node.name}: agent_mode='{node_mode}', last_heartbeat={last_heartbeat}", flush=True)
     
     if node_mode == "reverse":
         agent_version = getattr(node, "agent_version", None)
@@ -8250,6 +8250,9 @@ async def agent_register(
     Register a reverse mode (NAT) agent with the master.
     Called periodically by agents behind NAT to maintain heartbeat.
     """
+    # DEBUG: Print to stdout for guaranteed visibility
+    print(f"[REGISTER] Agent registration: node={node_name}, mode={mode}, version={agent_version}", flush=True)
+    
     # Get client IP from request
     client_ip = request.client.host if request.client else "unknown"
     forwarded = request.headers.get("X-Forwarded-For")
