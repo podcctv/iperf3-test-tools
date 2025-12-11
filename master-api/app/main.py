@@ -6545,16 +6545,23 @@ async def get_agent_tasks(node_name: str, db: Session = Depends(get_db)):
     if tasks:
         _internal_agent_tasks[node_name] = []  # Clear after returning
     
-    # Get whitelist from database
+    # Get whitelist from database (Node IPs + Master IP)
     whitelist_ips = []
     try:
-        whitelist_entries = db.scalars(select(Whitelist)).all()
-        whitelist_ips = [w.ip for w in whitelist_entries]
+        # Get all node IPs as whitelist (same logic as _sync_whitelist_to_agents)
+        nodes = db.scalars(select(Node)).all()
+        whitelist_ips = [n.ip for n in nodes]
+        
+        # Add Master IP if configured
+        master_ip = os.getenv("MASTER_IP", "")
+        if master_ip and master_ip not in whitelist_ips:
+            whitelist_ips.append(master_ip)
         
         # Update node's whitelist sync status
         node = db.scalars(select(Node).where(Node.name == node_name)).first()
         if node:
             node.whitelist_sync_status = "synced"
+            node.whitelist_sync_at = datetime.now(timezone.utc)
             db.commit()
     except Exception as e:
         print(f"[TASKS] Error getting whitelist: {e}", flush=True)
