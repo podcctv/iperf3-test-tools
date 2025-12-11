@@ -6086,43 +6086,89 @@ def _schedules_html() -> str:
                     const borderColor = borderColors[idx % borderColors.length];
                     const textColor = textColors[idx % textColors.length];
                     
+                    // Status indicator
+                    const isOnline = n.status === 'online';
+                    const statusDot = isOnline 
+                        ? '<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>'
+                        : '<span class="w-2 h-2 rounded-full bg-slate-500"></span>';
+                    
                     return `
-                      <div class="relative overflow-hidden rounded-2xl bg-gradient-to-br ${gradient} border ${borderColor} p-5 transition-all hover:scale-[1.02] hover:shadow-lg">
-                        <div class="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-white/5 to-transparent rounded-full -translate-y-8 translate-x-8"></div>
-                        <div class="relative z-10 flex items-center justify-between">
+                      <div class="relative overflow-hidden rounded-2xl bg-gradient-to-br ${gradient} border ${borderColor} p-4 transition-all hover:scale-[1.02] hover:shadow-lg group">
+                        <div class="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-white/5 to-transparent rounded-full -translate-y-6 translate-x-6"></div>
+                        
+                        <!-- Header: Flag + Status + Name -->
+                        <div class="flex items-center gap-2 mb-3">
+                          ${statusDot}
+                          <span id="vps-flag-${n.node_id}" class="text-lg">🌐</span>
+                          <h4 class="text-sm font-bold text-white truncate flex-1">${n.name}</h4>
+                          <span id="vps-tasks-${n.node_id}" class="px-2 py-0.5 rounded-full bg-slate-700/50 text-[10px] text-slate-400 font-medium" title="运行中的任务数">0 任务</span>
+                        </div>
+                        
+                        <!-- Traffic Display -->
+                        <div class="flex items-end justify-between">
                           <div class="space-y-1">
-                            <div class="flex items-center gap-2">
-                              <span class="text-lg">🖥️</span>
-                              <h4 class="text-base font-bold text-white">${n.name}</h4>
-                            </div>
-                            <div class="text-xs text-slate-400 font-mono flex items-center gap-1">
-                               <span class="opacity-70">${maskAddress(n.ip, true)}</span>
-                               <span class="text-slate-600">|</span>
-                               <span id="vps-isp-${n.node_id}" class="text-slate-500"></span>
-                            </div>
-                          </div>
-                          <div class="text-right">
-                            <div class="text-2xl font-bold ${textColor} drop-shadow-sm">${displayTraffic}</div>
+                            <div class="text-3xl font-bold ${textColor} drop-shadow-sm">${displayTraffic}</div>
                             <div class="text-[10px] text-slate-500 uppercase tracking-wider">今日流量</div>
+                          </div>
+                          <div class="text-right space-y-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div class="text-xs text-slate-400 font-mono truncate max-w-[120px]" title="${n.ip}">${maskAddress(n.ip, true)}</div>
+                            <div id="vps-isp-${n.node_id}" class="text-[10px] text-slate-500 truncate max-w-[120px]"></div>
                           </div>
                         </div>
                       </div>
                     `;
                 }).join('');
 
-                // Fetch ISPs for these nodes
+                // Fetch ISPs and flags for these nodes
                 data.nodes.forEach(n => {
                     fetch(`/geo?ip=${n.ip}`)
                       .then(r => r.json())
                       .then(d => {
-                          const el = document.getElementById(`vps-isp-${n.node_id}`);
-                          if (el && d.isp) {
-                              el.textContent = d.isp;
-                              el.title = d.country_code || '';
+                          // Update ISP
+                          const ispEl = document.getElementById(`vps-isp-${n.node_id}`);
+                          if (ispEl && d.isp) {
+                              ispEl.textContent = d.isp;
+                              ispEl.title = d.isp;
+                          }
+                          
+                          // Update flag emoji
+                          const flagEl = document.getElementById(`vps-flag-${n.node_id}`);
+                          if (flagEl && d.country_code) {
+                              // Convert country code to flag emoji
+                              const flag = d.country_code
+                                  .toUpperCase()
+                                  .split('')
+                                  .map(c => String.fromCodePoint(0x1F1E6 + c.charCodeAt(0) - 65))
+                                  .join('');
+                              flagEl.textContent = flag;
+                              flagEl.title = d.country_code;
                           }
                       })
                       .catch(() => void 0);
                 });
+                
+                // Update task counts for each node
+                if (window.schedulesData) {
+                    const taskCounts = {};
+                    window.schedulesData.forEach(s => {
+                        if (s.enabled) {
+                            if (s.src_node_id) taskCounts[s.src_node_id] = (taskCounts[s.src_node_id] || 0) + 1;
+                            if (s.dst_node_id) taskCounts[s.dst_node_id] = (taskCounts[s.dst_node_id] || 0) + 1;
+                        }
+                    });
+                    
+                    data.nodes.forEach(n => {
+                        const tasksEl = document.getElementById(`vps-tasks-${n.node_id}`);
+                        if (tasksEl) {
+                            const count = taskCounts[n.node_id] || 0;
+                            tasksEl.textContent = count > 0 ? `${count} 任务` : '无任务';
+                            if (count > 0) {
+                                tasksEl.classList.remove('bg-slate-700/50', 'text-slate-400');
+                                tasksEl.classList.add('bg-sky-500/20', 'text-sky-400');
+                            }
+                        }
+                    });
+                }
             }
         }
 
@@ -6345,8 +6391,12 @@ async def _check_node_health(node: Node) -> NodeWithStatus:
     
     # For NAT/reverse mode nodes, check heartbeat instead of HTTP
     node_mode = getattr(node, "agent_mode", "normal") or "normal"
+    
+    # Debug: Log what mode we're seeing for this node
+    last_heartbeat = getattr(node, "last_heartbeat", None)
+    logger.info(f"[HEALTH] Checking {node.name}: agent_mode='{node_mode}', last_heartbeat={last_heartbeat}")
+    
     if node_mode == "reverse":
-        last_heartbeat = getattr(node, "last_heartbeat", None)
         agent_version = getattr(node, "agent_version", None)
         
         if last_heartbeat:
@@ -6357,10 +6407,11 @@ async def _check_node_health(node: Node) -> NodeWithStatus:
                 last_heartbeat = last_heartbeat.replace(tzinfo=timezone.utc)
             
             heartbeat_age = (now - last_heartbeat).total_seconds()
-            logger.debug(f"[HEALTH] {node.name}: mode={node_mode}, heartbeat_age={heartbeat_age:.1f}s")
+            logger.info(f"[HEALTH] {node.name}: heartbeat_age={heartbeat_age:.1f}s (threshold=60s)")
             
             # Check if heartbeat is within 60 seconds (online threshold)
             if heartbeat_age < 60:
+                logger.info(f"[HEALTH] {node.name}: ONLINE (reverse mode, heartbeat fresh)")
                 return NodeWithStatus(
                     id=node.id,
                     name=node.name,
