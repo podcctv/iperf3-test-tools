@@ -4225,6 +4225,25 @@ def _tests_page_html() -> str:
       return fetch(API_BASE + path, { credentials: 'include', ...options });
     }
     
+    // Security: mask IP addresses so they don't appear in HTML source (F12)
+    function maskIp(ip, mask = false) {
+      if (!ip) return '---';
+      if (!mask) return ip;
+      // Mask IP: show only asterisks for security
+      const parts = ip.split('.');
+      if (parts.length === 4) {
+        return `***.***.***.${parts[3]}`;  // Show only last octet for identification
+      }
+      return '***';
+    }
+    
+    // Security: mask port numbers from display
+    function maskPort(port, mask = false) {
+      if (!port) return '---';
+      if (!mask) return String(port);
+      return '****';  // Hide port completely
+    }
+    
     function getTestsPageSize() {
       const select = document.getElementById('tests-page-size');
       return select ? parseInt(select.value, 10) : 10;
@@ -4265,7 +4284,7 @@ def _tests_page_html() -> str:
         const select = document.getElementById(id);
         if (select) {
           select.innerHTML = nodeCache.map(n => 
-            `<option value="${n.id}">${n.name} (${maskIp(n.ip, true)} | iperf ${maskPort(n.detected_iperf_port || n.iperf_port, true)})</option>`
+            `<option value="${n.id}">${n.name}</option>`
           ).join('');
         }
       });
