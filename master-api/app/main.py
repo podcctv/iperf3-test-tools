@@ -7143,10 +7143,10 @@ async def streaming_test(node_id: int, db: Session = Depends(get_db)):
     return await _probe_streaming_unlock(node)
 
 
-async def _ensure_iperf_server_running(dst: Node, requested_port: int) -> bool:
+async def _ensure_iperf_server_running(dst: Node, requested_port: int) -> int:
     """Ensure iperf server is running on the requested port.
     
-    Returns True if server was started (or restarted), False if already running on correct port.
+    Returns the port number the server is running on.
     """
     dst_status = await health_monitor.check_node(dst)
     current_port = dst_status.detected_iperf_port or dst_status.iperf_port
@@ -7156,16 +7156,16 @@ async def _ensure_iperf_server_running(dst: Node, requested_port: int) -> bool:
     if not dst_status.server_running:
         logger.info(f"Starting iperf server on {dst.name} at port {requested_port}")
         await _start_iperf_server(dst, requested_port)
-        return True
+        return requested_port
     
     if current_port != requested_port:
         logger.info(f"Restarting iperf server on {dst.name}: {current_port} -> {requested_port}")
         await _stop_iperf_server(dst)
         await _start_iperf_server(dst, requested_port)
-        return True
+        return requested_port
     
     logger.info(f"Iperf server already running on correct port {current_port}")
-    return False
+    return current_port
 
 
 async def _sync_whitelist_to_agents(db: Session, max_retries: int = 2, force: bool = False) -> dict:
@@ -7842,11 +7842,12 @@ async def create_test(test: TestCreate, db: Session = Depends(get_db)):
     logger.info(f"Using iperf port {requested_port} for test (detected: {dst_status.detected_iperf_port}, node: {dst.iperf_port}, request: {test.port})")
 
     server_started = False
-    server_started = await _ensure_iperf_server_running(dst, requested_port)
+    actual_port = await _ensure_iperf_server_running(dst, requested_port)
+    server_started = True  # Server is always running after this call
 
     payload = {
         "target": dst.ip,
-        "port": requested_port,
+        "port": actual_port,  # Use the actual port returned by ensure function
         "duration": test.duration,
         "protocol": test.protocol,
         "parallel": test.parallel,
@@ -7930,8 +7931,10 @@ async def create_dual_suite(test: DualSuiteTestCreate, db: Session = Depends(get
     logger.info(f"Using iperf port {requested_port} for suite test (detected: {dst_status.detected_iperf_port}, node: {dst.iperf_port}, request: {test.port})")
 
     server_started = False
+    actual_port = 0
     try:
-        server_started = await _ensure_iperf_server_running(dst, requested_port)
+        actual_port = await _ensure_iperf_server_running(dst, requested_port)
+        server_started = True  # Server is always running after this call
         
         # When direction is swapped, we need to toggle the reverse flags
         # so that "去程" and "回程" maintain their original meaning
@@ -7946,7 +7949,7 @@ async def create_dual_suite(test: DualSuiteTestCreate, db: Session = Depends(get
         for label, protocol, reverse, bandwidth in plan:
             payload = {
                 "target": dst.ip,
-                "port": requested_port,
+                "port": actual_port,  # Use actual port from ensure function
                 "duration": test.duration,
                 "protocol": protocol,
                 "parallel": test.parallel,
