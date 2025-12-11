@@ -23,7 +23,7 @@ from .config import settings
 from .constants import DEFAULT_IPERF_PORT
 from .database import SessionLocal, engine, get_db
 from .agent_store import AgentConfigStore
-from .models import Base, Node, TestResult, TestSchedule, ScheduleResult
+from .models import Base, Node, TestResult, TestSchedule, ScheduleResult, PendingTask
 from .remote_agent import fetch_agent_logs, redeploy_agent, remove_agent_container, RemoteCommandError
 from .schemas import (
     AgentActionResult,
@@ -213,6 +213,45 @@ def _ensure_schedule_columns() -> None:
         connection.commit()
 
 
+def _ensure_reverse_mode_columns() -> None:
+    """Add columns needed for reverse mode (NAT) agent support."""
+    dialect = engine.dialect.name
+    with engine.connect() as connection:
+        if dialect == "sqlite":
+            columns = connection.exec_driver_sql("PRAGMA table_info(nodes)").fetchall()
+            column_names = {col[1] for col in columns}
+            
+            if "agent_mode" not in column_names:
+                connection.exec_driver_sql(
+                    "ALTER TABLE nodes ADD COLUMN agent_mode VARCHAR DEFAULT 'normal'"
+                )
+            if "agent_version" not in column_names:
+                connection.exec_driver_sql(
+                    "ALTER TABLE nodes ADD COLUMN agent_version VARCHAR"
+                )
+            if "last_heartbeat" not in column_names:
+                connection.exec_driver_sql(
+                    "ALTER TABLE nodes ADD COLUMN last_heartbeat DATETIME"
+                )
+        elif dialect == "postgresql":
+            result = connection.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='nodes'"
+                )
+            )
+            column_names = {row[0] for row in result}
+            
+            if "agent_mode" not in column_names:
+                connection.execute(text("ALTER TABLE nodes ADD COLUMN agent_mode VARCHAR DEFAULT 'normal'"))
+            if "agent_version" not in column_names:
+                connection.execute(text("ALTER TABLE nodes ADD COLUMN agent_version VARCHAR"))
+            if "last_heartbeat" not in column_names:
+                connection.execute(text("ALTER TABLE nodes ADD COLUMN last_heartbeat TIMESTAMPTZ"))
+        
+        connection.commit()
+
+
 def _init_database_with_retry(max_attempts: int = 5, delay_seconds: float = 2.0) -> None:
     """Initialize database schema with simple retry to handle cold starts."""
 
@@ -224,6 +263,8 @@ def _init_database_with_retry(max_attempts: int = 5, delay_seconds: float = 2.0)
             _ensure_iperf_port_column()
             _ensure_test_result_columns()
             _ensure_schedule_columns()
+            _ensure_whitelist_sync_columns()
+            _ensure_reverse_mode_columns()
             return
         except Exception:  # pragma: no cover - best-effort bootstrap
             logger.exception(
@@ -232,6 +273,7 @@ def _init_database_with_retry(max_attempts: int = 5, delay_seconds: float = 2.0)
             if attempt >= max_attempts:
                 raise
             time.sleep(delay_seconds)
+
 
 
 _init_database_with_retry()
@@ -2682,8 +2724,8 @@ def _login_html() -> str:
           
           // Internal Agent Badge - for NAT/reverse connection agents
           let internalBadge = '';
-          if (node.is_internal) {
-              internalBadge = `<span class="inline-flex items-center rounded-md bg-violet-500/10 px-2 py-0.5 text-xs font-medium text-violet-400 ring-1 ring-inset ring-violet-500/20 cursor-help" title="内网设备 (反向穿透模式)">🔗 内网</span>`;
+          if (node.agent_mode === 'reverse') {
+              internalBadge = `<span class="inline-flex items-center rounded-md bg-violet-500/10 px-2 py-0.5 text-xs font-medium text-violet-400 ring-1 ring-inset ring-violet-500/20 cursor-help" title="内网穿透模式 (反向注册模式)">🔗 内网穿透</span>`;
           }
 
 
@@ -2719,7 +2761,6 @@ def _login_html() -> str:
               <div class="flex flex-wrap items-center gap-2" data-streaming-badges="${node.id}">${streamingBadges || ''}</div>
               <p class="${styles.textMuted} flex items-center gap-2 text-xs">
                 <span class="font-mono text-slate-400" data-node-ip-display="${node.id}">${ipMasked}</span>
-                <span class="text-slate-600" data-node-agent-port="${node.id}">:${agentPortDisplay}</span>
                 
                 <!-- ISP Display -->
                 <span class="text-slate-500 border-l border-slate-700 pl-2" id="isp-${node.id}"></span>
@@ -6262,8 +6303,63 @@ def root() -> dict:
 
 
 async def _check_node_health(node: Node) -> NodeWithStatus:
-    url = f"http://{node.ip}:{node.agent_port}/health"
     checked_at = int(datetime.now(timezone.utc).timestamp())
+    
+    # For NAT/reverse mode nodes, check heartbeat instead of HTTP
+    node_mode = getattr(node, "agent_mode", "normal") or "normal"
+    if node_mode == "reverse":
+        last_heartbeat = getattr(node, "last_heartbeat", None)
+        agent_version = getattr(node, "agent_version", None)
+        
+        if last_heartbeat:
+            # Check if heartbeat is within 60 seconds (online threshold)
+            heartbeat_age = (datetime.now(timezone.utc) - last_heartbeat).total_seconds()
+            if heartbeat_age < 60:
+                return NodeWithStatus(
+                    id=node.id,
+                    name=node.name,
+                    ip=node.ip,
+                    agent_port=node.agent_port,
+                    description=node.description,
+                    iperf_port=node.iperf_port,
+                    status="online",
+                    server_running=True,  # Assume server is running for reverse agents
+                    health_timestamp=int(last_heartbeat.timestamp()),
+                    checked_at=checked_at,
+                    detected_iperf_port=node.iperf_port,
+                    detected_agent_port=node.agent_port,
+                    backbone_latency=None,
+                    streaming=None,
+                    streaming_checked_at=None,
+                    whitelist_sync_status=getattr(node, "whitelist_sync_status", "unknown"),
+                    whitelist_sync_message=getattr(node, "whitelist_sync_message", None),
+                    whitelist_sync_at=getattr(node, "whitelist_sync_at", None),
+                    agent_version=agent_version,
+                    agent_mode=node_mode,
+                )
+        
+        # NAT node is offline (no recent heartbeat)
+        return NodeWithStatus(
+            id=node.id,
+            name=node.name,
+            ip=node.ip,
+            agent_port=node.agent_port,
+            iperf_port=node.iperf_port,
+            description=node.description,
+            status="offline",
+            server_running=None,
+            health_timestamp=int(last_heartbeat.timestamp()) if last_heartbeat else None,
+            checked_at=checked_at,
+            detected_iperf_port=None,
+            detected_agent_port=None,
+            whitelist_sync_status=getattr(node, "whitelist_sync_status", "unknown"),
+            whitelist_sync_at=getattr(node, "whitelist_sync_at", None),
+            agent_version=agent_version,
+            agent_mode=node_mode,
+        )
+    
+    # Normal nodes - check via HTTP health endpoint
+    url = f"http://{node.ip}:{node.agent_port}/health"
     try:
         async with httpx.AsyncClient(timeout=settings.request_timeout) as client:
             response = await client.get(url)
@@ -6301,6 +6397,7 @@ async def _check_node_health(node: Node) -> NodeWithStatus:
                     whitelist_sync_message=getattr(node, "whitelist_sync_message", None),
                     whitelist_sync_at=getattr(node, "whitelist_sync_at", None),
                     agent_version=data.get("version"),
+                    agent_mode=node_mode,
                 )
     except Exception:
         pass
@@ -6320,7 +6417,9 @@ async def _check_node_health(node: Node) -> NodeWithStatus:
         detected_agent_port=None,
         whitelist_sync_status=getattr(node, "whitelist_sync_status", "unknown"),
         whitelist_sync_at=getattr(node, "whitelist_sync_at", None),
+        agent_mode=node_mode,
     )
+
 
 
 # --- Reverse Agent Registration (for internal/NAT devices) ---
@@ -7493,14 +7592,18 @@ async def _execute_schedule_task(schedule_id: int):
 
             # Use a shared timestamp for all tests in this schedule run (for Chart align)
             execution_time = datetime.now(timezone.utc)
+            
+            # Check if source node is NAT (reverse mode) - queue task for agent to poll
+            src_mode = getattr(src_node, "agent_mode", "normal") or "normal"
+            is_nat_source = (src_mode == "reverse")
 
             for proto in protocols:
                 try:
                     # 构造测试参数
                     # Always use detected port to handle dynamic port changes (e.g., after agent reinstall)
                     test_params = {
-                        "target": dst_node.ip,
-                        "port": current_port,
+                        "target_ip": dst_node.ip,
+                        "target_port": current_port,
                         "duration": schedule.duration,
                         "protocol": proto,
                         "parallel": schedule.parallel,
@@ -7508,9 +7611,35 @@ async def _execute_schedule_task(schedule_id: int):
                         "bidir": is_bidir,
                     }
                     
-                    # 调用agent执行测试
-                    raw_data = await _call_agent_test(src_node, test_params, schedule.duration)
+                    if is_nat_source:
+                        # NAT source node: queue task for agent to poll and execute
+                        pending_task = PendingTask(
+                            node_name=src_node.name,
+                            task_type="iperf_test",
+                            task_data=test_params,
+                            schedule_id=schedule_id,
+                            status="pending",
+                        )
+                        db.add(pending_task)
+                        db.commit()
+                        logger.info(f"[REVERSE] Schedule {schedule_id} ({proto}) queued as PendingTask for NAT agent {src_node.name}")
+                        # Don't wait for result - agent will report via /api/agent/result
+                        continue
+                    
+                    # Normal source node: call agent directly
+                    # Adjust params format for _call_agent_test (uses "target" not "target_ip")
+                    call_params = {
+                        "target": test_params["target_ip"],
+                        "port": test_params["target_port"],
+                        "duration": test_params["duration"],
+                        "protocol": test_params["protocol"],
+                        "parallel": test_params["parallel"],
+                        "reverse": test_params["reverse"],
+                        "bidir": test_params.get("bidir", False),
+                    }
+                    raw_data = await _call_agent_test(src_node, call_params, schedule.duration)
                     summary = _summarize_metrics(raw_data)
+
                     
                     # Fix: Filter metrics based on direction to prevent pollution
                     if not is_bidir and summary:
@@ -8007,3 +8136,215 @@ def debug_failures(db: Session = Depends(get_db)):
         .limit(10)
     ).all()
     return [{"id": r.id, "schedule_id": r.schedule_id, "time": r.executed_at, "error": r.error_message} for r in results]
+
+
+# ============================================================================
+# Reverse Mode (NAT) Agent API Endpoints
+# ============================================================================
+
+@app.post("/api/agent/register")
+async def agent_register(
+    request: Request,
+    node_name: str = Body(..., embed=False, alias="node_name"),
+    iperf_port: int = Body(5201, embed=False),
+    agent_version: str = Body(None, embed=False),
+    mode: str = Body("reverse", embed=False),
+    db: Session = Depends(get_db)
+):
+    """
+    Register a reverse mode (NAT) agent with the master.
+    Called periodically by agents behind NAT to maintain heartbeat.
+    """
+    # Get client IP from request
+    client_ip = request.client.host if request.client else "unknown"
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        client_ip = forwarded.split(",")[0].strip()
+    
+    # Find or create node
+    node = db.scalars(select(Node).where(Node.name == node_name)).first()
+    
+    if node:
+        # Update existing node
+        node.last_heartbeat = datetime.now(timezone.utc)
+        node.agent_version = agent_version
+        node.agent_mode = mode
+        node.iperf_port = iperf_port
+        # Update IP if it changed (NAT agents may have dynamic IPs)
+        if node.ip != client_ip and client_ip != "unknown":
+            logger.info(f"[REVERSE] Agent {node_name} IP changed: {node.ip} -> {client_ip}")
+            node.ip = client_ip
+    else:
+        # Create new node for this agent
+        logger.info(f"[REVERSE] New agent registered: {node_name} from {client_ip}")
+        node = Node(
+            name=node_name,
+            ip=client_ip,
+            agent_port=8000,  # Not used for reverse mode
+            iperf_port=iperf_port,
+            agent_mode=mode,
+            agent_version=agent_version,
+            last_heartbeat=datetime.now(timezone.utc),
+            is_internal=True,  # NAT agents are internal
+        )
+        db.add(node)
+    
+    db.commit()
+    db.refresh(node)
+    
+    logger.debug(f"[REVERSE] Agent {node_name} heartbeat, version={agent_version}")
+    
+    return {
+        "status": "ok",
+        "node_id": node.id,
+        "node_name": node.name,
+        "message": "registered"
+    }
+
+
+@app.get("/api/agent/tasks")
+async def agent_get_tasks(
+    node_name: str = Query(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Get pending tasks for a reverse mode (NAT) agent.
+    Agent polls this endpoint to receive tasks to execute.
+    """
+    # Find pending tasks for this agent
+    tasks = db.scalars(
+        select(PendingTask)
+        .where(PendingTask.node_name == node_name)
+        .where(PendingTask.status == "pending")
+        .order_by(PendingTask.created_at)
+        .limit(10)  # Limit to prevent overload
+    ).all()
+    
+    # Mark tasks as claimed
+    task_list = []
+    now = datetime.now(timezone.utc)
+    for task in tasks:
+        task.status = "claimed"
+        task.claimed_at = now
+        task_list.append({
+            "id": task.id,
+            "type": task.task_type,
+            "target_ip": task.task_data.get("target_ip"),
+            "target_port": task.task_data.get("target_port", 5201),
+            "duration": task.task_data.get("duration", 10),
+            "protocol": task.task_data.get("protocol", "tcp"),
+            "parallel": task.task_data.get("parallel", 1),
+            "reverse": task.task_data.get("reverse", True),  # Default to reverse for NAT agents
+            "bandwidth": task.task_data.get("bandwidth"),
+            "schedule_id": task.schedule_id,
+        })
+    
+    db.commit()
+    
+    if task_list:
+        logger.info(f"[REVERSE] Agent {node_name} claimed {len(task_list)} tasks")
+    
+    return {"tasks": task_list}
+
+
+@app.post("/api/agent/result")
+async def agent_report_result(
+    task_id: int = Body(...),
+    result: dict = Body(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Report task execution result from a reverse mode (NAT) agent.
+    """
+    task = db.get(PendingTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+    
+    now = datetime.now(timezone.utc)
+    task.completed_at = now
+    task.result_data = result
+    
+    if result.get("status") == "ok":
+        task.status = "completed"
+        
+        # If this task is linked to a schedule, create TestResult and ScheduleResult
+        if task.schedule_id:
+            schedule = db.get(TestSchedule, task.schedule_id)
+            if schedule:
+                try:
+                    iperf_data = result.get("iperf_result", {})
+                    summary = _summarize_metrics({"iperf_result": iperf_data} if iperf_data else result)
+                    
+                    test_result = TestResult(
+                        src_node_id=schedule.src_node_id,
+                        dst_node_id=schedule.dst_node_id,
+                        protocol=task.task_data.get("protocol", "tcp"),
+                        params=task.task_data,
+                        raw_result=result,
+                        summary=summary,
+                        created_at=now,
+                    )
+                    db.add(test_result)
+                    db.flush()
+                    
+                    schedule_result = ScheduleResult(
+                        schedule_id=task.schedule_id,
+                        test_result_id=test_result.id,
+                        executed_at=now,
+                        status="success",
+                    )
+                    db.add(schedule_result)
+                    
+                    logger.info(f"[REVERSE] Task {task_id} completed, TestResult {test_result.id} created")
+                except Exception as e:
+                    logger.error(f"[REVERSE] Failed to create TestResult for task {task_id}: {e}")
+                    schedule_result = ScheduleResult(
+                        schedule_id=task.schedule_id,
+                        test_result_id=None,
+                        executed_at=now,
+                        status="failed",
+                        error_message=f"Failed to process result: {e}",
+                    )
+                    db.add(schedule_result)
+    else:
+        task.status = "failed"
+        task.error_message = result.get("error", "Unknown error")
+        
+        # Create failed ScheduleResult if linked to schedule
+        if task.schedule_id:
+            schedule_result = ScheduleResult(
+                schedule_id=task.schedule_id,
+                test_result_id=None,
+                executed_at=now,
+                status="failed",
+                error_message=task.error_message,
+            )
+            db.add(schedule_result)
+        
+        logger.warning(f"[REVERSE] Task {task_id} failed: {task.error_message}")
+    
+    db.commit()
+    
+    return {"status": "ok", "task_id": task_id}
+
+
+@app.get("/api/agent/pending_count")
+async def agent_pending_count(
+    node_name: str = Query(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Get count of pending tasks, optionally filtered by node.
+    Useful for monitoring task queue status.
+    """
+    query = select(PendingTask).where(PendingTask.status == "pending")
+    if node_name:
+        query = query.where(PendingTask.node_name == node_name)
+    
+    tasks = db.scalars(query).all()
+    
+    return {
+        "pending_count": len(tasks),
+        "node_name": node_name
+    }
+

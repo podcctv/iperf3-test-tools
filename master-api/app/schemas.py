@@ -71,6 +71,7 @@ class NodeWithStatus(NodeRead):
     streaming: list[StreamingServiceStatus] | None = None
     streaming_checked_at: int | None = None
     agent_version: str | None = None
+    agent_mode: str | None = "normal"  # "normal" or "reverse" for NAT agents
 
 
 class TestCreate(BaseModel):

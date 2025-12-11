@@ -44,6 +44,17 @@ if _config_path.exists():
     except Exception:
         pass
 
+# Log reverse mode configuration at startup
+print(f"[AGENT] Mode: {AGENT_MODE}", flush=True)
+print(f"[AGENT] MASTER_URL: {MASTER_URL or '(not set)'}", flush=True)
+print(f"[AGENT] NODE_NAME: {NODE_NAME or '(not set)'}", flush=True)
+print(f"[AGENT] IPERF_PORT: {IPERF_PORT}", flush=True)
+if AGENT_MODE == "reverse":
+    if not MASTER_URL:
+        print("[AGENT] ERROR: MASTER_URL not set for reverse mode!", flush=True)
+    if not NODE_NAME:
+        print("[AGENT] ERROR: NODE_NAME not set for reverse mode!", flush=True)
+
 _reverse_thread: threading.Thread | None = None
 _reverse_running = False
 
@@ -1065,6 +1076,27 @@ if STREAMING_AUTO_ENABLED:
     auto_runner.start()
 
 
+# Auto-start reverse mode at module load (not just in __main__)
+def _init_reverse_mode():
+    """Initialize reverse mode polling thread if configured."""
+    global _reverse_thread
+    
+    if AGENT_MODE != "reverse":
+        return
+    
+    if not MASTER_URL or not NODE_NAME:
+        print("[AGENT] Cannot start reverse mode: missing MASTER_URL or NODE_NAME", flush=True)
+        return
+    
+    print(f"[AGENT] Starting reverse mode thread: master={MASTER_URL}, node={NODE_NAME}", flush=True)
+    _reverse_thread = threading.Thread(target=_reverse_mode_loop, daemon=True, name="ReverseMode")
+    _reverse_thread.start()
+
+
+# NOTE: _init_reverse_mode() will be called at end of file after _reverse_mode_loop is defined
+
+
+
 def _ensure_streaming_script() -> Path:
     """Download the upstream streaming test script if it is missing or stale."""
 
@@ -1795,9 +1827,9 @@ def _reverse_mode_report_result(task_id: int, result: dict):
     if not MASTER_URL:
         return
     
-    result_url = f"{MASTER_URL.rstrip('/')}/api/agent/tasks/{task_id}/result"
+    result_url = f"{MASTER_URL.rstrip('/')}/api/agent/result"
     payload = {
-        "node_name": NODE_NAME,
+        "task_id": task_id,
         "result": result,
     }
     
@@ -1863,10 +1895,11 @@ def start_reverse_mode():
     _reverse_thread.start()
 
 
+# Auto-start reverse mode when module loads (after all functions are defined)
+_init_reverse_mode()
+
+
 if __name__ == "__main__":
-    # Start reverse mode polling if configured
-    if AGENT_MODE == "reverse":
-        start_reverse_mode()
-    
+    # Flask dev server - reverse mode already started at module load
     app.run(host="0.0.0.0", port=AGENT_API_PORT)
 
