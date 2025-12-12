@@ -7877,12 +7877,23 @@ async def run_traceroute(node_id: int, req: TracerouteRequest, db: Session = Dep
     if not node:
         raise HTTPException(status_code=404, detail="Node not found")
     
-    # Check node is online
-    node_status = await health_monitor.check_node(node)
-    if node_status.status != "online":
-        raise HTTPException(status_code=503, detail=f"Node {node.name} is offline")
+    # Check if this is a reverse agent
+    is_reverse = node.agent_mode == "reverse"
     
-    # Call agent's traceroute endpoint
+    if is_reverse:
+        # For reverse agents, create a pending task and wait for result
+        return await _run_traceroute_via_task_queue(node, req, db)
+    else:
+        # For normal agents, check online and call directly
+        node_status = await health_monitor.check_node(node)
+        if node_status.status != "online":
+            raise HTTPException(status_code=503, detail=f"Node {node.name} is offline")
+        
+        return await _run_traceroute_direct(node, req)
+
+
+async def _run_traceroute_direct(node: Node, req: TracerouteRequest) -> TracerouteResponse:
+    """Execute traceroute by directly calling the agent."""
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(
@@ -7916,6 +7927,75 @@ async def run_traceroute(node_id: int, req: TracerouteRequest, db: Session = Dep
     except Exception as e:
         logger.error(f"Traceroute error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+async def _run_traceroute_via_task_queue(node: Node, req: TracerouteRequest, db: Session) -> TracerouteResponse:
+    """Execute traceroute for reverse agent via task queue (agent polls for task)."""
+    from datetime import timezone
+    
+    # Create pending task
+    task = PendingTask(
+        node_name=node.name,
+        task_type="traceroute",
+        task_data={
+            "target": req.target,
+            "max_hops": req.max_hops,
+            "include_geo": req.include_geo,
+        },
+        status="pending",
+    )
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+    
+    task_id = task.id
+    logger.info(f"Created traceroute task {task_id} for reverse agent {node.name}")
+    
+    # Poll for result (agent will pick up task and submit result)
+    max_wait = 180  # 3 minutes max wait
+    poll_interval = 2
+    elapsed = 0
+    
+    while elapsed < max_wait:
+        await asyncio.sleep(poll_interval)
+        elapsed += poll_interval
+        
+        # Check task status
+        db.refresh(task)
+        task = db.get(PendingTask, task_id)
+        
+        if not task:
+            raise HTTPException(status_code=500, detail="Task disappeared")
+        
+        if task.status == "completed" and task.result_data:
+            result = task.result_data
+            
+            # Clean up task
+            db.delete(task)
+            db.commit()
+            
+            return TracerouteResponse(
+                status="ok",
+                target=req.target,
+                source_node_id=node.id,
+                source_node_name=node.name,
+                total_hops=result.get("total_hops", 0),
+                hops=result.get("hops", []),
+                route_hash=result.get("route_hash", ""),
+                tool_used=result.get("tool_used", "unknown"),
+                elapsed_ms=result.get("elapsed_ms", 0),
+            )
+        
+        if task.status == "failed":
+            error_msg = task.error_message or "Traceroute failed"
+            db.delete(task)
+            db.commit()
+            raise HTTPException(status_code=500, detail=error_msg)
+    
+    # Timeout - mark task as expired
+    task.status = "expired"
+    db.commit()
+    raise HTTPException(status_code=504, detail=f"Traceroute timed out waiting for reverse agent {node.name}")
 
 
 # ============== TraceSchedule CRUD API ==============

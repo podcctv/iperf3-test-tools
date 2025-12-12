@@ -2025,6 +2025,72 @@ def _execute_test_task(task: dict) -> dict:
         return {"status": "error", "error": str(e)}
 
 
+def _execute_traceroute_task(task: dict) -> dict:
+    """Execute a traceroute task received from master and return result."""
+    task_data = task.get("task_data", {})
+    target = task_data.get("target")
+    max_hops = task_data.get("max_hops", 30)
+    include_geo = task_data.get("include_geo", True)
+    
+    if not target:
+        return {"status": "error", "error": "No target specified"}
+    
+    print(f"[REVERSE] Executing traceroute to {target}", flush=True)
+    
+    start_time = time.time()
+    
+    try:
+        # Prefer mtr if available
+        cmd = f"mtr -r -n -c 3 -m {max_hops} {target}"
+        result = subprocess.run(
+            shlex.split(cmd),
+            capture_output=True,
+            text=True,
+            timeout=120
+        )
+        
+        if result.returncode == 0:
+            hops = _parse_mtr_output(result.stdout)
+            tool_used = "mtr"
+        else:
+            # Fall back to traceroute
+            cmd = f"traceroute -n -m {max_hops} {target}"
+            result = subprocess.run(
+                shlex.split(cmd),
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+            hops = _parse_traceroute_output(result.stdout)
+            tool_used = "traceroute"
+        
+        # Add geo info if requested
+        if include_geo:
+            for hop in hops:
+                if hop["ip"] and hop["ip"] != "*":
+                    hop["geo"] = _get_hop_geo(hop["ip"])
+        
+        # Calculate route hash
+        ips = [h["ip"] for h in hops if h["ip"] != "*"]
+        route_hash = "|".join(ips)
+        
+        elapsed_ms = int((time.time() - start_time) * 1000)
+        
+        return {
+            "status": "ok",
+            "target": target,
+            "total_hops": len(hops),
+            "hops": hops,
+            "route_hash": route_hash,
+            "tool_used": tool_used,
+            "elapsed_ms": elapsed_ms,
+        }
+        
+    except subprocess.TimeoutExpired:
+        return {"status": "error", "error": "Traceroute timed out"}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
 def _reverse_mode_register():
     """Register this agent with the master."""
     if not MASTER_URL or not NODE_NAME:
@@ -2140,8 +2206,15 @@ def _reverse_mode_loop():
             if tasks:
                 for task in tasks:
                     task_id = task.get("id")
-                    print(f"[REVERSE] Executing task {task_id}: {task.get('target_ip')}", flush=True)
-                    result = _execute_test_task(task)
+                    task_type = task.get("task_type", "iperf_test")
+                    print(f"[REVERSE] Executing task {task_id} (type: {task_type})", flush=True)
+                    
+                    if task_type == "traceroute":
+                        result = _execute_traceroute_task(task)
+                    else:
+                        # Default: iperf test
+                        result = _execute_test_task(task)
+                    
                     _reverse_mode_report_result(task_id, result)
             
             time.sleep(POLL_INTERVAL)
