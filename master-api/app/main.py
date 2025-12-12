@@ -6819,7 +6819,7 @@ def _trace_html() -> str:
 
     async function loadNodes() {
       try {
-        const res = await apiFetch('/api/nodes');
+        const res = await apiFetch('/nodes');
         nodes = await res.json();
         
         const srcSelect = document.getElementById('trace-src-node');
