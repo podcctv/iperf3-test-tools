@@ -6871,6 +6871,20 @@ def _trace_html() -> str:
       }
     }
 
+    function getTargetDisplayName() {
+      const type = document.getElementById('trace-target-type').value;
+      if (type === 'custom') {
+        return document.getElementById('trace-target-input').value.trim();
+      } else {
+        const select = document.getElementById('trace-target-node');
+        const option = select.options[select.selectedIndex];
+        // Return node name without IP
+        const text = option?.textContent || '';
+        const name = text.split(' (')[0];
+        return name || option?.dataset?.ip || '';
+      }
+    }
+
     function renderFlag(code) {
       if (!code) return '';
       return `<img src="/flags/${code}" alt="${code}" class="inline-block w-5 h-4 mr-2 rounded-sm">`;
@@ -6880,6 +6894,7 @@ def _trace_html() -> str:
       const srcSelect = document.getElementById('trace-src-node');
       const nodeId = srcSelect.value;
       const target = getTargetAddress();
+      const targetDisplayName = getTargetDisplayName();
       
       if (!nodeId) { alert('请选择源节点'); return; }
       if (!target) { alert('请输入或选择目标地址'); return; }
@@ -6905,7 +6920,8 @@ def _trace_html() -> str:
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || 'Traceroute failed');
         
-        metaDiv.textContent = `${data.source_node_name} → ${data.target} | ${data.total_hops} 跳 | ${data.elapsed_ms}ms | 使用 ${data.tool_used}`;
+        // Show target display name (node name or custom IP)
+        metaDiv.textContent = `${data.source_node_name} → ${targetDisplayName} | ${data.total_hops} 跳 | ${data.elapsed_ms}ms | 使用 ${data.tool_used}`;
         
         hopsDiv.innerHTML = data.hops.map(hop => {
           const geo = hop.geo || {};
