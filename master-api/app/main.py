@@ -1188,6 +1188,10 @@ def _login_html() -> str:
                 <p class="text-sm text-slate-400" id="auth-hint"></p>
               </div>
               <div class="flex flex-wrap items-center gap-3">
+                <button id="open-traceroute" onclick="toggleTracerouteModal(true)" class="rounded-lg border border-cyan-500/40 bg-cyan-500/15 px-4 py-2 text-sm font-semibold text-cyan-100 shadow-sm transition hover:bg-cyan-500/25 inline-flex items-center gap-2">
+                  <span class="text-base">🌐</span>
+                  <span>路由追踪</span>
+                </button>
                 <a href="/web/tests" class="rounded-lg border border-sky-500/40 bg-sky-500/15 px-4 py-2 text-sm font-semibold text-sky-100 shadow-sm transition hover:bg-sky-500/25">单次测试</a>
                 <a href="/web/schedules" class="rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-100 shadow-sm transition hover:bg-emerald-500/25">定时任务</a>
                 <a href="/web/whitelist" class="guest-hide rounded-lg border border-amber-500/40 bg-amber-500/15 px-4 py-2 text-sm font-semibold text-amber-100 shadow-sm transition hover:bg-amber-500/25">白名单管理</a>
@@ -1470,7 +1474,7 @@ def _login_html() -> str:
       
       <div class="mb-6 flex items-center justify-between gap-2 pr-12">
         <div>
-          <p class="text-xs uppercase tracking-[0.2em] text-indigo-300/80">系统管理</p>
+          <p class="text-xs uppercase tracking-[0.2em] text-indigo-300/80">数据库管理</p>
           <h3 class="text-2xl font-semibold text-white">设置</h3>
         </div>
       </div>
@@ -1484,7 +1488,7 @@ def _login_html() -> str:
           📦 配置管理
         </button>
         <button id="admin-tab" onclick="setActiveSettingsTab('admin')" class="rounded-full px-4 py-2 text-sm font-semibold text-slate-300 transition hover:text-white">
-          🔧 系统管理
+          🗄️ 数据库管理
         </button>
       </div>
 
@@ -1562,18 +1566,46 @@ def _login_html() -> str:
           </div>
         </div>
         
-        <div class="rounded-xl border border-slate-800/60 bg-slate-950/40 p-4">
-          <h4 class="mb-3 text-lg font-semibold text-white">🌐 Traceroute 路由追踪</h4>
-          <p class="mb-4 text-sm text-slate-400">从指定节点到目标地址进行路由追踪，分析网络路径和延迟。</p>
-          <div class="flex items-center justify-between rounded-xl bg-slate-900/60 p-3 border border-slate-700">
-            <div>
-              <span class="font-semibold text-white">🚧 即将推出</span>
-              <p class="text-xs text-slate-400">此功能正在开发中...</p>
-            </div>
-            <button disabled class="px-4 py-2 bg-slate-600 text-slate-400 rounded-lg text-sm font-bold cursor-not-allowed">
-              开发中
-            </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Traceroute Modal -->
+  <div id="traceroute-modal" class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-950/80 px-4 py-6 backdrop-blur">
+    <div class="relative w-full max-w-2xl rounded-3xl border border-slate-800 bg-slate-900/80 p-6 shadow-2xl shadow-black/40">
+      <button onclick="toggleTracerouteModal(false)" class="absolute right-4 top-4 rounded-full border border-slate-700/80 bg-slate-800/80 p-2 text-slate-300 transition hover:bg-slate-700/80 z-10">✕</button>
+      
+      <div class="mb-6 flex items-center justify-between gap-2 pr-12">
+        <div>
+          <p class="text-xs uppercase tracking-[0.2em] text-cyan-300/80">网络诊断</p>
+          <h3 class="text-2xl font-semibold text-white">🌐 Traceroute 路由追踪</h3>
+        </div>
+      </div>
+
+      <div class="space-y-4">
+        <p class="text-sm text-slate-400">从指定节点到目标地址进行路由追踪，分析网络路径和延迟。</p>
+        
+        <div class="grid gap-4 md:grid-cols-2">
+          <div class="space-y-2">
+            <label class="text-sm font-medium text-slate-300">选择源节点</label>
+            <select id="traceroute-src-node" class="w-full rounded-lg border border-slate-700 bg-slate-800 p-3 text-white focus:border-cyan-500 focus:outline-none">
+              <option value="">请选择节点...</option>
+            </select>
           </div>
+          <div class="space-y-2">
+            <label class="text-sm font-medium text-slate-300">目标地址</label>
+            <input type="text" id="traceroute-target" placeholder="例如: google.com 或 8.8.8.8" class="w-full rounded-lg border border-slate-700 bg-slate-800 p-3 text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none">
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between rounded-xl bg-slate-900/60 p-4 border border-slate-700">
+          <div>
+            <span class="font-semibold text-amber-300">🚧 即将推出</span>
+            <p class="text-xs text-slate-400 mt-1">此功能正在开发中，敬请期待...</p>
+          </div>
+          <button disabled class="px-5 py-2.5 bg-slate-600 text-slate-400 rounded-lg text-sm font-bold cursor-not-allowed">
+            开发中
+          </button>
         </div>
       </div>
     </div>
@@ -1609,6 +1641,37 @@ def _login_html() -> str:
           modal.classList.remove('flex');
         }
       }
+    }
+    
+    // Traceroute Modal Functions
+    function toggleTracerouteModal(show) {
+      const modal = document.getElementById('traceroute-modal');
+      if (modal) {
+        if (show) {
+          modal.classList.remove('hidden');
+          modal.classList.add('flex');
+          // Populate node selector
+          populateTracerouteNodes();
+        } else {
+          modal.classList.add('hidden');
+          modal.classList.remove('flex');
+        }
+      }
+    }
+    
+    function populateTracerouteNodes() {
+      const select = document.getElementById('traceroute-src-node');
+      if (!select || !window.nodesCache) return;
+      
+      select.innerHTML = '<option value="">请选择节点...</option>';
+      window.nodesCache.forEach(node => {
+        if (node.status === 'online') {
+          const option = document.createElement('option');
+          option.value = node.id;
+          option.textContent = node.name;
+          select.appendChild(option);
+        }
+      });
     }
     
     // Open Test Modal - scrolls to test panel section
