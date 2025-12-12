@@ -61,6 +61,41 @@ validate_port() {
     [[ "$port" =~ ^[0-9]+$ ]] && [ "$port" -ge 1 ] && [ "$port" -le 65535 ]
 }
 
+# 检查端口是否被占用
+check_port_available() {
+    local port="$1"
+    if command -v ss &>/dev/null; then
+        ! ss -tuln | grep -q ":${port} "
+    elif command -v netstat &>/dev/null; then
+        ! netstat -tuln | grep -q ":${port} "
+    else
+        # 无法检查，假设可用
+        return 0
+    fi
+}
+
+# 提示用户输入可用端口
+prompt_available_port() {
+    local label="$1" default_port="$2" port
+    port="$default_port"
+    
+    while true; do
+        if ! validate_port "$port"; then
+            read -rp "请输入 ${label} (1-65535, 默认 ${default_port})：" port
+            port="${port:-$default_port}"
+            continue
+        fi
+        
+        if check_port_available "$port"; then
+            echo "$port"
+            return 0
+        else
+            echo "[WARN] 端口 $port 已被占用" >&2
+            read -rp "请输入其他可用端口 (1-65535)：" port
+        fi
+    done
+}
+
 prompt_required_port() {
     local label="$1" default_value="$2" value
     value="$default_value"
@@ -274,14 +309,20 @@ case "$choice" in
     5)
         # GHCR - 自动安装 master
         cleanup_docker
+        
+        # 检查端口
+        DEFAULT_MASTER_PORT=9000
+        echo "[INFO] 检查端口 ${DEFAULT_MASTER_PORT} 是否可用..."
+        MASTER_PORT=$(prompt_available_port "Master API 端口" "$DEFAULT_MASTER_PORT")
+        
         echo "[INFO] 从 ghcr.io 拉取并安装 master..."
         docker pull "$GHCR_MASTER"
         
-        # 使用 docker-compose 但指定 ghcr 镜像
+        # 使用 docker-compose 但指定 ghcr 镜像和端口
         cd "$REPO_DIR"
-        MASTER_IMAGE="$GHCR_MASTER" docker compose up -d
+        MASTER_API_PORT="$MASTER_PORT" docker compose up -d
         
-        echo "[INFO] Master 安装完成！(使用 ghcr.io 镜像)"
+        echo "[INFO] Master 安装完成！(使用 ghcr.io 镜像, 端口: $MASTER_PORT)"
         show_master_password
         ;;
     6)
