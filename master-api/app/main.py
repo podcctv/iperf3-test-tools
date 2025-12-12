@@ -1598,18 +1598,29 @@ def _login_html() -> str:
           </div>
         </div>
 
-        <div class="flex items-center justify-between rounded-xl bg-slate-900/60 p-4 border border-slate-700">
-          <div>
-            <span class="font-semibold text-amber-300">🚧 即将推出</span>
-            <p class="text-xs text-slate-400 mt-1">此功能正在开发中，敬请期待...</p>
-          </div>
-          <button disabled class="px-5 py-2.5 bg-slate-600 text-slate-400 rounded-lg text-sm font-bold cursor-not-allowed">
-            开发中
+        <div class="flex items-center gap-4">
+          <button id="traceroute-start-btn" onclick="executeTraceroute()" class="px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm font-bold transition">
+            🚀 开始追踪
           </button>
+          <span id="traceroute-status" class="text-sm text-slate-400"></span>
+        </div>
+
+        <!-- Results Area -->
+        <div id="traceroute-results" class="hidden space-y-3">
+          <div class="flex items-center justify-between">
+            <h4 class="font-semibold text-white">追踪结果</h4>
+            <div class="text-xs text-slate-400">
+              <span id="traceroute-meta"></span>
+            </div>
+          </div>
+          <div id="traceroute-hops" class="rounded-xl border border-slate-700 bg-slate-900/60 p-4 max-h-96 overflow-y-auto">
+            <!-- Hop results will be rendered here -->
+          </div>
         </div>
       </div>
     </div>
   </div>
+
 
     <script>
     console.log('Script loading...');
@@ -1684,6 +1695,78 @@ def _login_html() -> str:
         setTimeout(() => {
           testPanel.style.boxShadow = '';
         }, 1500);
+      }
+    }
+
+    // ============== Traceroute Functions ==============
+    async function executeTraceroute() {
+      const nodeSelect = document.getElementById('traceroute-src-node');
+      const targetInput = document.getElementById('traceroute-target');
+      const startBtn = document.getElementById('traceroute-start-btn');
+      const statusSpan = document.getElementById('traceroute-status');
+      const resultsDiv = document.getElementById('traceroute-results');
+      const hopsDiv = document.getElementById('traceroute-hops');
+      const metaSpan = document.getElementById('traceroute-meta');
+      
+      const nodeId = nodeSelect?.value;
+      const target = targetInput?.value?.trim();
+      
+      if (!nodeId) {
+        alert('请选择源节点');
+        return;
+      }
+      if (!target) {
+        alert('请输入目标地址');
+        return;
+      }
+      
+      // Update UI for loading state
+      startBtn.disabled = true;
+      startBtn.textContent = '⏳ 追踪中...';
+      statusSpan.textContent = '正在执行路由追踪，请稍候...';
+      resultsDiv.classList.add('hidden');
+      
+      try {
+        const response = await apiFetch(`/api/trace/run?node_id=${nodeId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ target, max_hops: 30, include_geo: true })
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+          throw new Error(data.detail || 'Traceroute failed');
+        }
+        
+        // Render results
+        metaSpan.textContent = `${data.source_node_name} → ${data.target} | ${data.total_hops} 跳 | ${data.elapsed_ms}ms | ${data.tool_used}`;
+        
+        hopsDiv.innerHTML = data.hops.map(hop => {
+          const geo = hop.geo;
+          const geoStr = geo ? `${geo.country_code ? renderFlagHtml(geo.country_code) : ''} ${geo.city || ''} ${geo.isp || ''}`.trim() : '';
+          const rttStr = hop.rtt_avg ? `${hop.rtt_avg.toFixed(1)}ms` : '-';
+          const lossStr = hop.loss_pct > 0 ? `<span class="text-rose-400">${hop.loss_pct}%</span>` : '';
+          
+          return `
+            <div class="flex items-center gap-4 py-2 border-b border-slate-700/50 last:border-b-0">
+              <span class="w-8 text-center font-mono text-cyan-400">${hop.hop}</span>
+              <span class="flex-1 font-mono text-sm ${hop.ip === '*' ? 'text-slate-500' : 'text-white'}">${hop.ip}</span>
+              <span class="w-20 text-right text-sm ${hop.rtt_avg && hop.rtt_avg > 100 ? 'text-amber-400' : 'text-emerald-400'}">${rttStr}</span>
+              <span class="w-12 text-right text-xs">${lossStr}</span>
+              <span class="flex-1 text-xs text-slate-400 truncate">${geoStr}</span>
+            </div>
+          `;
+        }).join('');
+        
+        resultsDiv.classList.remove('hidden');
+        statusSpan.textContent = '✅ 追踪完成';
+        
+      } catch (error) {
+        statusSpan.textContent = `❌ 错误: ${error.message}`;
+      } finally {
+        startBtn.disabled = false;
+        startBtn.textContent = '🚀 开始追踪';
       }
     }
 
@@ -7507,6 +7590,84 @@ async def streaming_test(node_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="node not found")
 
     return await _probe_streaming_unlock(node)
+
+
+# ============== Traceroute API ==============
+
+class TracerouteRequest(BaseModel):
+    target: str
+    max_hops: int = 30
+    include_geo: bool = True
+
+
+class TracerouteHop(BaseModel):
+    hop: int
+    ip: str
+    rtt_avg: Optional[float] = None
+    rtt_best: Optional[float] = None
+    rtt_worst: Optional[float] = None
+    loss_pct: Optional[float] = None
+    geo: Optional[dict] = None
+
+
+class TracerouteResponse(BaseModel):
+    status: str
+    target: str
+    source_node_id: int
+    source_node_name: str
+    total_hops: int
+    hops: list
+    route_hash: str
+    tool_used: str
+    elapsed_ms: int
+
+
+@app.post("/api/trace/run", response_model=TracerouteResponse)
+async def run_traceroute(node_id: int, req: TracerouteRequest, db: Session = Depends(get_db)):
+    """Execute traceroute from specified node to target."""
+    node = db.get(Node, node_id)
+    if not node:
+        raise HTTPException(status_code=404, detail="Node not found")
+    
+    # Check node is online
+    node_status = await health_monitor.check_node(node)
+    if node_status.status != "online":
+        raise HTTPException(status_code=503, detail=f"Node {node.name} is offline")
+    
+    # Call agent's traceroute endpoint
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                f"http://{node.ip}:{node.port}/traceroute",
+                json={
+                    "target": req.target,
+                    "max_hops": req.max_hops,
+                    "include_geo": req.include_geo,
+                }
+            )
+            
+            if response.status_code != 200:
+                raise HTTPException(status_code=response.status_code, detail="Agent traceroute failed")
+            
+            result = response.json()
+            
+            return TracerouteResponse(
+                status="ok",
+                target=req.target,
+                source_node_id=node.id,
+                source_node_name=node.name,
+                total_hops=result.get("total_hops", 0),
+                hops=result.get("hops", []),
+                route_hash=result.get("route_hash", ""),
+                tool_used=result.get("tool_used", "unknown"),
+                elapsed_ms=result.get("elapsed_ms", 0),
+            )
+            
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Traceroute timed out")
+    except Exception as e:
+        logger.error(f"Traceroute error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 async def _ensure_iperf_server_running(dst: Node, requested_port: int) -> int:

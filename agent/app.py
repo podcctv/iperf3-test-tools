@@ -1598,6 +1598,193 @@ def streaming_probe() -> Any:
     return jsonify(payload)
 
 
+# ============== Traceroute Endpoint ==============
+
+def _parse_mtr_output(raw: str) -> list:
+    """Parse mtr -r output into structured hop list."""
+    hops = []
+    lines = raw.strip().split('\n')
+    
+    for line in lines:
+        # Skip header lines
+        if 'HOST:' in line or 'Start:' in line or not line.strip():
+            continue
+        
+        # Parse mtr output format: "hop  ip  loss%  snt  last  avg  best  wrst  stdev"
+        parts = line.split()
+        if len(parts) >= 8:
+            try:
+                hop_num = int(parts[0].rstrip('.'))
+                ip = parts[1] if parts[1] != '???' else '*'
+                loss = parts[2].rstrip('%') if '%' in parts[2] else '0'
+                avg_rtt = float(parts[5]) if parts[5] != '0.0' else None
+                
+                hops.append({
+                    "hop": hop_num,
+                    "ip": ip,
+                    "loss_pct": float(loss),
+                    "rtt_avg": avg_rtt,
+                    "rtt_last": float(parts[4]) if parts[4] != '0.0' else None,
+                    "rtt_best": float(parts[6]) if parts[6] != '0.0' else None,
+                    "rtt_worst": float(parts[7]) if parts[7] != '0.0' else None,
+                })
+            except (ValueError, IndexError):
+                continue
+    
+    return hops
+
+
+def _parse_traceroute_output(raw: str) -> list:
+    """Parse standard traceroute output into structured hop list."""
+    hops = []
+    lines = raw.strip().split('\n')
+    
+    for line in lines:
+        # Skip header
+        if 'traceroute to' in line.lower():
+            continue
+        
+        # Parse: " 1  192.168.1.1 (192.168.1.1)  1.234 ms  1.456 ms  1.789 ms"
+        match = re.match(r'\s*(\d+)\s+(\S+)\s+\(([^)]+)\)\s+(.*)', line)
+        if match:
+            hop_num = int(match.group(1))
+            hostname = match.group(2)
+            ip = match.group(3)
+            rtts_str = match.group(4)
+            
+            # Extract RTT values
+            rtt_matches = re.findall(r'([\d.]+)\s*ms', rtts_str)
+            rtts = [float(r) for r in rtt_matches] if rtt_matches else []
+            
+            hops.append({
+                "hop": hop_num,
+                "ip": ip,
+                "hostname": hostname if hostname != ip else None,
+                "rtt_values": rtts,
+                "rtt_avg": sum(rtts) / len(rtts) if rtts else None,
+            })
+        elif re.match(r'\s*(\d+)\s+\*\s+\*\s+\*', line):
+            # Timeout line: " 2  * * *"
+            hop_match = re.match(r'\s*(\d+)', line)
+            if hop_match:
+                hops.append({
+                    "hop": int(hop_match.group(1)),
+                    "ip": "*",
+                    "hostname": None,
+                    "rtt_values": [],
+                    "rtt_avg": None,
+                })
+    
+    return hops
+
+
+def _get_hop_geo(ip: str) -> dict | None:
+    """Get geographic location for an IP address."""
+    if ip == '*' or ip.startswith('10.') or ip.startswith('192.168.') or ip.startswith('172.'):
+        return {"country": "Private", "city": "", "isp": "Local Network"}
+    
+    try:
+        resp = requests.get(f"http://ip-api.com/json/{ip}?fields=status,country,countryCode,city,isp", timeout=2)
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("status") == "success":
+                return {
+                    "country": data.get("country", ""),
+                    "country_code": data.get("countryCode", "").lower(),
+                    "city": data.get("city", ""),
+                    "isp": data.get("isp", ""),
+                }
+    except Exception:
+        pass
+    return None
+
+
+@app.route("/traceroute", methods=["POST"])
+def traceroute() -> Any:
+    """
+    Execute traceroute to target address.
+    
+    Request JSON:
+    {
+        "target": "google.com",
+        "max_hops": 30,
+        "use_mtr": true
+    }
+    """
+    data = request.get_json(force=True, silent=True) or {}
+    target = data.get("target", "").strip()
+    max_hops = min(int(data.get("max_hops", 30)), 64)
+    use_mtr = data.get("use_mtr", True)
+    include_geo = data.get("include_geo", True)
+    
+    if not target:
+        return jsonify({"status": "error", "error": "target is required"}), 400
+    
+    # Validate target (prevent command injection)
+    if not re.match(r'^[a-zA-Z0-9.-]+$', target):
+        return jsonify({"status": "error", "error": "invalid target format"}), 400
+    
+    start_time = time.time()
+    
+    try:
+        # Prefer mtr if available
+        if use_mtr:
+            cmd = f"mtr -r -n -c 3 -m {max_hops} {target}"
+            try:
+                result = subprocess.run(
+                    shlex.split(cmd),
+                    capture_output=True,
+                    text=True,
+                    timeout=60
+                )
+                if result.returncode == 0:
+                    hops = _parse_mtr_output(result.stdout)
+                    tool_used = "mtr"
+                else:
+                    raise FileNotFoundError("mtr failed")
+            except (FileNotFoundError, subprocess.SubprocessError):
+                use_mtr = False
+        
+        if not use_mtr:
+            # Fall back to traceroute
+            cmd = f"traceroute -n -m {max_hops} {target}"
+            result = subprocess.run(
+                shlex.split(cmd),
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+            hops = _parse_traceroute_output(result.stdout)
+            tool_used = "traceroute"
+        
+        # Add geo info if requested
+        if include_geo:
+            for hop in hops:
+                if hop["ip"] and hop["ip"] != "*":
+                    hop["geo"] = _get_hop_geo(hop["ip"])
+        
+        # Calculate route hash for comparison
+        ips = [h["ip"] for h in hops if h["ip"] != "*"]
+        route_hash = "|".join(ips)
+        
+        elapsed_ms = int((time.time() - start_time) * 1000)
+        
+        return jsonify({
+            "status": "ok",
+            "target": target,
+            "total_hops": len(hops),
+            "hops": hops,
+            "route_hash": route_hash,
+            "tool_used": tool_used,
+            "elapsed_ms": elapsed_ms,
+        })
+        
+    except subprocess.TimeoutExpired:
+        return jsonify({"status": "error", "error": "traceroute timed out"}), 504
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
 @app.route("/whitelist", methods=["GET"])
 def get_whitelist() -> Any:
     """Get current whitelist."""

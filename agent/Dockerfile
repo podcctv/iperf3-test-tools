@@ -15,7 +15,7 @@ RUN if [ -n "$APT_MIRROR" ]; then \
   fi
 
 RUN apt-get update \
-  && apt-get install -y iperf3 curl jq bc netcat-openbsd dnsutils iproute2 \
+  && apt-get install -y iperf3 curl jq bc netcat-openbsd dnsutils iproute2 mtr-tiny traceroute \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
