@@ -99,3 +99,58 @@ class PendingTask(Base):
     
     schedule = relationship("TestSchedule", foreign_keys=[schedule_id])
 
+
+# ============== Traceroute Scheduled Monitoring ==============
+
+class TraceSchedule(Base):
+    """Scheduled traceroute monitoring tasks."""
+    __tablename__ = "trace_schedules"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    src_node_id = Column(Integer, ForeignKey("nodes.id"), nullable=False)
+    target_type = Column(String, default="custom")  # "custom" or "node"
+    target_address = Column(String, nullable=True)  # IP or hostname for custom
+    target_node_id = Column(Integer, ForeignKey("nodes.id"), nullable=True)  # for node type
+    
+    interval_seconds = Column(Integer, nullable=False, default=3600)  # Default 1 hour
+    max_hops = Column(Integer, default=30)
+    enabled = Column(Boolean, default=True)
+    
+    # Alert settings
+    alert_on_change = Column(Boolean, default=True)  # Alert when route changes
+    alert_threshold = Column(Integer, default=1)  # Number of hop changes to trigger alert
+    alert_channels = Column(JSON, default=list)  # ["bell", "telegram"]
+    
+    last_run_at = Column(DateTime(timezone=True), nullable=True)
+    next_run_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    src_node = relationship("Node", foreign_keys=[src_node_id])
+    target_node = relationship("Node", foreign_keys=[target_node_id])
+
+
+class TraceResult(Base):
+    """Traceroute execution results."""
+    __tablename__ = "trace_results"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    schedule_id = Column(Integer, ForeignKey("trace_schedules.id"), nullable=True)  # Null for ad-hoc traces
+    src_node_id = Column(Integer, ForeignKey("nodes.id"), nullable=False)
+    target = Column(String, nullable=False)  # Target IP/hostname
+    
+    executed_at = Column(DateTime(timezone=True), server_default=func.now())
+    total_hops = Column(Integer)
+    hops = Column(JSON)  # List of hop details
+    route_hash = Column(String)  # For quick comparison
+    tool_used = Column(String)  # "mtr" or "traceroute"
+    elapsed_ms = Column(Integer)
+    
+    # Route change detection
+    has_change = Column(Boolean, default=False)  # True if route changed from previous
+    change_summary = Column(JSON, nullable=True)  # Details of what changed
+    previous_route_hash = Column(String, nullable=True)  # For comparison reference
+    
+    schedule = relationship("TraceSchedule", foreign_keys=[schedule_id])
+    src_node = relationship("Node", foreign_keys=[src_node_id])
+

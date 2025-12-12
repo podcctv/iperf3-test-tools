@@ -7918,6 +7918,238 @@ async def run_traceroute(node_id: int, req: TracerouteRequest, db: Session = Dep
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ============== TraceSchedule CRUD API ==============
+
+from .models import TraceSchedule, TraceResult
+from .schemas import TraceScheduleCreate, TraceScheduleUpdate, TraceScheduleRead, TraceResultRead
+
+
+@app.get("/api/trace/schedules", response_model=List[TraceScheduleRead])
+def list_trace_schedules(db: Session = Depends(get_db)):
+    """List all traceroute schedules."""
+    schedules = db.scalars(select(TraceSchedule)).all()
+    return schedules
+
+
+@app.post("/api/trace/schedules", response_model=TraceScheduleRead)
+def create_trace_schedule(payload: TraceScheduleCreate, db: Session = Depends(get_db)):
+    """Create a new traceroute schedule."""
+    from datetime import timezone
+    
+    schedule = TraceSchedule(**payload.model_dump())
+    schedule.next_run_at = datetime.now(timezone.utc) + timedelta(seconds=schedule.interval_seconds)
+    
+    db.add(schedule)
+    db.commit()
+    db.refresh(schedule)
+    
+    # Register with scheduler
+    _register_trace_schedule_job(schedule)
+    
+    return schedule
+
+
+@app.get("/api/trace/schedules/{schedule_id}", response_model=TraceScheduleRead)
+def get_trace_schedule(schedule_id: int, db: Session = Depends(get_db)):
+    """Get a specific traceroute schedule."""
+    schedule = db.get(TraceSchedule, schedule_id)
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    return schedule
+
+
+@app.put("/api/trace/schedules/{schedule_id}", response_model=TraceScheduleRead)
+def update_trace_schedule(schedule_id: int, payload: TraceScheduleUpdate, db: Session = Depends(get_db)):
+    """Update a traceroute schedule."""
+    schedule = db.get(TraceSchedule, schedule_id)
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    
+    updates = payload.model_dump(exclude_unset=True)
+    for key, value in updates.items():
+        setattr(schedule, key, value)
+    
+    # Recalculate next run if interval changed
+    if "interval_seconds" in updates:
+        from datetime import timezone
+        schedule.next_run_at = datetime.now(timezone.utc) + timedelta(seconds=schedule.interval_seconds)
+    
+    db.commit()
+    db.refresh(schedule)
+    
+    # Re-register with scheduler
+    _register_trace_schedule_job(schedule)
+    
+    return schedule
+
+
+@app.delete("/api/trace/schedules/{schedule_id}")
+def delete_trace_schedule(schedule_id: int, db: Session = Depends(get_db)):
+    """Delete a traceroute schedule."""
+    schedule = db.get(TraceSchedule, schedule_id)
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    
+    # Remove from scheduler
+    try:
+        scheduler.remove_job(f"trace_{schedule_id}")
+    except Exception:
+        pass
+    
+    db.delete(schedule)
+    db.commit()
+    return {"status": "ok", "message": "Schedule deleted"}
+
+
+@app.get("/api/trace/results", response_model=List[TraceResultRead])
+def list_trace_results(
+    schedule_id: Optional[int] = None,
+    limit: int = 50,
+    db: Session = Depends(get_db)
+):
+    """List traceroute results, optionally filtered by schedule."""
+    query = select(TraceResult).order_by(TraceResult.executed_at.desc()).limit(limit)
+    
+    if schedule_id:
+        query = query.where(TraceResult.schedule_id == schedule_id)
+    
+    results = db.scalars(query).all()
+    return results
+
+
+def _register_trace_schedule_job(schedule: TraceSchedule):
+    """Register or update a traceroute schedule in the APScheduler."""
+    job_id = f"trace_{schedule.id}"
+    
+    # Remove existing job if any
+    try:
+        scheduler.remove_job(job_id)
+    except Exception:
+        pass
+    
+    if not schedule.enabled:
+        return
+    
+    # Add new job
+    scheduler.add_job(
+        _execute_trace_schedule,
+        trigger=IntervalTrigger(seconds=schedule.interval_seconds),
+        id=job_id,
+        args=[schedule.id],
+        replace_existing=True,
+        next_run_time=schedule.next_run_at,
+    )
+    logger.info(f"Registered trace schedule job: {job_id}, interval={schedule.interval_seconds}s")
+
+
+async def _execute_trace_schedule(schedule_id: int):
+    """Execute a scheduled traceroute."""
+    db = SessionLocal()
+    try:
+        schedule = db.get(TraceSchedule, schedule_id)
+        if not schedule or not schedule.enabled:
+            return
+        
+        # Determine target
+        if schedule.target_type == "node" and schedule.target_node_id:
+            target_node = db.get(Node, schedule.target_node_id)
+            target = target_node.ip if target_node else schedule.target_address
+        else:
+            target = schedule.target_address
+        
+        if not target:
+            logger.error(f"No target for trace schedule {schedule_id}")
+            return
+        
+        # Get source node
+        src_node = db.get(Node, schedule.src_node_id)
+        if not src_node:
+            logger.error(f"Source node not found for trace schedule {schedule_id}")
+            return
+        
+        # Execute traceroute
+        logger.info(f"Executing trace schedule {schedule.name}: {src_node.name} -> {target}")
+        
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                response = await client.post(
+                    f"http://{src_node.ip}:{src_node.agent_port}/traceroute",
+                    json={"target": target, "max_hops": schedule.max_hops, "include_geo": True}
+                )
+                
+                if response.status_code != 200:
+                    logger.error(f"Traceroute failed: {response.status_code}")
+                    return
+                
+                result = response.json()
+        except Exception as e:
+            logger.error(f"Traceroute request failed: {e}")
+            return
+        
+        # Get previous result for comparison
+        prev_result = db.scalars(
+            select(TraceResult)
+            .where(TraceResult.schedule_id == schedule_id)
+            .order_by(TraceResult.executed_at.desc())
+            .limit(1)
+        ).first()
+        
+        # Check for route change
+        has_change = False
+        change_summary = None
+        previous_hash = prev_result.route_hash if prev_result else None
+        
+        if prev_result and prev_result.route_hash != result.get("route_hash", ""):
+            has_change = True
+            change_summary = _compare_routes(prev_result.hops, result.get("hops", []))
+        
+        # Save result
+        trace_result = TraceResult(
+            schedule_id=schedule_id,
+            src_node_id=schedule.src_node_id,
+            target=target,
+            total_hops=result.get("total_hops", 0),
+            hops=result.get("hops", []),
+            route_hash=result.get("route_hash", ""),
+            tool_used=result.get("tool_used", "unknown"),
+            elapsed_ms=result.get("elapsed_ms", 0),
+            has_change=has_change,
+            change_summary=change_summary,
+            previous_route_hash=previous_hash,
+        )
+        db.add(trace_result)
+        
+        # Update schedule
+        from datetime import timezone
+        schedule.last_run_at = datetime.now(timezone.utc)
+        schedule.next_run_at = datetime.now(timezone.utc) + timedelta(seconds=schedule.interval_seconds)
+        
+        db.commit()
+        
+        # Trigger alert if route changed
+        if has_change and schedule.alert_on_change:
+            logger.warning(f"Route change detected for schedule {schedule.name}!")
+            # TODO: Implement alert notifications (bell, telegram)
+        
+    finally:
+        db.close()
+
+
+def _compare_routes(old_hops: list, new_hops: list) -> dict:
+    """Compare two route traces and return summary of changes."""
+    old_ips = [h.get("ip") for h in (old_hops or [])]
+    new_ips = [h.get("ip") for h in (new_hops or [])]
+    
+    added = [ip for ip in new_ips if ip and ip != "*" and ip not in old_ips]
+    removed = [ip for ip in old_ips if ip and ip != "*" and ip not in new_ips]
+    
+    return {
+        "added_hops": added,
+        "removed_hops": removed,
+        "old_hop_count": len(old_hops) if old_hops else 0,
+        "new_hop_count": len(new_hops) if new_hops else 0,
+    }
+
 async def _ensure_iperf_server_running(dst: Node, requested_port: int) -> int:
     """Ensure iperf server is running on the requested port.
     

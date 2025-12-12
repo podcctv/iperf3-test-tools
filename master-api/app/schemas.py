@@ -217,3 +217,65 @@ class ScheduleResultRead(BaseModel):
 
 class ScheduleResultWithTest(ScheduleResultRead):
     test_result: TestRead | None = None
+
+
+# ============== Traceroute Schemas ==============
+
+class TraceScheduleBase(BaseModel):
+    name: str
+    src_node_id: int
+    target_type: str = "custom"  # "custom" or "node"
+    target_address: Optional[str] = None
+    target_node_id: Optional[int] = None
+    interval_seconds: int = Field(default=3600, gt=0)  # Default 1 hour
+    max_hops: int = Field(default=30, ge=1, le=64)
+    enabled: bool = True
+    alert_on_change: bool = True
+    alert_threshold: int = Field(default=1, ge=1)
+    alert_channels: List[str] = []  # ["bell", "telegram"]
+
+
+class TraceScheduleCreate(TraceScheduleBase):
+    pass
+
+
+class TraceScheduleUpdate(BaseModel):
+    name: Optional[str] = None
+    src_node_id: Optional[int] = None
+    target_type: Optional[str] = None
+    target_address: Optional[str] = None
+    target_node_id: Optional[int] = None
+    interval_seconds: Optional[int] = Field(default=None, gt=0)
+    max_hops: Optional[int] = Field(default=None, ge=1, le=64)
+    enabled: Optional[bool] = None
+    alert_on_change: Optional[bool] = None
+    alert_threshold: Optional[int] = Field(default=None, ge=1)
+    alert_channels: Optional[List[str]] = None
+
+
+class TraceScheduleRead(TraceScheduleBase):
+    id: int
+    last_run_at: Optional[datetime] = None
+    next_run_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class TraceResultRead(BaseModel):
+    id: int
+    schedule_id: Optional[int] = None
+    src_node_id: int
+    target: str
+    executed_at: Optional[datetime] = None
+    total_hops: int
+    hops: Any  # JSON list of hop details
+    route_hash: str
+    tool_used: str
+    elapsed_ms: int
+    has_change: bool = False
+    change_summary: Any = None
+
+    class Config:
+        from_attributes = True
