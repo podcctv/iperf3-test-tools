@@ -308,16 +308,32 @@ case "$choice" in
         ;;
     5)
         # GHCR - 自动安装 master（含本机 agent）
-        cleanup_docker
         
-        # 检查端口
+        # 先检查所有端口
+        echo ""
+        echo "========== 端口检查 =========="
         DEFAULT_MASTER_PORT=9000
         echo "[INFO] 检查 Master API 端口 ${DEFAULT_MASTER_PORT} 是否可用..."
         MASTER_PORT=$(prompt_available_port "Master API 端口" "$DEFAULT_MASTER_PORT")
         
+        DEFAULT_AGENT_PORT=8000
+        echo "[INFO] 检查 Agent API 端口 ${DEFAULT_AGENT_PORT} 是否可用..."
+        AGENT_PORT=$(prompt_available_port "Agent API 端口" "$DEFAULT_AGENT_PORT")
+        
         DEFAULT_IPERF_PORT=5201
         echo "[INFO] 检查 iperf3 端口 ${DEFAULT_IPERF_PORT} 是否可用..."
         IPERF_PORT=$(prompt_available_port "iperf3 端口" "$DEFAULT_IPERF_PORT")
+        
+        echo ""
+        echo "========== 端口配置确认 =========="
+        echo "Master API 端口: $MASTER_PORT"
+        echo "Agent API 端口:  $AGENT_PORT"
+        echo "iperf3 端口:     $IPERF_PORT"
+        echo "=================================="
+        echo ""
+        
+        # 清理旧容器
+        cleanup_docker
         
         # 使用本地构建 master-api（确保使用最新代码，包含随机密码功能）
         echo "[INFO] 本地构建 master-api 镜像（使用最新代码）..."
@@ -333,14 +349,17 @@ case "$choice" in
         docker run -d \
             --name iperf-agent \
             --restart=always \
-            -p 8000:8000 \
+            -p ${AGENT_PORT}:8000 \
             -p ${IPERF_PORT}:${IPERF_PORT}/tcp \
             -p ${IPERF_PORT}:${IPERF_PORT}/udp \
             -e IPERF_PORT="$IPERF_PORT" \
             "$AGENT_IMAGE"
         
+        echo ""
         echo "[INFO] Master + Agent 安装完成！"
-        echo "[INFO] Master 端口: $MASTER_PORT, iperf3 端口: $IPERF_PORT"
+        echo "[INFO] Master 端口: $MASTER_PORT"
+        echo "[INFO] Agent API 端口: $AGENT_PORT"
+        echo "[INFO] iperf3 端口: $IPERF_PORT"
         show_master_password
         ;;
     6)
