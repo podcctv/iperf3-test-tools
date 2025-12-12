@@ -8479,61 +8479,61 @@ async def _execute_schedule_task(schedule_id: int):
                             "direction_label": direction_label,  # For result tracking
                         }
                     
-                    if is_nat_source:
-                        # NAT source node: queue task for agent to poll and execute
-                        # IMPORTANT: Start iperf server on destination BEFORE queuing task
-                        # so the NAT agent can connect when it picks up the task
-                        print(f"[NAT-SCHEDULE-DEBUG] Schedule {schedule_id}: effective_src={effective_src.name}, effective_dst={effective_dst.name} (IP: {effective_dst.ip}), requested_port={current_port}", flush=True)
-                        logger.info(f"[NAT-SCHEDULE-DEBUG] Schedule {schedule_id}: effective_src={effective_src.name}, effective_dst={effective_dst.name} (IP: {effective_dst.ip}), requested_port={current_port}")
-                        try:
-                            server_port = await _ensure_iperf_server_running(effective_dst, current_port)
-                            # Update test_params with the actual port the server is running on
-                            test_params["target_port"] = server_port
-                            print(f"[NAT-SCHEDULE] Started iperf server on {effective_dst.name}:{server_port} for NAT agent {effective_src.name}, task target_ip={test_params['target_ip']}", flush=True)
-                            logger.info(f"[NAT-SCHEDULE] Started iperf server on {effective_dst.name}:{server_port} for NAT agent {effective_src.name}")
-                        except Exception as e:
-                            print(f"[NAT-SCHEDULE] FAILED to start iperf server on {effective_dst.name}: {e}", flush=True)
-                            logger.error(f"[NAT-SCHEDULE] Failed to start iperf server on {effective_dst.name}: {e}")
-                            raise
+                        if is_nat_source:
+                            # NAT source node: queue task for agent to poll and execute
+                            # IMPORTANT: Start iperf server on destination BEFORE queuing task
+                            # so the NAT agent can connect when it picks up the task
+                            print(f"[NAT-SCHEDULE-DEBUG] Schedule {schedule_id}: effective_src={effective_src.name}, effective_dst={effective_dst.name} (IP: {effective_dst.ip}), requested_port={current_port}", flush=True)
+                            logger.info(f"[NAT-SCHEDULE-DEBUG] Schedule {schedule_id}: effective_src={effective_src.name}, effective_dst={effective_dst.name} (IP: {effective_dst.ip}), requested_port={current_port}")
+                            try:
+                                server_port = await _ensure_iperf_server_running(effective_dst, current_port)
+                                # Update test_params with the actual port the server is running on
+                                test_params["target_port"] = server_port
+                                print(f"[NAT-SCHEDULE] Started iperf server on {effective_dst.name}:{server_port} for NAT agent {effective_src.name}, task target_ip={test_params['target_ip']}", flush=True)
+                                logger.info(f"[NAT-SCHEDULE] Started iperf server on {effective_dst.name}:{server_port} for NAT agent {effective_src.name}")
+                            except Exception as e:
+                                print(f"[NAT-SCHEDULE] FAILED to start iperf server on {effective_dst.name}: {e}", flush=True)
+                                logger.error(f"[NAT-SCHEDULE] Failed to start iperf server on {effective_dst.name}: {e}")
+                                raise
+                            
+                            pending_task = PendingTask(
+                                node_name=effective_src.name,
+                                task_type="iperf_test",
+                                task_data=test_params,
+                                schedule_id=schedule_id,
+                                status="pending",
+                            )
+                            db.add(pending_task)
+                            db.flush()  # Get pending_task.id
+                            
+                            # Record pending schedule result immediately
+                            schedule_result = ScheduleResult(
+                                schedule_id=schedule_id,
+                                test_result_id=None,
+                                executed_at=execution_time,
+                                status="pending",
+                                error_message=f"Queued as task #{pending_task.id} for NAT agent {effective_src.name}",
+                            )
+                            db.add(schedule_result)
+                            db.commit()
+                            
+                            logger.info(f"[REVERSE] Schedule {schedule_id} ({proto}) queued as PendingTask #{pending_task.id} for NAT agent {effective_src.name}")
+                            # Don't wait for result - agent will report via /api/agent/result
+                            continue
                         
-                        pending_task = PendingTask(
-                            node_name=effective_src.name,
-                            task_type="iperf_test",
-                            task_data=test_params,
-                            schedule_id=schedule_id,
-                            status="pending",
-                        )
-                        db.add(pending_task)
-                        db.flush()  # Get pending_task.id
-                        
-                        # Record pending schedule result immediately
-                        schedule_result = ScheduleResult(
-                            schedule_id=schedule_id,
-                            test_result_id=None,
-                            executed_at=execution_time,
-                            status="pending",
-                            error_message=f"Queued as task #{pending_task.id} for NAT agent {effective_src.name}",
-                        )
-                        db.add(schedule_result)
-                        db.commit()
-                        
-                        logger.info(f"[REVERSE] Schedule {schedule_id} ({proto}) queued as PendingTask #{pending_task.id} for NAT agent {effective_src.name}")
-                        # Don't wait for result - agent will report via /api/agent/result
-                        continue
-                    
-                    # Normal source node: call agent directly
-                    # Adjust params format for _call_agent_test (uses "target" not "target_ip")
-                    call_params = {
-                        "target": test_params["target_ip"],
-                        "port": test_params["target_port"],
-                        "duration": test_params["duration"],
-                        "protocol": test_params["protocol"],
-                        "parallel": test_params["parallel"],
-                        "reverse": test_params["reverse"],
-                        "bidir": test_params.get("bidir", False),
-                    }
-                    raw_data = await _call_agent_test(effective_src, call_params, schedule.duration)
-                    summary = _summarize_metrics(raw_data)
+                        # Normal source node: call agent directly
+                        # Adjust params format for _call_agent_test (uses "target" not "target_ip")
+                        call_params = {
+                            "target": test_params["target_ip"],
+                            "port": test_params["target_port"],
+                            "duration": test_params["duration"],
+                            "protocol": test_params["protocol"],
+                            "parallel": test_params["parallel"],
+                            "reverse": test_params["reverse"],
+                            "bidir": test_params.get("bidir", False),
+                        }
+                        raw_data = await _call_agent_test(effective_src, call_params, schedule.duration)
+                        summary = _summarize_metrics(raw_data)
 
                         # Filter metrics based on direction to prevent pollution
                         # Since we're doing separate tests, always filter
@@ -8542,31 +8542,32 @@ async def _execute_schedule_task(schedule_id: int):
                                 summary["download_bits_per_second"] = 0
                             elif direction_label == "download":
                                 summary["upload_bits_per_second"] = 0
-                    
-                    # 保存测试结果
-                    test_result = TestResult(
-                        src_node_id=schedule.src_node_id,
-                        dst_node_id=schedule.dst_node_id,
-                        protocol=proto,
-                        params=test_params,
-                        raw_result=raw_data,
-                        summary=summary,
-                        created_at=execution_time,
-                    )
-                    db.add(test_result)
-                    db.flush()
-                    
-                    # 保存schedule结果
-                    schedule_result = ScheduleResult(
-                        schedule_id=schedule_id,
-                        test_result_id=test_result.id,
-                        executed_at=execution_time,
-                        status="success",
-                    )
-                    db.add(schedule_result)
-                    db.commit()
-                    
-                    logger.info(f"Schedule {schedule_id} ({proto}) executed successfully")
+                        
+                        # 保存测试结果
+                        test_result = TestResult(
+                            src_node_id=schedule.src_node_id,
+                            dst_node_id=schedule.dst_node_id,
+                            protocol=proto,
+                            params=test_params,
+                            raw_result=raw_data,
+                            summary=summary,
+                            created_at=execution_time,
+                        )
+                        db.add(test_result)
+                        db.flush()
+                        
+                        # 保存schedule结果
+                        schedule_result = ScheduleResult(
+                            schedule_id=schedule_id,
+                            test_result_id=test_result.id,
+                            executed_at=execution_time,
+                            status="success",
+                        )
+                        db.add(schedule_result)
+                        db.commit()
+                        
+                        logger.info(f"Schedule {schedule_id} ({proto}) executed successfully")
+
 
                 except Exception as inner_e:
                     logger.error(f"Schedule {schedule_id} ({proto}) execution failed: {inner_e}")
