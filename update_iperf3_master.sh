@@ -124,37 +124,78 @@ else
 fi
 
 echo
-echo "================ 安装选项 ================"
+echo "======== 安装选项（本地dockerfile编译） ========="
 echo "1) 自动安装 master（含本机 agent 容器）"
 echo "2) 自动安装 agent（仅作为测试节点）"
 echo "3) 手动安装 agent（NAT VPS 指定端口）"
 echo "4) 手动安装 agent（内网设备 反向穿透）"
-echo "5) 不执行安装（仅更新代码）"
+echo "========== 安装选项（pull ghcr.io） ==========="
+echo "5) 自动安装 master（含本机 agent 容器）"
+echo "6) 自动安装 agent（仅作为测试节点）"
+echo "7) 手动安装 agent（NAT VPS 指定端口）"
+echo "8) 手动安装 agent（内网设备 反向穿透）"
 echo "================ 查询选项 ================"
-echo "6) 查看 iperf-agent 日志"
-echo "7) 查看 master-api 日志"
-echo "========================================="
-read -rp "请选择 [1-7]：" choice
+echo "9) 查看 iperf-agent 日志"
+echo "10) 查看 master-api 日志"
+echo "================ 其他选项 ================"
+echo "11) 退出"
+echo "=========================================="
+read -rp "请选择 [1-11]：" choice
+
+# GHCR.io 镜像地址
+GHCR_MASTER="ghcr.io/podcctv/iperf3-master-api:latest"
+GHCR_AGENT="ghcr.io/podcctv/iperf3-agent:latest"
+GHCR_AGENT_CN="ghcr.io/podcctv/iperf3-agent:cn"
+
+# 检测是否为中国地区
+detect_region() {
+    local ip country
+    ip=$(curl -fsS --connect-timeout 5 https://api.ipify.org 2>/dev/null || curl -fsS --connect-timeout 5 https://ifconfig.me 2>/dev/null || true)
+    if [ -n "$ip" ]; then
+        country=$(curl -fsS --connect-timeout 5 "http://ip-api.com/line/${ip}?fields=countryCode" 2>/dev/null || true)
+        case "$country" in
+            CN|cn) echo "cn" ;;
+            *) echo "global" ;;
+        esac
+    else
+        echo "global"
+    fi
+}
+
+# 获取合适的 agent 镜像
+get_agent_image() {
+    local use_ghcr="$1"
+    if [ "$use_ghcr" = "true" ]; then
+        local region=$(detect_region)
+        if [ "$region" = "cn" ]; then
+            echo "$GHCR_AGENT_CN"
+        else
+            echo "$GHCR_AGENT"
+        fi
+    else
+        echo "iperf-agent:latest"
+    fi
+}
 
 case "$choice" in
     1)
-        # 自动安装 master（含本机 agent）
+        # 本地编译 - 自动安装 master（含本机 agent）
         cleanup_docker
-        echo "[INFO] Installing master..."
+        echo "[INFO] 本地编译安装 master..."
         bash "$MASTER_INSTALL_SCRIPT"
-        echo "[INFO] Master installation completed. (install_master.sh 已在本机启动 agent)"
+        echo "[INFO] Master 安装完成！(含本机 agent)"
         ;;
     2)
-        # 自动安装 agent（走 install_agent.sh 默认流程）
+        # 本地编译 - 自动安装 agent
         cleanup_docker
-        echo "[INFO] Installing agent only (auto mode)..."
+        echo "[INFO] 本地编译安装 agent..."
         bash "$AGENT_INSTALL_SCRIPT"
-        echo "[INFO] Agent installation completed."
+        echo "[INFO] Agent 安装完成！"
         ;;
     3)
-        # 手动安装 agent（NAT VPS、端口自行指定）
+        # 本地编译 - 手动安装 agent（NAT VPS）
         cleanup_docker
-        echo "[INFO] Manual agent installation (NAT mode, custom ports)..."
+        echo "[INFO] 本地编译 - 手动安装 agent (NAT 模式)..."
         AGENT_PORT=$(prompt_required_port "Agent API 端口（宿主机 NAT 映射端口）" "${AGENT_PORT:-}")
         AGENT_LISTEN_PORT=$(prompt_optional_port "Agent API 端口（容器内监听，留空则与宿主机相同）" "${AGENT_LISTEN_PORT:-}")
         IPERF_PORT=$(prompt_required_port "iperf3 端口（宿主机 NAT 映射端口）" "${IPERF_PORT:-}")
@@ -162,55 +203,31 @@ case "$choice" in
             AGENT_PORT="$AGENT_PORT" AGENT_LISTEN_PORT="$AGENT_LISTEN_PORT" IPERF_PORT="$IPERF_PORT" bash "$MANUAL_AGENT_SCRIPT"
         else
             echo "[ERROR] 手动安装脚本未找到：$MANUAL_AGENT_SCRIPT"
-            echo "[ERROR] 请确认 agent.sh 和 update_iperf3_master.sh 在同一目录，或修改脚本中的 MANUAL_AGENT_SCRIPT 路径。"
             exit 1
         fi
         ;;
     4)
-        # 手动安装 agent（内网设备，反向穿透 HTTP polling）
+        # 本地编译 - 手动安装 agent（内网设备，反向穿透）
         cleanup_docker
-        echo "[INFO] 内网 agent 安装（反向穿透模式）"
-        echo ""
-        read -rp "请输入主控 Master API URL (如 https://yourdomain.com 或 http://1.2.3.4:8000): " MASTER_URL
+        echo "[INFO] 本地编译 - 内网 agent 安装（反向穿透模式）"
+        read -rp "请输入主控 Master API URL (如 https://yourdomain.com): " MASTER_URL
         while [ -z "$MASTER_URL" ]; do
             read -rp "Master URL 不能为空，请重新输入: " MASTER_URL
         done
-        
         read -rp "请输入节点名称 (用于在主控中显示): " NODE_NAME
         while [ -z "$NODE_NAME" ]; do
             read -rp "节点名称不能为空，请重新输入: " NODE_NAME
         done
-        
         IPERF_PORT=$(prompt_required_port "iperf3 端口" "5201")
         
-        echo "[INFO] 配置内网 agent..."
-        echo "[INFO] Master URL: $MASTER_URL"
-        echo "[INFO] 节点名称: $NODE_NAME"
-        echo "[INFO] iperf3 端口: $IPERF_PORT"
-        
-        # 创建 agent 配置目录
-        mkdir -p /opt/iperf-agent
-        cat > /opt/iperf-agent/config.json << EOF
-{
-    "mode": "reverse",
-    "master_url": "$MASTER_URL",
-    "node_name": "$NODE_NAME",
-    "iperf_port": $IPERF_PORT,
-    "poll_interval": 10
-}
-EOF
-        
-        # 构建内网 agent 镜像（从本地 Dockerfile）
-        echo "[INFO] 正在构建 agent 镜像..."
+        echo "[INFO] 正在本地构建 agent 镜像..."
         docker build -t iperf-agent-reverse:latest "${REPO_DIR}/agent"
         
-        # 运行内网 agent 容器
         docker run -d \
             --name iperf-agent-reverse \
             --restart=always \
             -p ${IPERF_PORT}:${IPERF_PORT}/tcp \
             -p ${IPERF_PORT}:${IPERF_PORT}/udp \
-            -v /opt/iperf-agent/config.json:/app/config.json:ro \
             -e MASTER_URL="$MASTER_URL" \
             -e NODE_NAME="$NODE_NAME" \
             -e IPERF_PORT="$IPERF_PORT" \
@@ -218,17 +235,98 @@ EOF
             iperf-agent-reverse:latest
         
         echo "[INFO] 内网 agent 安装完成！"
-        echo "[INFO] Agent 将定期向 $MASTER_URL 注册并获取测试任务"
-        echo "[INFO] 请确保主控 Master API 可以从当前网络访问"
+        echo "[INFO] Agent 将定期向 $MASTER_URL 注册"
         ;;
     5)
-        echo "[INFO] Skip installation. Done."
+        # GHCR - 自动安装 master
+        cleanup_docker
+        echo "[INFO] 从 ghcr.io 拉取并安装 master..."
+        docker pull "$GHCR_MASTER"
+        
+        # 使用 docker-compose 但指定 ghcr 镜像
+        cd "$REPO_DIR"
+        MASTER_IMAGE="$GHCR_MASTER" docker compose up -d
+        
+        echo "[INFO] Master 安装完成！(使用 ghcr.io 镜像)"
         ;;
     6)
+        # GHCR - 自动安装 agent
+        cleanup_docker
+        AGENT_IMAGE=$(get_agent_image "true")
+        echo "[INFO] 从 ghcr.io 拉取 agent 镜像: $AGENT_IMAGE ..."
+        docker pull "$AGENT_IMAGE"
+        
+        IPERF_PORT=${IPERF_PORT:-5201}
+        docker run -d \
+            --name iperf-agent \
+            --restart=always \
+            -p 8000:8000 \
+            -p ${IPERF_PORT}:${IPERF_PORT}/tcp \
+            -p ${IPERF_PORT}:${IPERF_PORT}/udp \
+            -e IPERF_PORT="$IPERF_PORT" \
+            "$AGENT_IMAGE"
+        
+        echo "[INFO] Agent 安装完成！(使用 ghcr.io 镜像)"
+        ;;
+    7)
+        # GHCR - 手动安装 agent（NAT VPS）
+        cleanup_docker
+        AGENT_IMAGE=$(get_agent_image "true")
+        echo "[INFO] 从 ghcr.io 拉取 agent (NAT 模式): $AGENT_IMAGE ..."
+        docker pull "$AGENT_IMAGE"
+        
+        AGENT_PORT=$(prompt_required_port "Agent API 端口（宿主机 NAT 映射端口）" "${AGENT_PORT:-}")
+        AGENT_LISTEN_PORT=$(prompt_optional_port "Agent API 端口（容器内监听，留空则与宿主机相同）" "${AGENT_LISTEN_PORT:-}")
+        IPERF_PORT=$(prompt_required_port "iperf3 端口（宿主机 NAT 映射端口）" "${IPERF_PORT:-}")
+        
+        CONTAINER_API_PORT=${AGENT_LISTEN_PORT:-$AGENT_PORT}
+        
+        docker run -d \
+            --name iperf-agent \
+            --restart=always \
+            -p ${AGENT_PORT}:${CONTAINER_API_PORT} \
+            -p ${IPERF_PORT}:${IPERF_PORT}/tcp \
+            -p ${IPERF_PORT}:${IPERF_PORT}/udp \
+            -e AGENT_API_PORT="${CONTAINER_API_PORT}" \
+            -e IPERF_PORT="$IPERF_PORT" \
+            "$AGENT_IMAGE"
+        
+        echo "[INFO] Agent 安装完成！(NAT 模式, ghcr.io 镜像)"
+        ;;
+    8)
+        # GHCR - 手动安装 agent（内网设备，反向穿透）
+        cleanup_docker
+        AGENT_IMAGE=$(get_agent_image "true")
+        echo "[INFO] 从 ghcr.io 拉取 agent (反向穿透): $AGENT_IMAGE ..."
+        docker pull "$AGENT_IMAGE"
+        
+        read -rp "请输入主控 Master API URL (如 https://yourdomain.com): " MASTER_URL
+        while [ -z "$MASTER_URL" ]; do
+            read -rp "Master URL 不能为空，请重新输入: " MASTER_URL
+        done
+        read -rp "请输入节点名称 (用于在主控中显示): " NODE_NAME
+        while [ -z "$NODE_NAME" ]; do
+            read -rp "节点名称不能为空，请重新输入: " NODE_NAME
+        done
+        IPERF_PORT=$(prompt_required_port "iperf3 端口" "5201")
+        
+        docker run -d \
+            --name iperf-agent-reverse \
+            --restart=always \
+            -p ${IPERF_PORT}:${IPERF_PORT}/tcp \
+            -p ${IPERF_PORT}:${IPERF_PORT}/udp \
+            -e MASTER_URL="$MASTER_URL" \
+            -e NODE_NAME="$NODE_NAME" \
+            -e IPERF_PORT="$IPERF_PORT" \
+            -e AGENT_MODE="reverse" \
+            "$AGENT_IMAGE"
+        
+        echo "[INFO] 内网 agent 安装完成！(ghcr.io 镜像)"
+        echo "[INFO] Agent 将定期向 $MASTER_URL 注册"
+        ;;
+    9)
         # 查看 iperf-agent 日志
         echo "[INFO] 查看 iperf-agent 日志 (按 Ctrl+C 退出)..."
-        echo ""
-        # 尝试多种可能的容器名称
         AGENT_CONTAINER=$(docker ps -q --filter "name=iperf-agent" | head -1)
         if [ -z "$AGENT_CONTAINER" ]; then
             AGENT_CONTAINER=$(docker ps -q --filter "name=iperf3-test-tools-agent" | head -1)
@@ -237,14 +335,12 @@ EOF
             docker logs -f "$AGENT_CONTAINER"
         else
             echo "[ERROR] 未找到 iperf-agent 容器"
-            echo "[INFO] 可用容器列表："
             docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Image}}"
         fi
         ;;
-    7)
+    10)
         # 查看 master-api 日志
         echo "[INFO] 查看 master-api 日志 (按 Ctrl+C 退出)..."
-        echo ""
         MASTER_CONTAINER=$(docker ps -q --filter "name=master-api" | head -1)
         if [ -z "$MASTER_CONTAINER" ]; then
             MASTER_CONTAINER=$(docker ps -q --filter "name=iperf3-test-tools-master" | head -1)
@@ -253,11 +349,14 @@ EOF
             docker logs -f "$MASTER_CONTAINER"
         else
             echo "[ERROR] 未找到 master-api 容器"
-            echo "[INFO] 可用容器列表："
             docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Image}}"
         fi
         ;;
+    11)
+        echo "[INFO] 退出安装程序。"
+        exit 0
+        ;;
     *)
-        echo "[WARN] Invalid choice. No action performed."
+        echo "[WARN] 无效选项。未执行任何操作。"
         ;;
 esac
