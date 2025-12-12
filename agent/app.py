@@ -1605,32 +1605,78 @@ def _parse_mtr_output(raw: str) -> list:
     hops = []
     lines = raw.strip().split('\n')
     
+    print(f"[TRACE] mtr raw output ({len(lines)} lines):", flush=True)
+    for i, line in enumerate(lines[:5]):
+        print(f"[TRACE]   Line {i}: {line[:100]}", flush=True)
+    
     for line in lines:
         # Skip header lines
         if 'HOST:' in line or 'Start:' in line or not line.strip():
             continue
+        if 'Loss%' in line or 'Snt' in line:  # Skip header row
+            continue
         
-        # Parse mtr output format: "hop  ip  loss%  snt  last  avg  best  wrst  stdev"
+        # Parse mtr output format variations:
+        # Format 1: "  1.|-- 192.168.1.1  0.0%  3  1.2  1.3  1.0  1.5  0.2"
+        # Format 2: "|-- 192.168.1.1  0.0%  3  1.2  1.3  1.0  1.5  0.2"
+        # Format 3: "1. 192.168.1.1  0.0%  3  1.2  1.3  1.0  1.5  0.2"
+        
+        # Try to extract hop number and IP
         parts = line.split()
-        if len(parts) >= 8:
-            try:
-                hop_num = int(parts[0].rstrip('.'))
-                ip = parts[1] if parts[1] != '???' else '*'
-                loss = parts[2].rstrip('%') if '%' in parts[2] else '0'
-                avg_rtt = float(parts[5]) if parts[5] != '0.0' else None
+        if len(parts) < 7:
+            continue
+        
+        try:
+            # Find the hop number
+            hop_str = parts[0].replace('|--', '').replace('.', '').replace('-', '').strip()
+            if not hop_str:
+                hop_str = '1' if not hops else str(len(hops) + 1)
+            
+            # Handle format like "1.|--" or just numbers
+            hop_num = int(hop_str) if hop_str.isdigit() else len(hops) + 1
+            
+            # Find IP address (first thing that looks like an IP or '???')
+            ip = None
+            ip_idx = -1
+            for idx, part in enumerate(parts):
+                part_clean = part.replace('|--', '').strip()
+                if part_clean == '???' or re.match(r'^\d+\.\d+\.\d+\.\d+$', part_clean):
+                    ip = part_clean if part_clean != '???' else '*'
+                    ip_idx = idx
+                    break
+            
+            if ip is None or ip_idx == -1:
+                continue
+            
+            # Get remaining parts after IP
+            remaining = parts[ip_idx + 1:]
+            
+            if len(remaining) >= 6:
+                # Format: loss%, snt, last, avg, best, wrst, [stdev]
+                loss_str = remaining[0].rstrip('%')
+                loss = float(loss_str) if loss_str.replace('.', '').isdigit() else 0
+                
+                # Parse RTT values (last, avg, best, wrst)
+                def parse_rtt(s):
+                    try:
+                        return float(s) if s != '0.0' and s != '--' else None
+                    except:
+                        return None
                 
                 hops.append({
                     "hop": hop_num,
                     "ip": ip,
-                    "loss_pct": float(loss),
-                    "rtt_avg": avg_rtt,
-                    "rtt_last": float(parts[4]) if parts[4] != '0.0' else None,
-                    "rtt_best": float(parts[6]) if parts[6] != '0.0' else None,
-                    "rtt_worst": float(parts[7]) if parts[7] != '0.0' else None,
+                    "loss_pct": loss,
+                    "rtt_avg": parse_rtt(remaining[3]) if len(remaining) > 3 else None,
+                    "rtt_last": parse_rtt(remaining[2]) if len(remaining) > 2 else None,
+                    "rtt_best": parse_rtt(remaining[4]) if len(remaining) > 4 else None,
+                    "rtt_worst": parse_rtt(remaining[5]) if len(remaining) > 5 else None,
                 })
-            except (ValueError, IndexError):
-                continue
+        except (ValueError, IndexError) as e:
+            print(f"[TRACE] Parse error for line '{line}': {e}", flush=True)
+            continue
     
+    print(f"[TRACE] Parsed {len(hops)} hops", flush=True)
     return hops
 
 
