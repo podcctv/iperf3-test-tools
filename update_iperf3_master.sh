@@ -334,23 +334,18 @@ case "$choice" in
         echo "=================================="
         echo ""
         
-        # 拉取并启动 master（使用 ghcr.io 镜像）
+        # 使用 docker-compose 启动（指定使用 ghcr.io 镜像）
         echo "[INFO] 从 ghcr.io 拉取 master 镜像..."
         docker pull "$GHCR_MASTER"
         
-        # 创建数据目录
+        # 创建必要的文件和目录
         mkdir -p "${REPO_DIR}/data"
+        touch "${REPO_DIR}/agent_configs.json"
         
-        # 启动 master 容器
-        echo "[INFO] 启动 master-api 容器..."
-        docker run -d \
-            --name iperf3-master-api \
-            --restart=always \
-            -p ${MASTER_PORT}:8000 \
-            -v "${REPO_DIR}/data:/app/data" \
-            -v "${REPO_DIR}/agent_configs.json:/app/agent_configs.json" \
-            -e DATABASE_URL="sqlite:///./app/data/iperf.db" \
-            "$GHCR_MASTER"
+        # 启动 master (使用 docker-compose 以正确连接 PostgreSQL)
+        echo "[INFO] 启动 master-api 和数据库..."
+        cd "$REPO_DIR"
+        MASTER_API_PORT="$MASTER_PORT" docker compose up -d
         
         # 安装 agent（使用 ghcr.io 镜像）
         AGENT_IMAGE=$(get_agent_image "true")
