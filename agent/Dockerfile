@@ -6,11 +6,22 @@ RUN apt-get update \
 
 WORKDIR /app
 
+# Allow pip index to be configured at build time
+# Default to PyPI; Chinese servers should pass --build-arg PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
+ARG PIP_INDEX_URL=https://pypi.org/simple/
+ARG PIP_TRUSTED_HOST=""
+
 COPY requirements.txt /app/
-RUN pip install --no-cache-dir -r requirements.txt \
-    -i https://mirrors.aliyun.com/pypi/simple/ \
-    --trusted-host mirrors.aliyun.com \
-    --timeout 120
+RUN if [ -n "$PIP_TRUSTED_HOST" ]; then \
+      pip install --no-cache-dir -r requirements.txt \
+        -i "$PIP_INDEX_URL" \
+        --trusted-host "$PIP_TRUSTED_HOST" \
+        --timeout 120; \
+    else \
+      pip install --no-cache-dir -r requirements.txt \
+        -i "$PIP_INDEX_URL" \
+        --timeout 120; \
+    fi
 
 COPY app.py /app/
 COPY ip_whitelist.py /app/

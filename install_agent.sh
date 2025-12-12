@@ -33,6 +33,57 @@ detect_public_ip() {
   echo "${ip:-}"
 }
 
+detect_region() {
+  # Detect if server is in China based on IP geolocation
+  # Returns "cn" for China, "global" otherwise
+  local ip country
+  ip=$(detect_public_ip)
+  
+  if [ -z "${ip}" ]; then
+    echo "global"
+    return
+  fi
+  
+  # Try multiple geolocation services
+  if command -v curl >/dev/null 2>&1; then
+    # Try ip-api.com (free, no key needed)
+    country=$(curl -fsS --connect-timeout 5 "http://ip-api.com/line/${ip}?fields=countryCode" 2>/dev/null || true)
+    
+    if [ -z "${country}" ]; then
+      # Fallback: try ipinfo.io
+      country=$(curl -fsS --connect-timeout 5 "https://ipinfo.io/${ip}/country" 2>/dev/null || true)
+    fi
+  fi
+  
+  # Check if country is China
+  case "${country}" in
+    CN|cn|China|china)
+      echo "cn"
+      ;;
+    *)
+      echo "global"
+      ;;
+  esac
+}
+
+setup_pip_mirror() {
+  # Set up pip mirror based on detected region
+  local region
+  region=$(detect_region)
+  
+  if [ "${region}" = "cn" ]; then
+    log "Detected China region - using Aliyun pip mirror"
+    PIP_INDEX_URL="https://mirrors.aliyun.com/pypi/simple/"
+    PIP_TRUSTED_HOST="mirrors.aliyun.com"
+  else
+    log "Detected non-China region - using default PyPI"
+    PIP_INDEX_URL="https://pypi.org/simple/"
+    PIP_TRUSTED_HOST=""
+  fi
+  
+  export PIP_INDEX_URL PIP_TRUSTED_HOST
+}
+
 maybe_load_port_config() {
   local config_path="${PORT_CONFIG_FILE}" candidate
 
@@ -384,8 +435,15 @@ start_agent() {
     exit 1
   fi
 
-  log "Building agent image (${AGENT_IMAGE})..."
-  docker build -t "${AGENT_IMAGE}" "${REPO_ROOT}/agent"
+  log "Building agent image (${AGENT_IMAGE}) with pip mirror: ${PIP_INDEX_URL}..."
+  local build_args=""
+  if [ -n "${PIP_INDEX_URL:-}" ]; then
+    build_args="${build_args} --build-arg PIP_INDEX_URL=${PIP_INDEX_URL}"
+  fi
+  if [ -n "${PIP_TRUSTED_HOST:-}" ]; then
+    build_args="${build_args} --build-arg PIP_TRUSTED_HOST=${PIP_TRUSTED_HOST}"
+  fi
+  docker build ${build_args} -t "${AGENT_IMAGE}" "${REPO_ROOT}/agent"
 
   log "Launching local agent container (host port ${AGENT_PORT} -> container port ${AGENT_LISTEN_PORT}; iperf port ${IPERF_PORT})..."
   docker rm -f iperf-agent >/dev/null 2>&1 || true
@@ -473,6 +531,7 @@ main() {
   update_repo
   rerun_if_repo_updated "$@"
   ensure_ports_available
+  setup_pip_mirror
   ensure_docker
   start_agent
 
