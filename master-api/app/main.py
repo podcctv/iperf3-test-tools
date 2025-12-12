@@ -6968,12 +6968,46 @@ _task_id_counter = 0
 async def get_agent_tasks(node_name: str, db: Session = Depends(get_db)):
     """
     Get pending tasks for an internal agent.
-    Returns tasks, whitelist, and clears tasks from queue.
+    Returns tasks from BOTH in-memory queue AND PendingTask database table.
     """
     global _internal_agent_tasks
-    tasks = _internal_agent_tasks.get(node_name, [])
-    if tasks:
+    
+    # 1. Get tasks from in-memory queue (for immediate tests via create_test)
+    memory_tasks = _internal_agent_tasks.get(node_name, [])
+    if memory_tasks:
         _internal_agent_tasks[node_name] = []  # Clear after returning
+    
+    # 2. Get tasks from PendingTask database table (for scheduled tests)
+    db_tasks = []
+    try:
+        pending_db_tasks = db.scalars(
+            select(PendingTask).where(
+                PendingTask.node_name == node_name,
+                PendingTask.status == "pending"
+            )
+        ).all()
+        
+        for pt in pending_db_tasks:
+            # Build task dict matching what agent expects
+            task_dict = {
+                "id": pt.id,
+                "type": pt.task_type,
+                **pt.task_data,  # target_ip, target_port, duration, etc.
+            }
+            db_tasks.append(task_dict)
+            
+            # Mark as claimed so it's not picked up again
+            pt.status = "claimed"
+            pt.claimed_at = datetime.now(timezone.utc)
+        
+        if db_tasks:
+            db.commit()
+            print(f"[AGENT-TASKS] Delivered {len(db_tasks)} DB tasks to {node_name}", flush=True)
+    except Exception as e:
+        print(f"[AGENT-TASKS] Error getting DB tasks for {node_name}: {e}", flush=True)
+    
+    # Combine both sources
+    all_tasks = memory_tasks + db_tasks
     
     # Get whitelist from database (Node IPs + Master IP)
     whitelist_ips = []
@@ -6996,7 +7030,7 @@ async def get_agent_tasks(node_name: str, db: Session = Depends(get_db)):
     except Exception as e:
         print(f"[TASKS] Error getting whitelist: {e}", flush=True)
     
-    return {"status": "ok", "tasks": tasks, "whitelist": whitelist_ips}
+    return {"status": "ok", "tasks": all_tasks, "whitelist": whitelist_ips}
 
 
 
@@ -7025,18 +7059,104 @@ class AgentResultPayload(BaseModel):
 
 
 @app.post("/api/agent/result")
-async def receive_agent_result(payload: AgentResultPayload):
+async def receive_agent_result(payload: AgentResultPayload, db: Session = Depends(get_db)):
     """
     Receive task result from reverse mode (NAT) agent.
-    This is the endpoint the agent actually POSTs to.
+    Updates PendingTask in DB and creates TestResult/ScheduleResult.
     """
     global _task_results
     task_id = payload.task_id
+    result = payload.result
+    
+    # Store in memory for legacy callers
     _task_results[task_id] = {
-        "result": payload.result,
+        "result": result,
         "received_at": datetime.now(timezone.utc).isoformat()
     }
-    logger.info(f"[REVERSE-RESULT] Received result for task {task_id}")
+    
+    # Update PendingTask in database
+    pending_task = db.scalars(
+        select(PendingTask).where(PendingTask.id == task_id)
+    ).first()
+    
+    if pending_task:
+        pending_task.status = "completed" if result.get("status") == "ok" else "failed"
+        pending_task.completed_at = datetime.now(timezone.utc)
+        pending_task.result_data = result
+        if result.get("status") != "ok":
+            pending_task.error_message = result.get("error", "Unknown error")
+        
+        schedule_id = pending_task.schedule_id
+        logger.info(f"[REVERSE-RESULT] Task {task_id} completed, schedule_id={schedule_id}, status={result.get('status')}")
+        print(f"[REVERSE-RESULT] Task {task_id} completed, schedule_id={schedule_id}, status={result.get('status')}", flush=True)
+        
+        # If this task is from a schedule, update the ScheduleResult
+        if schedule_id:
+            try:
+                # Find the pending schedule result for this task
+                schedule_result = db.scalars(
+                    select(ScheduleResult).where(
+                        ScheduleResult.schedule_id == schedule_id,
+                        ScheduleResult.status == "pending",
+                        ScheduleResult.error_message.like(f"Queued as task #{task_id}%")
+                    )
+                ).first()
+                
+                if result.get("status") == "ok" and result.get("iperf_result"):
+                    # Parse iperf result and create TestResult
+                    iperf_data = result["iperf_result"]
+                    
+                    # Get schedule info for src/dst nodes
+                    schedule = db.scalars(select(TestSchedule).where(TestSchedule.id == schedule_id)).first()
+                    if schedule:
+                        summary = _extract_summary(iperf_data)
+                        test_result = TestResult(
+                            src_node_id=schedule.src_node_id,
+                            dst_node_id=schedule.dst_node_id,
+                            protocol=pending_task.task_data.get("protocol", "tcp"),
+                            params=pending_task.task_data,
+                            raw_result=iperf_data,
+                            summary=summary,
+                        )
+                        db.add(test_result)
+                        db.flush()
+                        
+                        if schedule_result:
+                            schedule_result.status = "success"
+                            schedule_result.test_result_id = test_result.id
+                            schedule_result.error_message = None
+                        else:
+                            # Create new schedule result if not found
+                            schedule_result = ScheduleResult(
+                                schedule_id=schedule_id,
+                                test_result_id=test_result.id,
+                                status="success",
+                            )
+                            db.add(schedule_result)
+                        
+                        print(f"[REVERSE-RESULT] Created TestResult #{test_result.id} for schedule {schedule_id}", flush=True)
+                else:
+                    # Test failed
+                    if schedule_result:
+                        schedule_result.status = "error"
+                        schedule_result.error_message = result.get("error", "Unknown error")
+                    else:
+                        schedule_result = ScheduleResult(
+                            schedule_id=schedule_id,
+                            status="error",
+                            error_message=result.get("error", "Unknown error"),
+                        )
+                        db.add(schedule_result)
+                
+                db.commit()
+            except Exception as e:
+                logger.error(f"[REVERSE-RESULT] Error updating ScheduleResult: {e}")
+                print(f"[REVERSE-RESULT] Error updating ScheduleResult: {e}", flush=True)
+        else:
+            db.commit()
+    else:
+        logger.warning(f"[REVERSE-RESULT] PendingTask {task_id} not found in DB")
+    
     return {"status": "ok", "task_id": task_id}
 
 
