@@ -8972,18 +8972,19 @@ async def get_daily_schedule_traffic_stats(db: Session = Depends(get_db)):
     """
     Get daily traffic statistics per schedule.
     """
-    from datetime import datetime, timezone
+    from datetime import timedelta
     
-    # Get today's date range (00:00 to 23:59)
-    now = datetime.now(timezone.utc)
+    # Use UTC+8 (same as VPS traffic stats) for consistency
+    utc_plus_8 = timezone(timedelta(hours=8))
+    now = datetime.now(utc_plus_8)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     
     # Query ScheduleResults joined with TestResults
-    # Explicit join to avoid relationship dependency if not defined
     rows = db.execute(
         select(TestResult.raw_result, ScheduleResult.schedule_id)
         .join(ScheduleResult, TestResult.id == ScheduleResult.test_result_id)
         .where(ScheduleResult.executed_at >= today_start)
+        .where(ScheduleResult.status == "success")
     ).all()
     
     stats = {} # schedule_id -> total_bytes
@@ -8993,16 +8994,24 @@ async def get_daily_schedule_traffic_stats(db: Session = Depends(get_db)):
             continue
             
         try:
-            iperf_data = raw_result.get("iperf_result", {})
-            end_data = iperf_data.get("end", {})
+            # Handle different data structures:
+            # 1. Direct: raw_result.end
+            # 2. Nested: raw_result.iperf_result.end
+            end_data = raw_result.get("end", {})
+            if not end_data and "iperf_result" in raw_result:
+                end_data = raw_result.get("iperf_result", {}).get("end", {})
             
+            # TCP: sum_sent + sum_received
             bytes_sent = end_data.get("sum_sent", {}).get("bytes", 0)
             bytes_recvd = end_data.get("sum_received", {}).get("bytes", 0)
             
+            # UDP: just sum
             if bytes_sent == 0 and bytes_recvd == 0:
                 bytes_sent = end_data.get("sum", {}).get("bytes", 0)
             
-            stats[schedule_id] = stats.get(schedule_id, 0) + (bytes_sent + bytes_recvd)
+            total = bytes_sent + bytes_recvd
+            if total > 0:
+                stats[schedule_id] = stats.get(schedule_id, 0) + total
         except Exception:
             continue
             
