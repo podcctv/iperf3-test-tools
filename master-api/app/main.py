@@ -675,6 +675,58 @@ def favicon() -> Response:
     )
 
 
+# Flag image cache - stores (image_bytes, timestamp)
+_flag_cache: Dict[str, tuple[bytes, float]] = {}
+FLAG_IMAGE_CACHE_TTL = 86400  # 24 hours
+
+
+@app.get("/flags/{code}")
+async def get_flag(code: str) -> Response:
+    """Proxy and cache flag images from flagcdn.com."""
+    # Validate country code (2 letter, lowercase)
+    code = code.lower().replace(".png", "")
+    if not code or len(code) != 2 or not code.isalpha():
+        raise HTTPException(status_code=400, detail="Invalid country code")
+    
+    cache_key = code
+    now = time.time()
+    
+    # Check cache
+    cached = _flag_cache.get(cache_key)
+    if cached and now - cached[1] < FLAG_IMAGE_CACHE_TTL:
+        return Response(
+            content=cached[0],
+            media_type="image/png",
+            headers={
+                "Cache-Control": "public, max-age=86400",
+                "X-Cache": "HIT"
+            },
+        )
+    
+    # Fetch from flagcdn.com
+    url = f"https://flagcdn.com/24x18/{code}.png"
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(url)
+            if resp.status_code == 200:
+                image_data = resp.content
+                # Cache the image
+                _flag_cache[cache_key] = (image_data, now)
+                return Response(
+                    content=image_data,
+                    media_type="image/png",
+                    headers={
+                        "Cache-Control": "public, max-age=86400",
+                        "X-Cache": "MISS"
+                    },
+                )
+            else:
+                raise HTTPException(status_code=resp.status_code, detail="Flag not found")
+    except httpx.RequestError as e:
+        logger.warning(f"Failed to fetch flag for {code}: {e}")
+        raise HTTPException(status_code=502, detail="Failed to fetch flag image")
+
+
 def _is_authenticated(request: Request) -> bool:
     return dashboard_auth.is_authenticated(request)
 
@@ -686,7 +738,6 @@ def _set_auth_cookie(response: Response, password: str) -> None:
 def _is_guest(request: Request) -> bool:
     """Check if request is from a guest session."""
     return request.cookies.get("guest_session") == "readonly"
-
 
 
 
@@ -2279,7 +2330,8 @@ def _login_html() -> str:
       const flag = (info?.flag || '🌐').replace(/'/g, '');
       const code = info?.code;
       if (code) {
-        const url = `https://flagcdn.com/24x18/${code.toLowerCase()}.png`;
+        // Use local proxy with server-side caching instead of direct flagcdn access
+        const url = `/flags/${code.toLowerCase()}`;
         return `<img src=\"${url}\" alt=\"${code} flag\" class=\"h-4 w-6 rounded-sm border border-white/10 bg-slate-800/50 shadow-sm\" loading=\"lazy\" onerror=\"this.replaceWith(document.createTextNode('${flag}'))\">`;
       }
       return flag;
