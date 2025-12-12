@@ -7109,7 +7109,7 @@ async def receive_agent_result(payload: AgentResultPayload, db: Session = Depend
                     # Get schedule info for src/dst nodes
                     schedule = db.scalars(select(TestSchedule).where(TestSchedule.id == schedule_id)).first()
                     if schedule:
-                        summary = _extract_summary(iperf_data)
+                        summary = _summarize_metrics({"iperf_result": iperf_data} if iperf_data else result)
                         test_result = TestResult(
                             src_node_id=schedule.src_node_id,
                             dst_node_id=schedule.dst_node_id,
