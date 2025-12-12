@@ -2501,19 +2501,23 @@ def _login_html() -> str:
         window.isGuest = isGuest;
         
         if (data.authenticated || isGuest) {
-          loginCard.classList.add('hidden');
-          appCard.classList.remove('hidden');
+          loginCard?.classList.add('hidden');
+          appCard?.classList.remove('hidden');
           setLoginState('unlocked');
           
           if (isGuest) {
-            authHint.textContent = '👁️ 访客模式 - 仅可查看，无法操作';
-            authHint.className = 'text-sm text-amber-400';
+            if (authHint) {
+              authHint.textContent = '👁️ 访客模式 - 仅可查看，无法操作';
+              authHint.className = 'text-sm text-amber-400';
+            }
             // Hide action buttons for guests
             document.querySelectorAll('.guest-hide').forEach(el => el.classList.add('hidden'));
             document.getElementById('logout-btn')?.classList.remove('hidden');
           } else {
-            authHint.textContent = '已通过认证，可管理节点与测速任务。';
-            authHint.className = 'text-sm text-slate-400';
+            if (authHint) {
+              authHint.textContent = '已通过认证，可管理节点与测速任务。';
+              authHint.className = 'text-sm text-slate-400';
+            }
             document.querySelectorAll('.guest-hide').forEach(el => el.classList.remove('hidden'));
           }
           
@@ -2521,16 +2525,16 @@ def _login_html() -> str:
           await refreshTests();
           return true;
         } else {
-          appCard.classList.add('hidden');
-          loginCard.classList.remove('hidden');
+          appCard?.classList.add('hidden');
+          loginCard?.classList.remove('hidden');
           setLoginState('idle');
           if (showFeedback) setAlert(loginAlert, '登录状态未建立，请重新登录。');
           return false;
         }
       } catch (err) {
         console.error('Auth check failed:', err);
-        appCard.classList.add('hidden');
-        loginCard.classList.remove('hidden');
+        appCard?.classList.add('hidden');
+        loginCard?.classList.remove('hidden');
         const errorMessage = '无法连接认证服务，请稍后重试。';
         setLoginState('error', errorMessage);
         if (showFeedback) setAlert(loginAlert, errorMessage);
