@@ -16,7 +16,7 @@ services:
     environment:
       DATABASE_URL: postgresql://iperf:iperf_pass@db:5432/iperf_db
       REQUEST_TIMEOUT: 10
-      DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:-iperf-pass}
+      DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:-}
       AGENT_CONFIG_PATH: /app/agent_configs.json
       AGENT_IMAGE: ${AGENT_IMAGE:-iperf-agent:latest}
       STATE_FILE_PATH: /app/data/master_state.json

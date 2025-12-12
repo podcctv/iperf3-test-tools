@@ -312,7 +312,13 @@ case "$choice" in
         # 先清理旧容器（释放端口）
         cleanup_docker
         
-        # 检查端口（仅 Master 和 Agent API 需要配置，iperf3 使用默认 5201）
+        # 清理旧的密码文件（确保生成新的随机密码）
+        if [ -f "${REPO_DIR}/data/dashboard_password.txt" ]; then
+            echo "[INFO] 删除旧密码文件以生成新的随机密码..."
+            rm -f "${REPO_DIR}/data/dashboard_password.txt"
+        fi
+        
+        # 检查端口
         echo ""
         echo "========== 端口配置 =========="
         DEFAULT_MASTER_PORT=9000
@@ -323,14 +329,14 @@ case "$choice" in
         echo "[INFO] 检查 Agent API 端口 ${DEFAULT_AGENT_PORT} 是否可用..."
         AGENT_PORT=$(prompt_available_port "Agent API 端口" "$DEFAULT_AGENT_PORT")
         
-        # iperf3 端口使用默认值
-        IPERF_PORT=5201
+        # iperf3 端口使用随机值 (50000-60000)
+        IPERF_PORT=$((50000 + RANDOM % 10000))
         
         echo ""
         echo "========== 端口配置确认 =========="
         echo "Master API 端口: $MASTER_PORT"
         echo "Agent API 端口:  $AGENT_PORT"
-        echo "iperf3 端口:     $IPERF_PORT (默认)"
+        echo "iperf3 端口:     $IPERF_PORT (随机)"
         echo "=================================="
         echo ""
         
