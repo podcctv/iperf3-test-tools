@@ -340,11 +340,10 @@ case "$choice" in
         echo "=================================="
         echo ""
         
-        # 使用本地构建 master-api（--no-cache 确保使用最新代码）
-        echo "[INFO] 本地构建 master-api 镜像（强制重建，使用最新代码）..."
+        # 使用本地构建 master-api
+        echo "[INFO] 本地构建 master-api 镜像..."
         cd "$REPO_DIR"
-        docker compose build --no-cache master-api
-        MASTER_API_PORT="$MASTER_PORT" docker compose up -d
+        MASTER_API_PORT="$MASTER_PORT" docker compose up -d --build
         
         # 安装 agent（使用 ghcr.io 镜像）
         AGENT_IMAGE=$(get_agent_image "true")
