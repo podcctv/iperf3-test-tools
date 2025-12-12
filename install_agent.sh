@@ -66,22 +66,24 @@ detect_region() {
   esac
 }
 
-setup_pip_mirror() {
-  # Set up pip mirror based on detected region
+setup_build_mirrors() {
+  # Set up pip and apt mirrors based on detected region
   local region
   region=$(detect_region)
   
   if [ "${region}" = "cn" ]; then
-    log "Detected China region - using Aliyun pip mirror"
+    log "Detected China region - using Aliyun mirrors for pip and apt"
     PIP_INDEX_URL="https://mirrors.aliyun.com/pypi/simple/"
     PIP_TRUSTED_HOST="mirrors.aliyun.com"
+    APT_MIRROR="https://mirrors.aliyun.com"
   else
-    log "Detected non-China region - using default PyPI"
+    log "Detected non-China region - using default mirrors"
     PIP_INDEX_URL="https://pypi.org/simple/"
     PIP_TRUSTED_HOST=""
+    APT_MIRROR=""
   fi
   
-  export PIP_INDEX_URL PIP_TRUSTED_HOST
+  export PIP_INDEX_URL PIP_TRUSTED_HOST APT_MIRROR
 }
 
 maybe_load_port_config() {
@@ -435,13 +437,16 @@ start_agent() {
     exit 1
   fi
 
-  log "Building agent image (${AGENT_IMAGE}) with pip mirror: ${PIP_INDEX_URL}..."
+  log "Building agent image (${AGENT_IMAGE}) with pip mirror: ${PIP_INDEX_URL}, apt mirror: ${APT_MIRROR:-default}..."
   local build_args=""
   if [ -n "${PIP_INDEX_URL:-}" ]; then
     build_args="${build_args} --build-arg PIP_INDEX_URL=${PIP_INDEX_URL}"
   fi
   if [ -n "${PIP_TRUSTED_HOST:-}" ]; then
     build_args="${build_args} --build-arg PIP_TRUSTED_HOST=${PIP_TRUSTED_HOST}"
+  fi
+  if [ -n "${APT_MIRROR:-}" ]; then
+    build_args="${build_args} --build-arg APT_MIRROR=${APT_MIRROR}"
   fi
   docker build ${build_args} -t "${AGENT_IMAGE}" "${REPO_ROOT}/agent"
 
@@ -531,7 +536,7 @@ main() {
   update_repo
   rerun_if_repo_updated "$@"
   ensure_ports_available
-  setup_pip_mirror
+  setup_build_mirrors
   ensure_docker
   start_agent
 

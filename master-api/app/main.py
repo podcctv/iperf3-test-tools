@@ -4256,6 +4256,10 @@ def _tests_page_html() -> str:
             <label class="text-sm font-medium text-slate-200">并行数</label>
             <input id="suite-parallel" type="number" value="1" class="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500">
           </div>
+          <div class="space-y-2">
+            <label class="text-sm font-medium text-slate-200">UDP 带宽 (-b) <span class="text-slate-500 font-normal">例如 100M</span></label>
+            <input id="suite-udp-bandwidth" type="text" value="100M" placeholder="100M" class="w-full rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus:border-sky-500">
+          </div>
         </div>
         <button id="run-suite-test" class="w-full rounded-xl bg-gradient-to-r from-emerald-500 to-sky-500 px-4 py-3 text-sm font-semibold text-white shadow-lg transition hover:scale-[1.01]">
           🚀 开始双向 TCP/UDP 测试
@@ -4604,6 +4608,7 @@ def _tests_page_html() -> str:
       const dstId = document.getElementById('suite-dst-select').value;
       const duration = parseInt(document.getElementById('suite-duration').value);
       const parallel = document.getElementById('suite-parallel').value;
+      const udpBandwidth = document.getElementById('suite-udp-bandwidth')?.value || '100M';
       
       // Get the target node's iperf port
       const dstNode = nodeCache.find(n => n.id === parseInt(dstId));
@@ -4629,7 +4634,7 @@ def _tests_page_html() -> str:
         const res = await apiFetch('/tests/suite', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ src_node_id: parseInt(srcId), dst_node_id: parseInt(dstId), duration, parallel: parseInt(parallel), port })
+          body: JSON.stringify({ src_node_id: parseInt(srcId), dst_node_id: parseInt(dstId), duration, parallel: parseInt(parallel), port, udp_bandwidth: udpBandwidth })
         });
         clearInterval(timer);
         if (progressBar) progressBar.style.width = '100%';

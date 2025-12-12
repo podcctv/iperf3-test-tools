@@ -1,8 +1,22 @@
 FROM python:3.11-slim
 
+# Allow APT mirror to be configured at build time
+# Default to empty (use default Debian mirrors)
+# Chinese servers should pass --build-arg APT_MIRROR=https://mirrors.aliyun.com
+ARG APT_MIRROR=""
+
+# Configure APT mirror if specified
+RUN if [ -n "$APT_MIRROR" ]; then \
+  echo "Using APT mirror: $APT_MIRROR"; \
+  sed -i "s|http://deb.debian.org|$APT_MIRROR|g" /etc/apt/sources.list.d/debian.sources 2>/dev/null || true; \
+  sed -i "s|https://deb.debian.org|$APT_MIRROR|g" /etc/apt/sources.list.d/debian.sources 2>/dev/null || true; \
+  sed -i "s|http://deb.debian.org|$APT_MIRROR|g" /etc/apt/sources.list 2>/dev/null || true; \
+  sed -i "s|https://deb.debian.org|$APT_MIRROR|g" /etc/apt/sources.list 2>/dev/null || true; \
+  fi
+
 RUN apt-get update \
-    && apt-get install -y iperf3 curl jq bc netcat-openbsd dnsutils iproute2 \
-    && rm -rf /var/lib/apt/lists/*
+  && apt-get install -y iperf3 curl jq bc netcat-openbsd dnsutils iproute2 \
+  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -13,15 +27,15 @@ ARG PIP_TRUSTED_HOST=""
 
 COPY requirements.txt /app/
 RUN if [ -n "$PIP_TRUSTED_HOST" ]; then \
-      pip install --no-cache-dir -r requirements.txt \
-        -i "$PIP_INDEX_URL" \
-        --trusted-host "$PIP_TRUSTED_HOST" \
-        --timeout 120; \
-    else \
-      pip install --no-cache-dir -r requirements.txt \
-        -i "$PIP_INDEX_URL" \
-        --timeout 120; \
-    fi
+  pip install --no-cache-dir -r requirements.txt \
+  -i "$PIP_INDEX_URL" \
+  --trusted-host "$PIP_TRUSTED_HOST" \
+  --timeout 120; \
+  else \
+  pip install --no-cache-dir -r requirements.txt \
+  -i "$PIP_INDEX_URL" \
+  --timeout 120; \
+  fi
 
 COPY app.py /app/
 COPY ip_whitelist.py /app/
