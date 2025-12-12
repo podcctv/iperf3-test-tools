@@ -19,7 +19,7 @@ app = Flask(__name__)
 
 DEFAULT_IPERF_PORT = int(Path("/app").joinpath("IPERF_PORT").read_text().strip()) if Path("/app/IPERF_PORT").exists() else 62001
 AGENT_API_PORT = int(os.environ.get("AGENT_API_PORT", "8000"))
-AGENT_VERSION = "1.0.3"  # Update this when releasing new agent versions
+AGENT_VERSION = "1.1.0"  # Update this when releasing new agent versions
 
 # Reverse mode configuration for internal agents behind NAT
 AGENT_MODE = os.environ.get("AGENT_MODE", "normal").lower()

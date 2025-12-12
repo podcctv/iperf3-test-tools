@@ -3048,7 +3048,7 @@ def _login_html() -> str:
           }
           
           // Version Mismatch Badge - only show when agent reports a different version
-          const expectedVersion = '1.0.3';
+          const expectedVersion = '1.1.0';
           let versionBadge = '';
           if (node.agent_version && node.agent_version !== expectedVersion) {
               versionBadge = `<span class="inline-flex items-center rounded-md bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-400 ring-1 ring-inset ring-amber-500/20 cursor-help" title="Agent版本 ${node.agent_version} 与预期版本 ${expectedVersion} 不一致，请更新">⬆️ 需更新</span>`;
