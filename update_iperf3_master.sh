@@ -307,22 +307,40 @@ case "$choice" in
         echo "[INFO] Agent 将定期向 $MASTER_URL 注册"
         ;;
     5)
-        # GHCR - 自动安装 master
+        # GHCR - 自动安装 master（含本机 agent）
         cleanup_docker
         
         # 检查端口
         DEFAULT_MASTER_PORT=9000
-        echo "[INFO] 检查端口 ${DEFAULT_MASTER_PORT} 是否可用..."
+        echo "[INFO] 检查 Master API 端口 ${DEFAULT_MASTER_PORT} 是否可用..."
         MASTER_PORT=$(prompt_available_port "Master API 端口" "$DEFAULT_MASTER_PORT")
         
-        echo "[INFO] 从 ghcr.io 拉取并安装 master..."
-        docker pull "$GHCR_MASTER"
+        DEFAULT_IPERF_PORT=5201
+        echo "[INFO] 检查 iperf3 端口 ${DEFAULT_IPERF_PORT} 是否可用..."
+        IPERF_PORT=$(prompt_available_port "iperf3 端口" "$DEFAULT_IPERF_PORT")
         
-        # 使用 docker-compose 但指定 ghcr 镜像和端口
+        # 使用本地构建 master-api（确保使用最新代码，包含随机密码功能）
+        echo "[INFO] 本地构建 master-api 镜像（使用最新代码）..."
         cd "$REPO_DIR"
-        MASTER_API_PORT="$MASTER_PORT" docker compose up -d
+        MASTER_API_PORT="$MASTER_PORT" docker compose up -d --build
         
-        echo "[INFO] Master 安装完成！(使用 ghcr.io 镜像, 端口: $MASTER_PORT)"
+        # 安装 agent（使用 ghcr.io 镜像）
+        AGENT_IMAGE=$(get_agent_image "true")
+        echo "[INFO] 从 ghcr.io 拉取 agent 镜像: $AGENT_IMAGE..."
+        docker pull "$AGENT_IMAGE"
+        
+        echo "[INFO] 启动本机 agent 容器..."
+        docker run -d \
+            --name iperf-agent \
+            --restart=always \
+            -p 8000:8000 \
+            -p ${IPERF_PORT}:${IPERF_PORT}/tcp \
+            -p ${IPERF_PORT}:${IPERF_PORT}/udp \
+            -e IPERF_PORT="$IPERF_PORT" \
+            "$AGENT_IMAGE"
+        
+        echo "[INFO] Master + Agent 安装完成！"
+        echo "[INFO] Master 端口: $MASTER_PORT, iperf3 端口: $IPERF_PORT"
         show_master_password
         ;;
     6)
