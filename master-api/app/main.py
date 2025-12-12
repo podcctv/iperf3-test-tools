@@ -8568,19 +8568,18 @@ async def _execute_schedule_task(schedule_id: int):
                         
                         logger.info(f"Schedule {schedule_id} ({proto}) executed successfully")
 
-
-                except Exception as inner_e:
-                    logger.error(f"Schedule {schedule_id} ({proto}) execution failed: {inner_e}")
-                    # Keep going for next protocol if any
-                    schedule_result = ScheduleResult(
-                        schedule_id=schedule_id,
-                        test_result_id=None,
-                        executed_at=datetime.now(timezone.utc),
-                        status="failed",
-                        error_message=f"{proto}: {str(inner_e)}",
-                    )
-                    db.add(schedule_result)
-                    db.commit()
+                    except Exception as inner_e:
+                        logger.error(f"Schedule {schedule_id} ({proto}) execution failed: {inner_e}")
+                        # Keep going for next protocol if any
+                        schedule_result = ScheduleResult(
+                            schedule_id=schedule_id,
+                            test_result_id=None,
+                            executed_at=datetime.now(timezone.utc),
+                            status="failed",
+                            error_message=f"{proto}: {str(inner_e)}",
+                        )
+                        db.add(schedule_result)
+                        db.commit()
 
         except Exception as e:
             logger.error(f"Schedule {schedule_id} setup failed: {e}")
