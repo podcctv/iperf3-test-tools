@@ -8410,8 +8410,19 @@ async def _execute_schedule_task(schedule_id: int):
             # Determine direction params
             direction = getattr(schedule, "direction", "upload") or "upload"
             direction = direction.lower() # Normalize case
-            is_reverse = (direction == "download")
-            is_bidir = (direction == "bidirectional")
+            
+            # For bidirectional: run TWO SEPARATE tests (upload first, then download)
+            # For upload/download: run ONE test with appropriate reverse flag
+            if direction == "bidirectional":
+                # Two separate tests: first upload (reverse=False), then download (reverse=True)
+                direction_tests = [
+                    {"direction_name": "upload", "reverse": False},
+                    {"direction_name": "download", "reverse": True},
+                ]
+            elif direction == "download":
+                direction_tests = [{"direction_name": "download", "reverse": True}]
+            else:  # upload
+                direction_tests = [{"direction_name": "upload", "reverse": False}]
 
             # Use a shared timestamp for all tests in this schedule run (for Chart align)
             execution_time = datetime.now(timezone.utc)
@@ -8426,17 +8437,15 @@ async def _execute_schedule_task(schedule_id: int):
             # and toggle the reverse flag to maintain the correct traffic direction semantics.
             effective_src = src_node
             effective_dst = dst_node
-            effective_reverse = is_reverse
             is_nat_swapped = False
             
             if dst_mode == "reverse" and src_mode != "reverse":
                 # Swap: NAT node becomes source, original source becomes destination
                 effective_src = dst_node
                 effective_dst = src_node
-                effective_reverse = not is_reverse  # Toggle to maintain traffic direction
                 is_nat_swapped = True
-                logger.info(f"[NAT-SWAP] Schedule {schedule_id}: Swapping direction because {dst_node.name} is NAT. "
-                           f"Effective: {effective_src.name} -> {effective_dst.name}, reverse={effective_reverse}")
+                logger.info(f"[NAT-SWAP] Schedule {schedule_id}: Swapping because {dst_node.name} is NAT. "
+                           f"Effective: {effective_src.name} -> {effective_dst.name}")
                 
                 # Get port from the new destination
                 new_dst_status = await health_monitor.check_node(effective_dst)
@@ -8444,19 +8453,31 @@ async def _execute_schedule_task(schedule_id: int):
             
             is_nat_source = (getattr(effective_src, "agent_mode", "normal") or "normal") == "reverse"
 
+            # Iterate over protocols AND directions
             for proto in protocols:
-                try:
-                    # 构造测试参数
-                    # Use effective nodes after NAT swap logic
-                    test_params = {
-                        "target_ip": effective_dst.ip,
-                        "target_port": current_port,
-                        "duration": schedule.duration,
-                        "protocol": proto,
-                        "parallel": schedule.parallel,
-                        "reverse": effective_reverse,
-                        "bidir": is_bidir,
-                    }
+                for dir_test in direction_tests:
+                    try:
+                        # Calculate effective reverse flag
+                        # If NAT swapped, toggle the reverse flag
+                        effective_reverse = dir_test["reverse"]
+                        if is_nat_swapped:
+                            effective_reverse = not effective_reverse
+                        
+                        direction_label = dir_test["direction_name"]
+                        logger.info(f"Schedule {schedule_id}: Running {proto} {direction_label} test (effective_reverse={effective_reverse})")
+                        
+                        # 构造测试参数
+                        # Use effective nodes after NAT swap logic
+                        test_params = {
+                            "target_ip": effective_dst.ip,
+                            "target_port": current_port,
+                            "duration": schedule.duration,
+                            "protocol": proto,
+                            "parallel": schedule.parallel,
+                            "reverse": effective_reverse,
+                            "bidir": False,  # No longer using --bidir, doing two separate tests
+                            "direction_label": direction_label,  # For result tracking
+                        }
                     
                     if is_nat_source:
                         # NAT source node: queue task for agent to poll and execute
@@ -8514,13 +8535,13 @@ async def _execute_schedule_task(schedule_id: int):
                     raw_data = await _call_agent_test(effective_src, call_params, schedule.duration)
                     summary = _summarize_metrics(raw_data)
 
-                    
-                    # Fix: Filter metrics based on direction to prevent pollution
-                    if not is_bidir and summary:
-                        if not effective_reverse: # Upload only
-                            summary["download_bits_per_second"] = 0
-                        else: # Download only
-                            summary["upload_bits_per_second"] = 0
+                        # Filter metrics based on direction to prevent pollution
+                        # Since we're doing separate tests, always filter
+                        if summary:
+                            if direction_label == "upload":
+                                summary["download_bits_per_second"] = 0
+                            elif direction_label == "download":
+                                summary["upload_bits_per_second"] = 0
                     
                     # 保存测试结果
                     test_result = TestResult(
