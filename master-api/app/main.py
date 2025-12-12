@@ -6734,6 +6734,7 @@ def _trace_html() -> str:
     body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
     .hop-row:nth-child(odd) { background: rgba(15, 23, 42, 0.4); }
     .hop-row:nth-child(even) { background: rgba(30, 41, 59, 0.4); }
+    .tab-active { border-bottom: 2px solid #06b6d4; color: #06b6d4; }
   </style>
 </head>
 <body class="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
@@ -6748,65 +6749,128 @@ def _trace_html() -> str:
       </div>
     </div>
 
-    <!-- Config Panel -->
-    <div class="rounded-2xl border border-slate-700 bg-slate-800/60 p-6 mb-6">
-      <div class="grid gap-6 md:grid-cols-3">
-        <!-- Source Node -->
-        <div class="space-y-2">
-          <label class="text-sm font-medium text-slate-300">源节点</label>
-          <select id="trace-src-node" class="w-full rounded-lg border border-slate-600 bg-slate-700 p-3 text-white focus:border-cyan-500 focus:outline-none">
-            <option value="">加载中...</option>
-          </select>
+    <!-- Tabs -->
+    <div class="flex border-b border-slate-700 mb-6 gap-6">
+      <button onclick="switchTab('single')" id="tab-single" class="pb-3 text-sm font-semibold tab-active">🚀 单次追踪</button>
+      <button onclick="switchTab('schedules')" id="tab-schedules" class="pb-3 text-sm font-semibold text-slate-400 hover:text-white">📅 定时监控</button>
+      <button onclick="switchTab('history')" id="tab-history" class="pb-3 text-sm font-semibold text-slate-400 hover:text-white">📜 历史记录</button>
+    </div>
+
+    <!-- Tab: Single Trace -->
+    <div id="panel-single">
+      <!-- Config Panel -->
+      <div class="rounded-2xl border border-slate-700 bg-slate-800/60 p-6 mb-6">
+        <div class="grid gap-6 md:grid-cols-3">
+          <div class="space-y-2">
+            <label class="text-sm font-medium text-slate-300">源节点</label>
+            <select id="trace-src-node" class="w-full rounded-lg border border-slate-600 bg-slate-700 p-3 text-white focus:border-cyan-500 focus:outline-none">
+              <option value="">加载中...</option>
+            </select>
+          </div>
+          <div class="space-y-2">
+            <label class="text-sm font-medium text-slate-300">目标类型</label>
+            <select id="trace-target-type" onchange="toggleTargetInput()" class="w-full rounded-lg border border-slate-600 bg-slate-700 p-3 text-white focus:border-cyan-500 focus:outline-none">
+              <option value="custom">自定义地址</option>
+              <option value="node">选择节点</option>
+            </select>
+          </div>
+          <div class="space-y-2">
+            <label class="text-sm font-medium text-slate-300">目标地址</label>
+            <input type="text" id="trace-target-input" placeholder="例如: google.com 或 8.8.8.8" class="w-full rounded-lg border border-slate-600 bg-slate-700 p-3 text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none">
+            <select id="trace-target-node" class="hidden w-full rounded-lg border border-slate-600 bg-slate-700 p-3 text-white focus:border-cyan-500 focus:outline-none">
+              <option value="">选择目标节点...</option>
+            </select>
+          </div>
         </div>
-        
-        <!-- Target Type -->
-        <div class="space-y-2">
-          <label class="text-sm font-medium text-slate-300">目标类型</label>
-          <select id="trace-target-type" onchange="toggleTargetInput()" class="w-full rounded-lg border border-slate-600 bg-slate-700 p-3 text-white focus:border-cyan-500 focus:outline-none">
-            <option value="custom">自定义地址</option>
-            <option value="node">选择节点</option>
-          </select>
-        </div>
-        
-        <!-- Target Input / Node Select -->
-        <div class="space-y-2">
-          <label class="text-sm font-medium text-slate-300">目标地址</label>
-          <input type="text" id="trace-target-input" placeholder="例如: google.com 或 8.8.8.8" class="w-full rounded-lg border border-slate-600 bg-slate-700 p-3 text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none">
-          <select id="trace-target-node" class="hidden w-full rounded-lg border border-slate-600 bg-slate-700 p-3 text-white focus:border-cyan-500 focus:outline-none">
-            <option value="">选择目标节点...</option>
-          </select>
+        <div class="mt-6 flex items-center gap-4">
+          <button id="trace-start-btn" onclick="runTrace()" class="px-6 py-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-sm font-bold transition inline-flex items-center gap-2">
+            <span>🚀</span> 开始追踪
+          </button>
+          <span id="trace-status" class="text-sm text-slate-400"></span>
         </div>
       </div>
-      
-      <div class="mt-6 flex items-center gap-4">
-        <button id="trace-start-btn" onclick="runTrace()" class="px-6 py-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-sm font-bold transition inline-flex items-center gap-2">
-          <span>🚀</span> 开始追踪
-        </button>
-        <span id="trace-status" class="text-sm text-slate-400"></span>
+
+      <!-- Results Panel -->
+      <div id="trace-results" class="hidden">
+        <div class="rounded-2xl border border-slate-700 bg-slate-800/60 overflow-hidden">
+          <div class="px-6 py-4 border-b border-slate-700 flex items-center justify-between">
+            <h2 class="text-lg font-semibold">追踪结果</h2>
+            <div id="trace-meta" class="text-sm text-slate-400"></div>
+          </div>
+          <div class="px-6 py-3 bg-slate-900/60 grid grid-cols-12 gap-4 text-xs font-semibold text-slate-400 uppercase">
+            <div class="col-span-1">跳数</div>
+            <div class="col-span-3">IP 地址</div>
+            <div class="col-span-2 text-right">延迟</div>
+            <div class="col-span-1 text-right">丢包</div>
+            <div class="col-span-5">地理位置 / ISP</div>
+          </div>
+          <div id="trace-hops" class="max-h-[500px] overflow-y-auto"></div>
+        </div>
       </div>
     </div>
 
-    <!-- Results Panel -->
-    <div id="trace-results" class="hidden">
-      <div class="rounded-2xl border border-slate-700 bg-slate-800/60 overflow-hidden">
-        <!-- Results Header -->
-        <div class="px-6 py-4 border-b border-slate-700 flex items-center justify-between">
-          <h2 class="text-lg font-semibold">追踪结果</h2>
-          <div id="trace-meta" class="text-sm text-slate-400"></div>
+    <!-- Tab: Schedules -->
+    <div id="panel-schedules" class="hidden">
+      <div class="rounded-2xl border border-slate-700 bg-slate-800/60 p-6 mb-6">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-semibold">定时追踪任务</h3>
+          <button onclick="showCreateScheduleModal()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-semibold">+ 新建任务</button>
         </div>
-        
-        <!-- Hops Table Header -->
-        <div class="px-6 py-3 bg-slate-900/60 grid grid-cols-12 gap-4 text-xs font-semibold text-slate-400 uppercase">
-          <div class="col-span-1">跳数</div>
-          <div class="col-span-3">IP 地址</div>
-          <div class="col-span-2 text-right">延迟</div>
-          <div class="col-span-1 text-right">丢包</div>
-          <div class="col-span-5">地理位置 / ISP</div>
+        <div id="schedule-list" class="space-y-3">
+          <p class="text-slate-500 text-sm">加载中...</p>
         </div>
-        
-        <!-- Hops Container -->
-        <div id="trace-hops" class="max-h-[500px] overflow-y-auto">
-          <!-- Hop rows will be rendered here -->
+      </div>
+    </div>
+
+    <!-- Tab: History -->
+    <div id="panel-history" class="hidden">
+      <div class="rounded-2xl border border-slate-700 bg-slate-800/60 p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-semibold">历史追踪记录</h3>
+          <button onclick="loadHistory()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-semibold">🔄 刷新</button>
+        </div>
+        <div id="history-list" class="space-y-3">
+          <p class="text-slate-500 text-sm">加载中...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Create Schedule Modal -->
+    <div id="schedule-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+      <div class="bg-slate-800 rounded-2xl border border-slate-700 p-6 w-full max-w-lg">
+        <h3 class="text-xl font-bold mb-4">新建定时追踪任务</h3>
+        <div class="space-y-4">
+          <div>
+            <label class="text-sm text-slate-300">任务名称</label>
+            <input id="sched-name" type="text" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white">
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="text-sm text-slate-300">源节点</label>
+              <select id="sched-src" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white"></select>
+            </div>
+            <div>
+              <label class="text-sm text-slate-300">目标</label>
+              <input id="sched-target" type="text" placeholder="IP 或域名" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white">
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="text-sm text-slate-300">执行间隔（分钟）</label>
+              <input id="sched-interval" type="number" value="60" min="5" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white">
+            </div>
+            <div>
+              <label class="text-sm text-slate-300">路由变化告警</label>
+              <select id="sched-alert" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white">
+                <option value="true">启用</option>
+                <option value="false">禁用</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="flex justify-end gap-3 mt-6">
+          <button onclick="hideScheduleModal()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">取消</button>
+          <button onclick="createSchedule()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-sm font-semibold">创建</button>
         </div>
       </div>
     </div>
@@ -6817,72 +6881,58 @@ def _trace_html() -> str:
     const apiFetch = (url, options = {}) => fetch(url, { credentials: 'include', ...options });
     let nodes = [];
 
+    // Tab switching
+    function switchTab(tab) {
+      ['single', 'schedules', 'history'].forEach(t => {
+        document.getElementById(`panel-${t}`).classList.toggle('hidden', t !== tab);
+        document.getElementById(`tab-${t}`).classList.toggle('tab-active', t === tab);
+        document.getElementById(`tab-${t}`).classList.toggle('text-slate-400', t !== tab);
+      });
+      if (tab === 'schedules') loadSchedules();
+      if (tab === 'history') loadHistory();
+    }
+
     async function loadNodes() {
       try {
         const res = await apiFetch('/nodes');
         nodes = await res.json();
-        
         const srcSelect = document.getElementById('trace-src-node');
         const targetSelect = document.getElementById('trace-target-node');
+        const schedSrc = document.getElementById('sched-src');
         
         srcSelect.innerHTML = '<option value="">选择源节点...</option>';
         targetSelect.innerHTML = '<option value="">选择目标节点...</option>';
+        schedSrc.innerHTML = '';
         
         nodes.forEach(node => {
-          const opt1 = document.createElement('option');
-          opt1.value = node.id;
-          opt1.textContent = `${node.name} (${node.ip})`;
+          const opt1 = new Option(`${node.name} (${node.ip})`, node.id);
           opt1.dataset.ip = node.ip;
           srcSelect.appendChild(opt1);
-          
-          const opt2 = document.createElement('option');
-          opt2.value = node.id;
-          opt2.textContent = `${node.name} (${node.ip})`;
-          opt2.dataset.ip = node.ip;
-          targetSelect.appendChild(opt2);
+          targetSelect.appendChild(opt1.cloneNode(true));
+          schedSrc.appendChild(new Option(node.name, node.id));
         });
-      } catch (e) {
-        console.error('Failed to load nodes:', e);
-      }
+      } catch (e) { console.error('Failed to load nodes:', e); }
     }
 
     function toggleTargetInput() {
       const type = document.getElementById('trace-target-type').value;
-      const input = document.getElementById('trace-target-input');
-      const select = document.getElementById('trace-target-node');
-      
-      if (type === 'custom') {
-        input.classList.remove('hidden');
-        select.classList.add('hidden');
-      } else {
-        input.classList.add('hidden');
-        select.classList.remove('hidden');
-      }
+      document.getElementById('trace-target-input').classList.toggle('hidden', type !== 'custom');
+      document.getElementById('trace-target-node').classList.toggle('hidden', type === 'custom');
     }
 
     function getTargetAddress() {
       const type = document.getElementById('trace-target-type').value;
-      if (type === 'custom') {
-        return document.getElementById('trace-target-input').value.trim();
-      } else {
-        const select = document.getElementById('trace-target-node');
-        const option = select.options[select.selectedIndex];
-        return option?.dataset?.ip || '';
-      }
+      if (type === 'custom') return document.getElementById('trace-target-input').value.trim();
+      const select = document.getElementById('trace-target-node');
+      return select.options[select.selectedIndex]?.dataset?.ip || '';
     }
 
     function getTargetDisplayName() {
       const type = document.getElementById('trace-target-type').value;
-      if (type === 'custom') {
-        return document.getElementById('trace-target-input').value.trim();
-      } else {
-        const select = document.getElementById('trace-target-node');
-        const option = select.options[select.selectedIndex];
-        // Return node name without IP
-        const text = option?.textContent || '';
-        const name = text.split(' (')[0];
-        return name || option?.dataset?.ip || '';
-      }
+      if (type === 'custom') return document.getElementById('trace-target-input').value.trim();
+      const select = document.getElementById('trace-target-node');
+      const text = select.options[select.selectedIndex]?.textContent || '';
+      return text.split(' (')[0] || select.options[select.selectedIndex]?.dataset?.ip || '';
     }
 
     function renderFlag(code) {
@@ -6920,7 +6970,6 @@ def _trace_html() -> str:
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || 'Traceroute failed');
         
-        // Show target display name (node name or custom IP)
         metaDiv.textContent = `${data.source_node_name} → ${targetDisplayName} | ${data.total_hops} 跳 | ${data.elapsed_ms}ms | 使用 ${data.tool_used}`;
         
         hopsDiv.innerHTML = data.hops.map(hop => {
@@ -6953,7 +7002,127 @@ def _trace_html() -> str:
       }
     }
 
-    // Init
+    // Schedules
+    async function loadSchedules() {
+      const list = document.getElementById('schedule-list');
+      try {
+        const res = await apiFetch('/api/trace/schedules');
+        const schedules = await res.json();
+        
+        if (schedules.length === 0) {
+          list.innerHTML = '<p class="text-slate-500 text-sm">暂无定时追踪任务</p>';
+          return;
+        }
+        
+        list.innerHTML = schedules.map(s => {
+          const srcNode = nodes.find(n => n.id === s.src_node_id);
+          const intervalMin = Math.floor(s.interval_seconds / 60);
+          const statusBadge = s.enabled 
+            ? '<span class="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded text-xs">运行中</span>'
+            : '<span class="px-2 py-0.5 bg-slate-600/40 text-slate-400 rounded text-xs">已暂停</span>';
+          
+          return `
+            <div class="flex items-center justify-between p-4 rounded-xl border border-slate-700 bg-slate-900/40">
+              <div>
+                <div class="font-semibold">${s.name}</div>
+                <div class="text-sm text-slate-400">${srcNode?.name || '?'} → ${s.target_address || '?'} | 每${intervalMin}分钟</div>
+              </div>
+              <div class="flex items-center gap-2">
+                ${statusBadge}
+                <button onclick="toggleScheduleEnabled(${s.id}, ${!s.enabled})" class="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs">${s.enabled ? '暂停' : '启用'}</button>
+                <button onclick="deleteSchedule(${s.id})" class="px-3 py-1 bg-rose-600/30 hover:bg-rose-600/50 text-rose-300 rounded text-xs">删除</button>
+              </div>
+            </div>
+          `;
+        }).join('');
+      } catch (e) {
+        list.innerHTML = '<p class="text-rose-400 text-sm">加载失败</p>';
+      }
+    }
+
+    function showCreateScheduleModal() { document.getElementById('schedule-modal').classList.remove('hidden'); }
+    function hideScheduleModal() { document.getElementById('schedule-modal').classList.add('hidden'); }
+
+    async function createSchedule() {
+      const name = document.getElementById('sched-name').value.trim();
+      const srcId = document.getElementById('sched-src').value;
+      const target = document.getElementById('sched-target').value.trim();
+      const intervalMin = parseInt(document.getElementById('sched-interval').value) || 60;
+      const alertEnabled = document.getElementById('sched-alert').value === 'true';
+      
+      if (!name || !srcId || !target) { alert('请填写完整信息'); return; }
+      
+      try {
+        const res = await apiFetch('/api/trace/schedules', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name,
+            src_node_id: parseInt(srcId),
+            target_type: 'custom',
+            target_address: target,
+            interval_seconds: intervalMin * 60,
+            alert_on_change: alertEnabled
+          })
+        });
+        if (!res.ok) throw new Error('创建失败');
+        hideScheduleModal();
+        loadSchedules();
+      } catch (e) { alert(e.message); }
+    }
+
+    async function toggleScheduleEnabled(id, enabled) {
+      await apiFetch(`/api/trace/schedules/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled })
+      });
+      loadSchedules();
+    }
+
+    async function deleteSchedule(id) {
+      if (!confirm('确定删除此任务?')) return;
+      await apiFetch(`/api/trace/schedules/${id}`, { method: 'DELETE' });
+      loadSchedules();
+    }
+
+    // History
+    async function loadHistory() {
+      const list = document.getElementById('history-list');
+      try {
+        const res = await apiFetch('/api/trace/results?limit=30');
+        const results = await res.json();
+        
+        if (results.length === 0) {
+          list.innerHTML = '<p class="text-slate-500 text-sm">暂无历史记录</p>';
+          return;
+        }
+        
+        list.innerHTML = results.map(r => {
+          const srcNode = nodes.find(n => n.id === r.src_node_id);
+          const date = new Date(r.executed_at).toLocaleString('zh-CN');
+          const changeBadge = r.has_change
+            ? '<span class="px-2 py-0.5 bg-amber-500/20 text-amber-400 rounded text-xs">⚠ 路由变化</span>'
+            : '';
+          
+          return `
+            <div class="p-4 rounded-xl border border-slate-700 bg-slate-900/40">
+              <div class="flex items-center justify-between">
+                <div>
+                  <span class="font-medium">${srcNode?.name || '?'} → ${r.target}</span>
+                  ${changeBadge}
+                </div>
+                <span class="text-xs text-slate-500">${date}</span>
+              </div>
+              <div class="text-sm text-slate-400 mt-1">${r.total_hops} 跳 | ${r.elapsed_ms}ms | ${r.tool_used}</div>
+            </div>
+          `;
+        }).join('');
+      } catch (e) {
+        list.innerHTML = '<p class="text-rose-400 text-sm">加载失败</p>';
+      }
+    }
+
     document.addEventListener('DOMContentLoaded', loadNodes);
   </script>
 </body>
