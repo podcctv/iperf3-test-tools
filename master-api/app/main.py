@@ -1169,7 +1169,43 @@ def _login_html() -> str:
                     <div id="streaming-progress-bar" class="h-2 w-0 rounded-full bg-gradient-to-r from-emerald-500 to-sky-500 transition-all duration-300"></div>
                   </div>
                 </div>
-                <div id="nodes-list" class="text-sm text-slate-400 space-y-3">暂无节点。</div>
+                <div id="nodes-list" class="text-sm text-slate-400 space-y-3">
+                  <!-- Skeleton loading state -->
+                  <div class="nodes-skeleton grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    <div class="animate-pulse rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+                      <div class="flex items-center gap-3 mb-3">
+                        <div class="h-3 w-3 rounded-full bg-slate-700"></div>
+                        <div class="h-4 w-24 rounded bg-slate-700"></div>
+                      </div>
+                      <div class="h-8 w-16 rounded bg-slate-700 mb-2"></div>
+                      <div class="h-3 w-20 rounded bg-slate-700"></div>
+                    </div>
+                    <div class="animate-pulse rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+                      <div class="flex items-center gap-3 mb-3">
+                        <div class="h-3 w-3 rounded-full bg-slate-700"></div>
+                        <div class="h-4 w-20 rounded bg-slate-700"></div>
+                      </div>
+                      <div class="h-8 w-16 rounded bg-slate-700 mb-2"></div>
+                      <div class="h-3 w-20 rounded bg-slate-700"></div>
+                    </div>
+                    <div class="animate-pulse rounded-xl border border-slate-800 bg-slate-900/60 p-4 hidden sm:block">
+                      <div class="flex items-center gap-3 mb-3">
+                        <div class="h-3 w-3 rounded-full bg-slate-700"></div>
+                        <div class="h-4 w-28 rounded bg-slate-700"></div>
+                      </div>
+                      <div class="h-8 w-16 rounded bg-slate-700 mb-2"></div>
+                      <div class="h-3 w-20 rounded bg-slate-700"></div>
+                    </div>
+                    <div class="animate-pulse rounded-xl border border-slate-800 bg-slate-900/60 p-4 hidden lg:block">
+                      <div class="flex items-center gap-3 mb-3">
+                        <div class="h-3 w-3 rounded-full bg-slate-700"></div>
+                        <div class="h-4 w-24 rounded bg-slate-700"></div>
+                      </div>
+                      <div class="h-8 w-16 rounded bg-slate-700 mb-2"></div>
+                      <div class="h-3 w-20 rounded bg-slate-700"></div>
+                    </div>
+                  </div>
+                </div>
               </div>
               <!-- Test Plan Panel - hidden on main page, shown on /web/tests -->
               <div id="test-plan-panel" class="panel-card rounded-2xl p-5 space-y-4 hidden">
