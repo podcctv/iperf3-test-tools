@@ -312,7 +312,7 @@ case "$choice" in
         # 先清理旧容器（释放端口）
         cleanup_docker
         
-        # 检查所有端口
+        # 检查端口（仅 Master 和 Agent API 需要配置，iperf3 使用默认 5201）
         echo ""
         echo "========== 端口配置 =========="
         DEFAULT_MASTER_PORT=9000
@@ -323,22 +323,22 @@ case "$choice" in
         echo "[INFO] 检查 Agent API 端口 ${DEFAULT_AGENT_PORT} 是否可用..."
         AGENT_PORT=$(prompt_available_port "Agent API 端口" "$DEFAULT_AGENT_PORT")
         
-        DEFAULT_IPERF_PORT=5201
-        echo "[INFO] 检查 iperf3 端口 ${DEFAULT_IPERF_PORT} 是否可用..."
-        IPERF_PORT=$(prompt_available_port "iperf3 端口" "$DEFAULT_IPERF_PORT")
+        # iperf3 端口使用默认值
+        IPERF_PORT=5201
         
         echo ""
         echo "========== 端口配置确认 =========="
         echo "Master API 端口: $MASTER_PORT"
         echo "Agent API 端口:  $AGENT_PORT"
-        echo "iperf3 端口:     $IPERF_PORT"
+        echo "iperf3 端口:     $IPERF_PORT (默认)"
         echo "=================================="
         echo ""
         
-        # 使用本地构建 master-api（确保使用最新代码，包含随机密码功能）
-        echo "[INFO] 本地构建 master-api 镜像（使用最新代码）..."
+        # 使用本地构建 master-api（--no-cache 确保使用最新代码）
+        echo "[INFO] 本地构建 master-api 镜像（强制重建，使用最新代码）..."
         cd "$REPO_DIR"
-        MASTER_API_PORT="$MASTER_PORT" docker compose up -d --build
+        docker compose build --no-cache master-api
+        MASTER_API_PORT="$MASTER_PORT" docker compose up -d
         
         # 安装 agent（使用 ghcr.io 镜像）
         AGENT_IMAGE=$(get_agent_image "true")
