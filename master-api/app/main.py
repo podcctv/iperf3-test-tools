@@ -7651,8 +7651,9 @@ async def get_agent_tasks(node_name: str, db: Session = Depends(get_db)):
             # Build task dict matching what agent expects
             task_dict = {
                 "id": pt.id,
-                "type": pt.task_type,
-                **pt.task_data,  # target_ip, target_port, duration, etc.
+                "task_type": pt.task_type,  # Must be "task_type" not "type" for agent
+                "task_data": pt.task_data,  # Keep task_data as nested object
+                **pt.task_data,  # Also spread for backward compatibility
             }
             db_tasks.append(task_dict)
             
