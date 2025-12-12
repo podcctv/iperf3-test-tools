@@ -1453,6 +1453,7 @@ def run_test() -> Any:
     try:
         port = _read_port_from_request(data)
         reverse_mode = str(data.get("reverse", "false")).lower() in ["1", "true", "yes"]
+        bidir_mode = str(data.get("bidir", "false")).lower() in ["1", "true", "yes"]
         bandwidth = data.get("bandwidth")
         datagram_size = data.get("datagram_size")
     except ValueError as e:
@@ -1471,6 +1472,8 @@ def run_test() -> Any:
         extra_flags.extend(["-O", str(omit)])
     if reverse_mode:
         extra_flags.append("--get-server-output")
+    if bidir_mode:
+        extra_flags.append("--bidir")  # Simultaneous bidirectional test
 
     cmd_parts = [
         "iperf3",
@@ -1740,6 +1743,7 @@ def _execute_test_task(task: dict) -> dict:
     protocol = task.get("protocol", "tcp")
     parallel = task.get("parallel", 1)
     reverse_mode = task.get("reverse", False)
+    bidir_mode = task.get("bidir", False)  # Bidirectional test
     bandwidth = task.get("bandwidth")
     
     proto_flag = "-u" if protocol == "udp" else ""
@@ -1750,6 +1754,8 @@ def _execute_test_task(task: dict) -> dict:
         extra_flags.extend(["-b", str(bandwidth)])
     if reverse_mode:
         extra_flags.append("--get-server-output")
+    if bidir_mode:
+        extra_flags.append("--bidir")  # Simultaneous bidirectional test
     
     cmd_parts = [
         "iperf3", "-c", str(target), "-p", str(port),
