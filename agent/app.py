@@ -1375,11 +1375,20 @@ def start_server() -> Any:
         return jsonify({"status": "error", "error": "invalid_port"}), 400
 
     with server_lock:
+        # Check if server is running on the CORRECT port
         if _is_process_running(server_process):
-            return jsonify({"status": "running", "port": requested_port})
+            if DEFAULT_IPERF_PORT == requested_port:
+                return jsonify({"status": "running", "port": requested_port})
+            else:
+                # Server running on different port - restart it
+                print(f"[AGENT] Restarting iperf server: {DEFAULT_IPERF_PORT} -> {requested_port}", flush=True)
+                server_process.terminate()
+                server_process.wait(timeout=5)
+                server_process = None
 
         DEFAULT_IPERF_PORT = requested_port
         server_process = _start_server_process(DEFAULT_IPERF_PORT)
+        print(f"[AGENT] Started iperf server on port {DEFAULT_IPERF_PORT}", flush=True)
         return jsonify({"status": "started", "port": DEFAULT_IPERF_PORT})
 
 
