@@ -9104,6 +9104,9 @@ async def agent_register(
     db.commit()
     db.refresh(node)
     
+    # Invalidate health monitor cache to ensure fresh node data is used
+    health_monitor.invalidate(node.id)
+    
     print(f"[REGISTER] Success: node_id={node.id}, agent_mode={node.agent_mode}", flush=True)
     
     return {
