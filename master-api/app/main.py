@@ -7870,7 +7870,7 @@ async def run_traceroute(node_id: int, req: TracerouteRequest, db: Session = Dep
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(
-                f"http://{node.ip}:{node.port}/traceroute",
+                f"http://{node.ip}:{node.agent_port}/traceroute",
                 json={
                     "target": req.target,
                     "max_hops": req.max_hops,
