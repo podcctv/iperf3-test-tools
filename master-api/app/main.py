@@ -1188,10 +1188,10 @@ def _login_html() -> str:
                 <p class="text-sm text-slate-400" id="auth-hint"></p>
               </div>
               <div class="flex flex-wrap items-center gap-3">
-                <button id="open-traceroute" onclick="toggleTracerouteModal(true)" class="rounded-lg border border-slate-600 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-cyan-500 hover:text-cyan-200 inline-flex items-center gap-2">
+                <a href="/web/trace" class="rounded-lg border border-slate-600 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-cyan-500 hover:text-cyan-200 inline-flex items-center gap-2">
                   <span class="text-base">🌐</span>
                   <span>路由追踪</span>
-                </button>
+                </a>
                 <a href="/web/tests" class="rounded-lg border border-slate-600 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200">单次测试</a>
                 <a href="/web/schedules" class="rounded-lg border border-slate-600 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-emerald-500 hover:text-emerald-200">定时任务</a>
                 <a href="/web/whitelist" class="guest-hide rounded-lg border border-slate-600 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-amber-500 hover:text-amber-200">白名单管理</a>
@@ -6722,6 +6722,229 @@ def _schedules_html() -> str:
 '''
 
 
+def _trace_html() -> str:
+    return '''<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>路由追踪 - iPerf3 测试工具</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    .hop-row:nth-child(odd) { background: rgba(15, 23, 42, 0.4); }
+    .hop-row:nth-child(even) { background: rgba(30, 41, 59, 0.4); }
+  </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
+  <div class="max-w-6xl mx-auto px-6 py-10">
+    
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-8">
+      <div>
+        <a href="/web" class="text-sm text-slate-400 hover:text-white transition mb-2 inline-block">← 返回主页</a>
+        <h1 class="text-3xl font-bold">🌐 Traceroute 路由追踪</h1>
+        <p class="text-slate-400 mt-1">从指定节点到目标地址进行路由追踪，分析网络路径和延迟</p>
+      </div>
+    </div>
+
+    <!-- Config Panel -->
+    <div class="rounded-2xl border border-slate-700 bg-slate-800/60 p-6 mb-6">
+      <div class="grid gap-6 md:grid-cols-3">
+        <!-- Source Node -->
+        <div class="space-y-2">
+          <label class="text-sm font-medium text-slate-300">源节点</label>
+          <select id="trace-src-node" class="w-full rounded-lg border border-slate-600 bg-slate-700 p-3 text-white focus:border-cyan-500 focus:outline-none">
+            <option value="">加载中...</option>
+          </select>
+        </div>
+        
+        <!-- Target Type -->
+        <div class="space-y-2">
+          <label class="text-sm font-medium text-slate-300">目标类型</label>
+          <select id="trace-target-type" onchange="toggleTargetInput()" class="w-full rounded-lg border border-slate-600 bg-slate-700 p-3 text-white focus:border-cyan-500 focus:outline-none">
+            <option value="custom">自定义地址</option>
+            <option value="node">选择节点</option>
+          </select>
+        </div>
+        
+        <!-- Target Input / Node Select -->
+        <div class="space-y-2">
+          <label class="text-sm font-medium text-slate-300">目标地址</label>
+          <input type="text" id="trace-target-input" placeholder="例如: google.com 或 8.8.8.8" class="w-full rounded-lg border border-slate-600 bg-slate-700 p-3 text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none">
+          <select id="trace-target-node" class="hidden w-full rounded-lg border border-slate-600 bg-slate-700 p-3 text-white focus:border-cyan-500 focus:outline-none">
+            <option value="">选择目标节点...</option>
+          </select>
+        </div>
+      </div>
+      
+      <div class="mt-6 flex items-center gap-4">
+        <button id="trace-start-btn" onclick="runTrace()" class="px-6 py-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-sm font-bold transition inline-flex items-center gap-2">
+          <span>🚀</span> 开始追踪
+        </button>
+        <span id="trace-status" class="text-sm text-slate-400"></span>
+      </div>
+    </div>
+
+    <!-- Results Panel -->
+    <div id="trace-results" class="hidden">
+      <div class="rounded-2xl border border-slate-700 bg-slate-800/60 overflow-hidden">
+        <!-- Results Header -->
+        <div class="px-6 py-4 border-b border-slate-700 flex items-center justify-between">
+          <h2 class="text-lg font-semibold">追踪结果</h2>
+          <div id="trace-meta" class="text-sm text-slate-400"></div>
+        </div>
+        
+        <!-- Hops Table Header -->
+        <div class="px-6 py-3 bg-slate-900/60 grid grid-cols-12 gap-4 text-xs font-semibold text-slate-400 uppercase">
+          <div class="col-span-1">跳数</div>
+          <div class="col-span-3">IP 地址</div>
+          <div class="col-span-2 text-right">延迟</div>
+          <div class="col-span-1 text-right">丢包</div>
+          <div class="col-span-5">地理位置 / ISP</div>
+        </div>
+        
+        <!-- Hops Container -->
+        <div id="trace-hops" class="max-h-[500px] overflow-y-auto">
+          <!-- Hop rows will be rendered here -->
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const apiFetch = (url, options = {}) => fetch(url, { credentials: 'include', ...options });
+    let nodes = [];
+
+    async function loadNodes() {
+      try {
+        const res = await apiFetch('/api/nodes');
+        nodes = await res.json();
+        
+        const srcSelect = document.getElementById('trace-src-node');
+        const targetSelect = document.getElementById('trace-target-node');
+        
+        srcSelect.innerHTML = '<option value="">选择源节点...</option>';
+        targetSelect.innerHTML = '<option value="">选择目标节点...</option>';
+        
+        nodes.forEach(node => {
+          const opt1 = document.createElement('option');
+          opt1.value = node.id;
+          opt1.textContent = `${node.name} (${node.ip})`;
+          opt1.dataset.ip = node.ip;
+          srcSelect.appendChild(opt1);
+          
+          const opt2 = document.createElement('option');
+          opt2.value = node.id;
+          opt2.textContent = `${node.name} (${node.ip})`;
+          opt2.dataset.ip = node.ip;
+          targetSelect.appendChild(opt2);
+        });
+      } catch (e) {
+        console.error('Failed to load nodes:', e);
+      }
+    }
+
+    function toggleTargetInput() {
+      const type = document.getElementById('trace-target-type').value;
+      const input = document.getElementById('trace-target-input');
+      const select = document.getElementById('trace-target-node');
+      
+      if (type === 'custom') {
+        input.classList.remove('hidden');
+        select.classList.add('hidden');
+      } else {
+        input.classList.add('hidden');
+        select.classList.remove('hidden');
+      }
+    }
+
+    function getTargetAddress() {
+      const type = document.getElementById('trace-target-type').value;
+      if (type === 'custom') {
+        return document.getElementById('trace-target-input').value.trim();
+      } else {
+        const select = document.getElementById('trace-target-node');
+        const option = select.options[select.selectedIndex];
+        return option?.dataset?.ip || '';
+      }
+    }
+
+    function renderFlag(code) {
+      if (!code) return '';
+      return `<img src="/flags/${code}" alt="${code}" class="inline-block w-5 h-4 mr-2 rounded-sm">`;
+    }
+
+    async function runTrace() {
+      const srcSelect = document.getElementById('trace-src-node');
+      const nodeId = srcSelect.value;
+      const target = getTargetAddress();
+      
+      if (!nodeId) { alert('请选择源节点'); return; }
+      if (!target) { alert('请输入或选择目标地址'); return; }
+      
+      const btn = document.getElementById('trace-start-btn');
+      const status = document.getElementById('trace-status');
+      const results = document.getElementById('trace-results');
+      const hopsDiv = document.getElementById('trace-hops');
+      const metaDiv = document.getElementById('trace-meta');
+      
+      btn.disabled = true;
+      btn.innerHTML = '<span class="animate-pulse">⏳</span> 追踪中...';
+      status.textContent = '正在执行路由追踪，可能需要30秒至2分钟...';
+      results.classList.add('hidden');
+      
+      try {
+        const res = await apiFetch(`/api/trace/run?node_id=${nodeId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ target, max_hops: 30, include_geo: true })
+        });
+        
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Traceroute failed');
+        
+        metaDiv.textContent = `${data.source_node_name} → ${data.target} | ${data.total_hops} 跳 | ${data.elapsed_ms}ms | 使用 ${data.tool_used}`;
+        
+        hopsDiv.innerHTML = data.hops.map(hop => {
+          const geo = hop.geo || {};
+          const flag = renderFlag(geo.country_code);
+          const geoStr = [geo.city, geo.isp].filter(Boolean).join(' · ') || '-';
+          const rtt = hop.rtt_avg ? `${hop.rtt_avg.toFixed(1)}ms` : '-';
+          const rttClass = hop.rtt_avg > 100 ? 'text-amber-400' : hop.rtt_avg > 50 ? 'text-yellow-400' : 'text-emerald-400';
+          const loss = hop.loss_pct > 0 ? `<span class="text-rose-400">${hop.loss_pct}%</span>` : '-';
+          
+          return `
+            <div class="hop-row px-6 py-3 grid grid-cols-12 gap-4 items-center text-sm">
+              <div class="col-span-1 font-mono text-cyan-400 font-bold">${hop.hop}</div>
+              <div class="col-span-3 font-mono ${hop.ip === '*' ? 'text-slate-500' : 'text-white'}">${hop.ip}</div>
+              <div class="col-span-2 text-right ${rttClass} font-medium">${rtt}</div>
+              <div class="col-span-1 text-right text-xs">${loss}</div>
+              <div class="col-span-5 text-slate-400 truncate">${flag}${geoStr}</div>
+            </div>
+          `;
+        }).join('');
+        
+        results.classList.remove('hidden');
+        status.textContent = '✅ 追踪完成';
+        
+      } catch (e) {
+        status.textContent = `❌ 错误: ${e.message}`;
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<span>🚀</span> 开始追踪';
+      }
+    }
+
+    // Init
+    document.addEventListener('DOMContentLoaded', loadNodes);
+  </script>
+</body>
+</html>
+'''
+
+
 def _admin_html() -> str:
     return '''<!DOCTYPE html>
 <html lang="zh-CN">
@@ -6945,6 +7168,15 @@ async def admin_page(request: Request):
         return HTMLResponse(content="<script>window.location.href='/web';</script>")
     
     return HTMLResponse(content=_admin_html())
+
+
+@app.get("/web/trace")
+async def trace_page(request: Request):
+    """路由追踪页面"""
+    if not auth_manager().is_authenticated(request) and not _is_guest(request):
+        return HTMLResponse(content="<script>window.location.href='/web';</script>")
+    
+    return HTMLResponse(content=_trace_html())
 
 
 @app.get("/auth/status")
