@@ -177,6 +177,39 @@ get_agent_image() {
     fi
 }
 
+# 显示 master 登录密码
+show_master_password() {
+    echo ""
+    echo "================================================"
+    echo "正在获取 Dashboard 登录密码..."
+    echo "================================================"
+    sleep 3  # 等待容器启动
+    
+    # 尝试从日志获取密码
+    MASTER_CONTAINER=$(docker ps -q --filter "name=master-api" | head -1)
+    if [ -z "$MASTER_CONTAINER" ]; then
+        MASTER_CONTAINER=$(docker ps -q --filter "name=iperf3-test-tools-master" | head -1)
+    fi
+    
+    if [ -n "$MASTER_CONTAINER" ]; then
+        PASSWORD=$(docker logs "$MASTER_CONTAINER" 2>&1 | grep -i "Dashboard password initialized" | tail -1 | sed 's/.*Dashboard password initialized: //')
+        if [ -n "$PASSWORD" ]; then
+            echo ""
+            echo "=============================================="
+            echo "   Dashboard 登录密码: $PASSWORD"
+            echo "=============================================="
+            echo ""
+            echo "[提示] 密码已保存到容器内部，重启后保持不变"
+            echo "[提示] 如需修改密码，可在 Dashboard 设置中更改"
+        else
+            echo "[WARN] 无法从日志获取密码，请手动查看:"
+            echo "       docker logs $MASTER_CONTAINER | grep 'Dashboard password'"
+        fi
+    else
+        echo "[ERROR] 未找到 master-api 容器"
+    fi
+}
+
 case "$choice" in
     1)
         # 本地编译 - 自动安装 master（含本机 agent）
@@ -184,6 +217,7 @@ case "$choice" in
         echo "[INFO] 本地编译安装 master..."
         bash "$MASTER_INSTALL_SCRIPT"
         echo "[INFO] Master 安装完成！(含本机 agent)"
+        show_master_password
         ;;
     2)
         # 本地编译 - 自动安装 agent
@@ -248,6 +282,7 @@ case "$choice" in
         MASTER_IMAGE="$GHCR_MASTER" docker compose up -d
         
         echo "[INFO] Master 安装完成！(使用 ghcr.io 镜像)"
+        show_master_password
         ;;
     6)
         # GHCR - 自动安装 agent

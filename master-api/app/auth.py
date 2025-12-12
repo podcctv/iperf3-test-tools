@@ -122,15 +122,23 @@ class DashboardAuthManager:
         except OSError:
             logger.exception("Failed to persist dashboard password to %s", path)
 
+    def _generate_random_password(self, length: int = 12) -> str:
+        """Generate a secure random password."""
+        alphabet = string.ascii_letters + string.digits
+        return ''.join(secrets.choice(alphabet) for _ in range(length))
+
     def _ensure_password_file(self) -> None:
         if self._password:
              if not settings.dashboard_password_file.exists():
                 self._save_password(self._password)
              return
 
-        # Fallback to default
-        logger.info("No dashboard password found. Using default: %s", DEFAULT_DASHBOARD_PASSWORD)
-        self._password = DEFAULT_DASHBOARD_PASSWORD
+        # Generate random password on first deploy
+        random_password = self._generate_random_password()
+        logger.info("=" * 60)
+        logger.info("FIRST DEPLOY: Generated random dashboard password")
+        logger.info("=" * 60)
+        self._password = random_password
         self._save_password(self._password)
 
     def _log_password(self) -> None:
