@@ -309,9 +309,12 @@ case "$choice" in
     5)
         # GHCR - 自动安装 master（含本机 agent）
         
-        # 先检查所有端口
+        # 先清理旧容器（释放端口）
+        cleanup_docker
+        
+        # 检查所有端口
         echo ""
-        echo "========== 端口检查 =========="
+        echo "========== 端口配置 =========="
         DEFAULT_MASTER_PORT=9000
         echo "[INFO] 检查 Master API 端口 ${DEFAULT_MASTER_PORT} 是否可用..."
         MASTER_PORT=$(prompt_available_port "Master API 端口" "$DEFAULT_MASTER_PORT")
@@ -331,9 +334,6 @@ case "$choice" in
         echo "iperf3 端口:     $IPERF_PORT"
         echo "=================================="
         echo ""
-        
-        # 清理旧容器
-        cleanup_docker
         
         # 使用本地构建 master-api（确保使用最新代码，包含随机密码功能）
         echo "[INFO] 本地构建 master-api 镜像（使用最新代码）..."
