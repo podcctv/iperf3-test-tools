@@ -307,16 +307,10 @@ case "$choice" in
         echo "[INFO] Agent 将定期向 $MASTER_URL 注册"
         ;;
     5)
-        # GHCR - 自动安装 master（含本机 agent）
+        # GHCR - 自动安装 master（含本机 agent）- 纯拉取镜像
         
         # 先清理旧容器（释放端口）
         cleanup_docker
-        
-        # 清理旧的密码文件（确保生成新的随机密码）
-        if [ -f "${REPO_DIR}/data/dashboard_password.txt" ]; then
-            echo "[INFO] 删除旧密码文件以生成新的随机密码..."
-            rm -f "${REPO_DIR}/data/dashboard_password.txt"
-        fi
         
         # 检查端口
         echo ""
@@ -340,10 +334,23 @@ case "$choice" in
         echo "=================================="
         echo ""
         
-        # 使用本地构建 master-api
-        echo "[INFO] 本地构建 master-api 镜像..."
-        cd "$REPO_DIR"
-        MASTER_API_PORT="$MASTER_PORT" docker compose up -d --build
+        # 拉取并启动 master（使用 ghcr.io 镜像）
+        echo "[INFO] 从 ghcr.io 拉取 master 镜像..."
+        docker pull "$GHCR_MASTER"
+        
+        # 创建数据目录
+        mkdir -p "${REPO_DIR}/data"
+        
+        # 启动 master 容器
+        echo "[INFO] 启动 master-api 容器..."
+        docker run -d \
+            --name iperf3-master-api \
+            --restart=always \
+            -p ${MASTER_PORT}:8000 \
+            -v "${REPO_DIR}/data:/app/data" \
+            -v "${REPO_DIR}/agent_configs.json:/app/agent_configs.json" \
+            -e DATABASE_URL="sqlite:///./app/data/iperf.db" \
+            "$GHCR_MASTER"
         
         # 安装 agent（使用 ghcr.io 镜像）
         AGENT_IMAGE=$(get_agent_image "true")
