@@ -6756,6 +6756,7 @@ def _trace_html() -> str:
     .badge-zayo { background: #7c3aed; color: white; }
     .badge-he { background: #64748b; color: white; }
     .diff-row { background: rgba(251, 191, 36, 0.15) !important; border-left: 3px solid #fbbf24; }
+    .same-row { background: rgba(34, 197, 94, 0.15) !important; border-left: 3px solid #22c55e; }
     .comp-row { display: grid; grid-template-columns: 40px 1fr 50px 1fr; gap: 8px; padding: 8px 12px; align-items: center; font-size: 13px; border-bottom: 1px solid rgba(51, 65, 85, 0.4); }
     .comp-row:nth-child(odd) { background: rgba(15, 23, 42, 0.3); }
     .comp-row:nth-child(even) { background: rgba(30, 41, 59, 0.3); }
@@ -6963,53 +6964,56 @@ def _trace_html() -> str:
     }
 
     function renderComparisonTable(fwdHops, revHops) {
-      // Reverse the reverse route since A→B and B→A traverse same nodes in opposite order
-      const revHopsReversed = [...revHops].reverse();
-      const fwdIPs = fwdHops.map(h => h.ip);
-      const revIPsReversed = revHopsReversed.map(h => h.ip);
+      // Build sets of IPs for cross-reference (excluding * and private IPs at start/end)
+      const fwdIPs = new Set(fwdHops.filter(h => h.ip !== '*' && !isPrivateIP(h.ip)).map(h => h.ip));
+      const revIPs = new Set(revHops.filter(h => h.ip !== '*' && !isPrivateIP(h.ip)).map(h => h.ip));
+      const commonIPs = new Set([...fwdIPs].filter(ip => revIPs.has(ip)));
       
-      // Find alignment using LCS on forward and reversed-reverse IPs
-      const aligned = alignByCommonIPs(fwdIPs, revIPsReversed);
+      const maxLen = Math.max(fwdHops.length, revHops.length);
       const rows = [];
-      let rowNum = 1;
       
-      for (const [fIdx, rIdxReversed] of aligned) {
-        const fwd = fIdx >= 0 ? fwdHops[fIdx] : null;
-        // Map reversed index back to original reverse route
-        const rIdxOriginal = rIdxReversed >= 0 ? (revHops.length - 1 - rIdxReversed) : -1;
-        const rev = rIdxOriginal >= 0 ? revHops[rIdxOriginal] : null;
-        const isDiff = fwd && rev && fwd.ip !== '*' && rev.ip !== '*' && fwd.ip !== rev.ip;
-        rows.push(`<div class="comp-row ${isDiff ? 'diff-row' : ''}"><div class="text-cyan-400 font-mono font-bold text-center">${rowNum++}</div>${renderHopCell(fwd)}<div class="text-slate-600 text-center">⇄</div>${renderHopCell(rev)}</div>`);
+      for (let i = 0; i < maxLen; i++) {
+        const fwd = fwdHops[i] || null;
+        const rev = revHops[i] || null;
+        
+        // Determine row style
+        let rowClass = '';
+        if (fwd && rev) {
+          if (fwd.ip === rev.ip && fwd.ip !== '*') {
+            rowClass = 'same-row';  // Same IP = green highlight
+          } else if (fwd.ip !== '*' && rev.ip !== '*') {
+            const fwdInRev = commonIPs.has(fwd.ip);
+            const revInFwd = commonIPs.has(rev.ip);
+            if (!fwdInRev && !revInFwd) {
+              rowClass = 'diff-row';  // Both unique = yellow highlight
+            }
+          }
+        }
+        
+        rows.push(`<div class="comp-row ${rowClass}"><div class="text-cyan-400 font-mono font-bold text-center">${i + 1}</div>${renderHopCell(fwd)}<div class="text-slate-600 text-center">⇄</div>${renderHopCell(rev)}</div>`);
       }
+      
+      // Add symmetry info if routes are very different
+      const commonCount = commonIPs.size;
+      const totalUnique = fwdIPs.size + revIPs.size - commonCount;
+      const symmetryPct = totalUnique > 0 ? Math.round(commonCount * 2 / totalUnique * 100) : 100;
+      
+      if (symmetryPct < 30) {
+        rows.push(`<div class="p-3 bg-amber-500/10 border-t border-amber-500/30 text-amber-400 text-sm">⚠️ 路由不对称：去回程仅 ${commonCount} 个公共跳点 (${symmetryPct}%)</div>`);
+      } else if (commonCount > 0) {
+        rows.push(`<div class="p-3 bg-slate-800/50 border-t border-slate-700 text-slate-400 text-xs">✓ ${commonCount} 个公共中间节点 | 对称度 ${symmetryPct}%</div>`);
+      }
+      
       return rows.join('');
     }
     
-    function alignByCommonIPs(fwdIPs, revIPs) {
-      // Find LCS (longest common subsequence) for alignment
-      const m = fwdIPs.length, n = revIPs.length;
-      const dp = Array.from({length: m+1}, () => Array(n+1).fill(0));
-      for (let i = 1; i <= m; i++) {
-        for (let j = 1; j <= n; j++) {
-          if (fwdIPs[i-1] === revIPs[j-1] && fwdIPs[i-1] !== '*') dp[i][j] = dp[i-1][j-1] + 1;
-          else dp[i][j] = Math.max(dp[i-1][j], dp[i][j-1]);
-        }
-      }
-      // Backtrack to find alignment
-      const result = [];
-      let i = m, j = n;
-      const tempFwd = [], tempRev = [];
-      while (i > 0 || j > 0) {
-        if (i > 0 && j > 0 && fwdIPs[i-1] === revIPs[j-1] && fwdIPs[i-1] !== '*') {
-          tempFwd.unshift(i-1); tempRev.unshift(j-1); i--; j--;
-        } else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) {
-          tempFwd.unshift(-1); tempRev.unshift(j-1); j--;
-        } else {
-          tempFwd.unshift(i-1); tempRev.unshift(-1); i--;
-        }
-      }
-      for (let k = 0; k < tempFwd.length; k++) result.push([tempFwd[k], tempRev[k]]);
-      return result;
+    function isPrivateIP(ip) {
+      if (!ip || ip === '*') return false;
+      return ip.startsWith('10.') || ip.startsWith('192.168.') || 
+             ip.startsWith('172.16.') || ip.startsWith('172.17.') || ip.startsWith('172.18.') ||
+             ip.startsWith('172.19.') || ip.startsWith('172.2') || ip.startsWith('172.30.') || ip.startsWith('172.31.');
     }
+
 
 
     function renderSingleHops(hops) {
