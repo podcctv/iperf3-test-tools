@@ -7403,6 +7403,50 @@ def _trace_html() -> str:
       ).join('');
     }
     
+    async function loadHistory() {
+      const list = document.getElementById('history-list');
+      list.innerHTML = '<p class="text-slate-500 text-sm">加载中...</p>';
+      
+      try {
+        const res = await apiFetch('/api/trace/results?limit=50');
+        const data = await res.json();
+        
+        if (!res.ok) {
+          list.innerHTML = '<p class="text-rose-400 text-sm">加载失败: ' + (data.detail || '未知错误') + '</p>';
+          return;
+        }
+        
+        if (!data.length) {
+          list.innerHTML = '<p class="text-slate-500 text-sm">暂无记录</p>';
+          return;
+        }
+        
+        list.innerHTML = data.map(r => {
+          const time = new Date(r.executed_at).toLocaleString('zh-CN');
+          const changeClass = r.has_change ? 'border-l-amber-500' : 'border-l-slate-600';
+          const changeIcon = r.has_change ? '⚠️' : '✅';
+          
+          return `
+            <div class="p-3 rounded-lg bg-slate-900/50 border-l-4 ${changeClass}">
+              <div class="flex items-center justify-between">
+                <div>
+                  <span class="text-sm font-semibold text-cyan-400">${r.target}</span>
+                  <span class="text-xs text-slate-500 ml-2">从节点 #${r.src_node_id}</span>
+                </div>
+                <div class="text-xs text-slate-400">
+                  ${changeIcon} ${r.total_hops}跳 | ${r.tool_used} | ${r.elapsed_ms}ms | ${time}
+                </div>
+              </div>
+              <div class="text-xs text-slate-500 mt-1">Route Hash: ${r.route_hash.substring(0, 50)}...</div>
+            </div>
+          `;
+        }).join('');
+        
+      } catch (e) {
+        list.innerHTML = '<p class="text-rose-400 text-sm">加载失败: ' + e.message + '</p>';
+      }
+    }
+    
     function toggleMultisrcTarget() {
       const isNode = document.getElementById('multisrc-target-type').value === 'node';
       document.getElementById('multisrc-target-node').classList.toggle('hidden', !isNode);
