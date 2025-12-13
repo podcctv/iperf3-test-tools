@@ -6963,7 +6963,7 @@ def _trace_html() -> str:
       return `<div class="hop-cell"><div class="flex items-center gap-1">${renderBadge(badge)}<span class="hop-ip ${hop.ip === '*' ? 'text-slate-500' : ''}">${hop.ip}</span><span class="${rttClass} text-xs">${rtt}</span>${loss}</div><div class="hop-isp flex items-center gap-1">${flag} ${isp}</div></div>`;
     }
 
-    function renderComparisonTable(fwdHops, revHops) {
+    function renderComparisonTable(fwdHops, revHops, srcIp, srcName, dstIp, dstName) {
       // Build sets of IPs for cross-reference (excluding * and private IPs at start/end)
       const fwdIPs = new Set(fwdHops.filter(h => h.ip !== '*' && !isPrivateIP(h.ip)).map(h => h.ip));
       const revIPs = new Set(revHops.filter(h => h.ip !== '*' && !isPrivateIP(h.ip)).map(h => h.ip));
@@ -6971,6 +6971,9 @@ def _trace_html() -> str:
       
       const maxLen = Math.max(fwdHops.length, revHops.length);
       const rows = [];
+      
+      // Add START row (source nodes)
+      rows.push(`<div class="comp-row" style="background: rgba(6, 182, 212, 0.1) !important; border-left: 3px solid #06b6d4;"><div class="text-cyan-400 font-mono font-bold text-center">起</div><div class="hop-cell"><div class="flex items-center gap-1"><span class="text-cyan-400 font-mono">${srcIp}</span></div><div class="hop-isp text-cyan-400/70">${srcName} (源)</div></div><div class="text-slate-600 text-center">⇄</div><div class="hop-cell"><div class="flex items-center gap-1"><span class="text-cyan-400 font-mono">${dstIp}</span></div><div class="hop-isp text-cyan-400/70">${dstName} (源)</div></div></div>`);
       
       for (let i = 0; i < maxLen; i++) {
         const fwd = fwdHops[i] || null;
@@ -6992,6 +6995,9 @@ def _trace_html() -> str:
         
         rows.push(`<div class="comp-row ${rowClass}"><div class="text-cyan-400 font-mono font-bold text-center">${i + 1}</div>${renderHopCell(fwd)}<div class="text-slate-600 text-center">⇄</div>${renderHopCell(rev)}</div>`);
       }
+      
+      // Add END row (destination nodes)
+      rows.push(`<div class="comp-row" style="background: rgba(6, 182, 212, 0.1) !important; border-left: 3px solid #06b6d4;"><div class="text-cyan-400 font-mono font-bold text-center">终</div><div class="hop-cell"><div class="flex items-center gap-1"><span class="text-cyan-400 font-mono">${dstIp}</span></div><div class="hop-isp text-cyan-400/70">${dstName} (目标)</div></div><div class="text-slate-600 text-center">⇄</div><div class="hop-cell"><div class="flex items-center gap-1"><span class="text-cyan-400 font-mono">${srcIp}</span></div><div class="hop-isp text-cyan-400/70">${srcName} (目标)</div></div></div>`);
       
       // Add symmetry info if routes are very different
       const commonCount = commonIPs.size;
@@ -7068,7 +7074,7 @@ def _trace_html() -> str:
           document.getElementById('rev-title').textContent = `${targetName} → ${srcOpt.dataset.name}`;
           document.getElementById('rev-badges').innerHTML = revBadges.map(b => renderBadge(b)).join('');
           document.getElementById('rev-stats').textContent = `${revData.total_hops}跳 | ${revData.elapsed_ms}ms`;
-          document.getElementById('comparison-body').innerHTML = renderComparisonTable(fwdData.hops, revData.hops);
+          document.getElementById('comparison-body').innerHTML = renderComparisonTable(fwdData.hops, revData.hops, srcOpt.dataset.ip, srcOpt.dataset.name, targetIp, targetName);
           document.getElementById('trace-results').classList.remove('hidden');
         } else {
           document.getElementById('single-title').textContent = `${srcOpt.dataset.name} → ${targetName}`;
