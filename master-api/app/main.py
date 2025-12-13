@@ -7008,44 +7008,49 @@ def _trace_html() -> str:
       btn.disabled = true;
       
       try {
-        // Clone the results container
-        const original = document.getElementById('trace-results');
-        const clone = original.cloneNode(true);
-        clone.style.position = 'absolute';
-        clone.style.left = '-9999px';
-        clone.style.width = original.offsetWidth + 'px';
-        clone.style.background = '#1e293b';
-        clone.style.padding = '16px';
-        clone.style.borderRadius = '12px';
+        const container = document.getElementById('trace-results');
         
-        // Remove share button from clone
-        const clonedBtn = clone.querySelector('#share-btn');
-        if (clonedBtn) clonedBtn.remove();
+        // Hide share button temporarily
+        btn.style.display = 'none';
         
-        document.body.appendChild(clone);
-        
-        // Mask all IPs in the clone (format: xxx.xxx.xxx.xxx -> xxx.xxx.*.*)
+        // Store original text content and mask IPs
         const textNodes = [];
-        const walker = document.createTreeWalker(clone, NodeFilter.SHOW_TEXT, null, false);
-        while (walker.nextNode()) textNodes.push(walker.currentNode);
+        const originalTexts = [];
+        const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
+        while (walker.nextNode()) {
+          textNodes.push(walker.currentNode);
+          originalTexts.push(walker.currentNode.textContent);
+        }
         
+        // Mask all IPs (xxx.xxx.xxx.xxx -> xxx.xxx.**.** )
         textNodes.forEach(node => {
-          // Match IPv4 addresses and mask last two octets
           node.textContent = node.textContent.replace(
             /(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/g,
             '$1.$2.**.**'
           );
         });
         
-        // Capture as image
-        const canvas = await html2canvas(clone, {
+        // Small delay for DOM to update
+        await new Promise(r => setTimeout(r, 50));
+        
+        // Capture as image from original element (preserves CSS)
+        const canvas = await html2canvas(container, {
           backgroundColor: '#1e293b',
           scale: 2,
           logging: false,
-          useCORS: true
+          useCORS: true,
+          allowTaint: true,
+          scrollX: 0,
+          scrollY: -window.scrollY
         });
         
-        document.body.removeChild(clone);
+        // Restore original text
+        textNodes.forEach((node, i) => {
+          node.textContent = originalTexts[i];
+        });
+        
+        // Show share button again
+        btn.style.display = '';
         
         // Copy to clipboard
         canvas.toBlob(async (blob) => {
@@ -7071,10 +7076,12 @@ def _trace_html() -> str:
         
       } catch (e) {
         console.error('Share as image failed:', e);
+        btn.style.display = '';
         btn.innerHTML = '<span>❌</span><span>失败</span>';
         setTimeout(() => { btn.innerHTML = originalText; btn.disabled = false; }, 2000);
       }
     }
+
 
     async function loadNodes() {
       try {
