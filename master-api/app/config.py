@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     state_file_path: str = str(Path(__file__).resolve().parent.parent / "data" / "master_state.json")
     state_recent_tests: int = 50
     health_check_interval: int = 30
+    # Telegram alert settings
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
 
     @property
     def agent_config_file(self) -> Path:

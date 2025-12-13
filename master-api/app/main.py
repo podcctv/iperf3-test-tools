@@ -8715,19 +8715,65 @@ def delete_trace_schedule(schedule_id: int, db: Session = Depends(get_db)):
     return {"status": "ok", "message": "Schedule deleted"}
 
 
+def _mask_ip_address(ip: str) -> str:
+    """Mask IP address for guest users (last two octets -> **)."""
+    if not ip or ip == "*":
+        return ip
+    parts = ip.split(".")
+    if len(parts) == 4:  # IPv4
+        return f"{parts[0]}.{parts[1]}.**.**"
+    return ip  # IPv6 or hostname - return as-is
+
+
+def _mask_hop_ips(hop: dict) -> dict:
+    """Mask IPs in hop data for guest users."""
+    masked = hop.copy()
+    if "ip" in masked:
+        masked["ip"] = _mask_ip_address(masked["ip"])
+    return masked
+
 @app.get("/api/trace/results", response_model=List[TraceResultRead])
 def list_trace_results(
+    request: Request,
     schedule_id: Optional[int] = None,
     limit: int = 50,
     db: Session = Depends(get_db)
 ):
     """List traceroute results, optionally filtered by schedule."""
+    from .auth import auth_manager
+    
     query = select(TraceResult).order_by(TraceResult.executed_at.desc()).limit(limit)
     
     if schedule_id:
         query = query.where(TraceResult.schedule_id == schedule_id)
     
     results = db.scalars(query).all()
+    
+    # For guests (not authenticated), mask IPs in results
+    is_guest = not auth_manager().is_authenticated(request)
+    
+    if is_guest:
+        # Convert to dicts and mask IPs
+        masked_results = []
+        for r in results:
+            result_dict = {
+                "id": r.id,
+                "schedule_id": r.schedule_id,
+                "src_node_id": r.src_node_id,
+                "target": _mask_ip_address(r.target),
+                "executed_at": r.executed_at,
+                "total_hops": r.total_hops,
+                "hops": [_mask_hop_ips(h) for h in (r.hops or [])],
+                "route_hash": r.route_hash,
+                "tool_used": r.tool_used,
+                "elapsed_ms": r.elapsed_ms,
+                "has_change": r.has_change,
+                "change_summary": r.change_summary,
+                "previous_route_hash": r.previous_route_hash,
+            }
+            masked_results.append(result_dict)
+        return masked_results
+    
     return results
 
 
@@ -8814,6 +8860,35 @@ def _register_trace_schedule_job(schedule: TraceSchedule):
         next_run_time=schedule.next_run_at,
     )
     logger.info(f"Registered trace schedule job: {job_id}, interval={schedule.interval_seconds}s")
+
+
+async def _send_telegram_alert(title: str, message: str) -> bool:
+    """Send alert message via Telegram bot."""
+    from .config import settings
+    
+    if not settings.telegram_bot_token or not settings.telegram_chat_id:
+        logger.warning("Telegram alert skipped: bot token or chat_id not configured")
+        return False
+    
+    text = f"*{title}*\n\n{message}"
+    url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
+    
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(url, json={
+                "chat_id": settings.telegram_chat_id,
+                "text": text,
+                "parse_mode": "Markdown"
+            })
+            if response.status_code == 200:
+                logger.info(f"Telegram alert sent: {title}")
+                return True
+            else:
+                logger.error(f"Telegram API error: {response.status_code} - {response.text}")
+                return False
+    except Exception as e:
+        logger.error(f"Telegram alert failed: {e}")
+        return False
 
 
 async def _execute_trace_schedule(schedule_id: int):
@@ -8903,7 +8978,17 @@ async def _execute_trace_schedule(schedule_id: int):
         # Trigger alert if route changed
         if has_change and schedule.alert_on_change:
             logger.warning(f"Route change detected for schedule {schedule.name}!")
-            # TODO: Implement alert notifications (bell, telegram)
+            alert_channels = schedule.alert_channels or []
+            
+            # Telegram notification
+            if "telegram" in alert_channels:
+                try:
+                    await _send_telegram_alert(
+                        title=f"🔔 路由变化告警: {schedule.name}",
+                        message=f"源节点: {src_node.name}\n目标: {target}\n变化详情: {change_summary}"
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to send Telegram alert: {e}")
         
     finally:
         db.close()
