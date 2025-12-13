@@ -6930,14 +6930,17 @@ def _trace_html() -> str:
     }
     
     const ISP_RULES = [
-      // China carriers
-      { match: /chinanet|china\s*telecom|ct\.net|163data/i, asn: [4134, 4812], badge: '163', label: '163' },
-      { match: /cn2|ctgnet|china\s*telecom\s*global|next\s*carrier|next\s*carr/i, asn: [4809], badge: 'cn2', label: 'CN2' },
-      { match: /chinaunicom(?!.*9929)|unicom.*169|169\.net|cncgroup/i, asn: [4837, 17621, 17622], badge: '4837', label: '4837' },
-      { match: /9929|unicom.*premium|cuii/i, asn: [9929], badge: '9929', label: '9929' },
-      { match: /unicom.*global/i, asn: [10099], badge: '9929', label: 'CU-G' },
-      { match: /chinamobile|cmnet|cmi/i, asn: [9808, 56040, 56041, 56042, 56044, 56046, 56047, 56048], badge: 'cmi', label: 'CMI' },
-      { match: /cmin2/i, asn: [58807], badge: 'cmin2', label: 'CMIN2' },
+      // China Telecom (电信) - CN2 must be checked before 163
+      { match: /cn2|ctgnet|next\s*carr|next\s*gen|as4809/i, asn: [4809], badge: 'cn2', label: 'CN2' },
+      { match: /chinanet|china\s*telecom(?!.*next)|ct\.net|163data|no\.31|as4134/i, asn: [4134, 4812], badge: '163', label: '163' },
+      // China Unicom (联通) - 9929/10099 must be checked before 4837
+      { match: /9929|as9929|unicom.*premium|cuii|cu\s*vip/i, asn: [9929], badge: '9929', label: '9929' },
+      { match: /10099|as10099|unicom.*global|cu.*international/i, asn: [10099], badge: '9929', label: '10099' },
+      { match: /4837|as4837|169.*backbone|chinaunicom|cncgroup|china\s*unicom(?!.*(9929|premium|global|international))/i, asn: [4837, 17621, 17622], badge: '4837', label: '4837' },
+      // China Mobile (移动) - CMIN2 must be checked before CMI
+      { match: /cmin2|as58807|mobile.*international.*2/i, asn: [58807], badge: 'cmin2', label: 'CMIN2' },
+      { match: /cmi(?!n2)|as58453|china\s*mobile.*international(?!.*2)/i, asn: [58453], badge: 'cmi', label: 'CMI' },
+      { match: /chinamobile|cmnet|china\s*mobile(?!.*international)/i, asn: [9808, 56040, 56041, 56042, 56044, 56046, 56047, 56048], badge: 'cmi', label: 'CM' },
       // Tier 1 - Global backbone
       { match: /ntt.*comm|ntt\s*com|ntt\s*america/i, asn: [2914], badge: 'ntt', label: 'T1:NTT' },
       { match: /telia|arelion/i, asn: [1299], badge: 'telia', label: 'T1:Telia' },
@@ -7233,10 +7236,18 @@ def _trace_html() -> str:
         if (/ams-ix/i.test(isp)) return 'IX:AMS-IX';
         if (/linx/i.test(isp)) return 'IX:LINX';
         
-        // China carriers (Tier 2/3)
-        if (/china\s*telecom|chinanet|ct\.net|as4134|as4809/i.test(isp + asn)) return 'CN:CT';
-        if (/china\s*unicom|cncgroup|as4837|as9929/i.test(isp + asn)) return 'CN:CU';
-        if (/china\s*mobile|cmnet|as9808|as58453/i.test(isp + asn)) return 'CN:CM';
+        // China carriers - must match ISP_RULES order
+        // China Telecom
+        if (/cn2|ctgnet|next\s*carr|as4809/i.test(isp + asn)) return 'CN:CN2';
+        if (/chinanet|china\s*telecom|163data|as4134/i.test(isp + asn)) return 'CN:163';
+        // China Unicom  
+        if (/9929|as9929|unicom.*premium|cuii/i.test(isp + asn)) return 'CN:9929';
+        if (/10099|as10099|unicom.*global/i.test(isp + asn)) return 'CN:10099';
+        if (/4837|as4837|chinaunicom|cncgroup/i.test(isp + asn)) return 'CN:4837';
+        // China Mobile
+        if (/cmin2|as58807/i.test(isp + asn)) return 'CN:CMIN2';
+        if (/cmi|as58453|mobile.*international/i.test(isp + asn)) return 'CN:CMI';
+        if (/chinamobile|cmnet|as9808/i.test(isp + asn)) return 'CN:CM';
         
         // Cloud/CDN providers
         if (/cloudflare|as13335/i.test(isp + asn)) return 'CDN:CF';
