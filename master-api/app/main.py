@@ -6932,7 +6932,7 @@ def _trace_html() -> str:
     const ISP_RULES = [
       // China carriers
       { match: /chinanet|china\s*telecom|ct\.net|163data/i, asn: [4134, 4812], badge: '163', label: '163' },
-      { match: /cn2|ctgnet|china\s*telecom\s*global/i, asn: [4809], badge: 'cn2', label: 'CN2' },
+      { match: /cn2|ctgnet|china\s*telecom\s*global|next\s*carrier|next\s*carr/i, asn: [4809], badge: 'cn2', label: 'CN2' },
       { match: /chinaunicom(?!.*9929)|unicom.*169|169\.net|cncgroup/i, asn: [4837, 17621, 17622], badge: '4837', label: '4837' },
       { match: /9929|unicom.*premium|cuii/i, asn: [9929], badge: '9929', label: '9929' },
       { match: /unicom.*global/i, asn: [10099], badge: '9929', label: 'CU-G' },
