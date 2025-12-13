@@ -6997,18 +6997,34 @@ def _trace_html() -> str:
       // Reverse the return route for proper alignment (B→A becomes A←B direction)
       const revHopsReversed = [...revHops].reverse();
       
-      // Forward: add srcIp at start, add dstIp at end if not already there
-      const fwdComplete = [{ip: srcIp, geo: {isp: srcName}, isEndpoint: true}, ...fwdHops];
-      if (fwdHops.length === 0 || fwdHops[fwdHops.length - 1].ip !== dstIp) {
-        fwdComplete.push({ip: dstIp, geo: {isp: dstName}, isEndpoint: true});
+      // Forward route: srcIp → hops → dstIp
+      // Start with srcIp, add all hops, ensure dstIp at end
+      const fwdComplete = [{ip: srcIp, geo: {isp: srcName}, isEndpoint: true, endType: 'start'}];
+      fwdHops.forEach(h => fwdComplete.push(h));
+      // Add dstIp at end if last hop is not already dstIp
+      const lastFwdHop = fwdHops[fwdHops.length - 1];
+      if (!lastFwdHop || lastFwdHop.ip !== dstIp) {
+        fwdComplete.push({ip: dstIp, geo: {isp: dstName}, isEndpoint: true, endType: 'end'});
+      } else {
+        // Mark last hop as endpoint
+        fwdComplete[fwdComplete.length - 1].isEndpoint = true;
+        fwdComplete[fwdComplete.length - 1].endType = 'end';
       }
       
-      // Reverse: just reverse, DON'T prepend srcIp (MTR already has destination as last hop)
-      // After reversal, first hop should be near srcIp (destination of original reverse)
-      const revComplete = [...revHopsReversed];
-      // Add dstIp at end if not already there (srcIp of original reverse route)
-      if (revHopsReversed.length === 0 || revHopsReversed[revHopsReversed.length - 1].ip !== dstIp) {
-        revComplete.push({ip: dstIp, geo: {isp: dstName}, isEndpoint: true});
+      // Reverse route (after reversal): dstIp → reversed_hops → srcIp
+      // Original reverse trace was from dstIp to srcIp
+      // After reversal, first hop is near dstIp, last hop is near srcIp
+      // BUT we want to display from srcIp side for alignment!
+      // So we add srcIp at START (reversed endpoint), dstIp at END (original start)
+      const revComplete = [{ip: srcIp, geo: {isp: srcName}, isEndpoint: true, endType: 'start'}];
+      revHopsReversed.forEach(h => revComplete.push(h));
+      // Add dstIp at end if last reversed hop is not already dstIp
+      const lastRevHop = revHopsReversed[revHopsReversed.length - 1];
+      if (!lastRevHop || lastRevHop.ip !== dstIp) {
+        revComplete.push({ip: dstIp, geo: {isp: dstName}, isEndpoint: true, endType: 'end'});
+      } else {
+        revComplete[revComplete.length - 1].isEndpoint = true;
+        revComplete[revComplete.length - 1].endType = 'end';
       }
       
       // Get hop key for matching - Tier 1/2/3 and ISP classification
@@ -7085,11 +7101,10 @@ def _trace_html() -> str:
         const fwd = fIdx >= 0 ? fwdComplete[fIdx] : null;
         const rev = rIdx >= 0 ? revComplete[rIdx] : null;
         
-        // Determine row style
+        // Determine row style using endType field
         let rowClass = '';
-        const isStartRow = rowNum === 0;
-        const isEndRow = (fIdx === fwdComplete.length - 1 || rIdx === revComplete.length - 1) && 
-                         (fwd?.isEndpoint || rev?.isEndpoint);
+        const isStartRow = (fwd?.endType === 'start' || rev?.endType === 'start');
+        const isEndRow = (fwd?.endType === 'end' || rev?.endType === 'end');
         
         if (fwd && rev && fwd.ip === rev.ip && fwd.ip !== '*') {
           rowClass = 'same-row';
@@ -7097,7 +7112,7 @@ def _trace_html() -> str:
           rowClass = 'same-row';  // Same ISP = green highlight
         }
         
-        const rowLabel = isStartRow ? '起' : (isEndRow && rowNum > 0 ? '终' : rowNum);
+        const rowLabel = isStartRow ? '起' : (isEndRow ? '终' : rowNum);
         const rowStyle = (isStartRow || isEndRow) ? 'style="background: rgba(6, 182, 212, 0.1) !important; border-left: 3px solid #06b6d4;"' : '';
         
         rows.push(`<div class="comp-row ${rowClass}" ${rowStyle}><div class="text-cyan-400 font-mono font-bold text-center">${rowLabel}</div>${renderHopCell(fwd)}<div class="text-slate-600 text-center">⇄</div>${renderHopCell(rev)}</div>`);
