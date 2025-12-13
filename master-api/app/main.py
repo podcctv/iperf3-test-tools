@@ -6821,7 +6821,7 @@ def _trace_html() -> str:
             <div class="px-4 py-3 bg-slate-900/60 font-semibold text-emerald-400 border-b border-slate-700">→ 去程路由</div>
             <div class="px-4 py-3 bg-slate-900/60 font-semibold text-amber-400 border-b border-slate-700">← 回程路由</div>
           </div>
-          <div id="comparison-body" class="max-h-[600px] overflow-y-auto"></div>
+          <div id="comparison-body"></div>
         </div>
         <div class="mt-3 text-xs text-slate-500"><span class="inline-block w-3 h-3 bg-amber-500/30 border-l-2 border-amber-500 mr-1"></span> 去回程不同的跳点</div>
       </div>
@@ -6963,16 +6963,45 @@ def _trace_html() -> str:
     }
 
     function renderComparisonTable(fwdHops, revHops) {
-      const maxLen = Math.max(fwdHops.length, revHops.length), rows = [];
-      const fwdIPs = new Set(fwdHops.filter(h => h.ip !== '*').map(h => h.ip));
-      const revIPs = new Set(revHops.filter(h => h.ip !== '*').map(h => h.ip));
-      for (let i = 0; i < maxLen; i++) {
-        const fwd = fwdHops[i], rev = revHops[i];
-        let isDiff = false;
-        if (fwd && rev && fwd.ip !== '*' && rev.ip !== '*') isDiff = fwd.ip !== rev.ip && !revIPs.has(fwd.ip) && !fwdIPs.has(rev.ip);
-        rows.push(`<div class="comp-row ${isDiff ? 'diff-row' : ''}"><div class="text-cyan-400 font-mono font-bold text-center">${i + 1}</div>${renderHopCell(fwd)}<div class="text-slate-600 text-center">⇄</div>${renderHopCell(rev)}</div>`);
+      // Use LCS-based alignment: find common IPs and align them on same row
+      const fwdIPs = fwdHops.map(h => h.ip), revIPs = revHops.map(h => h.ip);
+      const rows = [], aligned = alignByCommonIPs(fwdIPs, revIPs);
+      
+      let fIdx = 0, rIdx = 0, rowNum = 1;
+      for (const [fAlign, rAlign] of aligned) {
+        const fwd = fAlign >= 0 ? fwdHops[fAlign] : null;
+        const rev = rAlign >= 0 ? revHops[rAlign] : null;
+        const isDiff = fwd && rev && fwd.ip !== '*' && rev.ip !== '*' && fwd.ip !== rev.ip;
+        rows.push(`<div class="comp-row ${isDiff ? 'diff-row' : ''}"><div class="text-cyan-400 font-mono font-bold text-center">${rowNum++}</div>${renderHopCell(fwd)}<div class="text-slate-600 text-center">⇄</div>${renderHopCell(rev)}</div>`);
       }
       return rows.join('');
+    }
+    
+    function alignByCommonIPs(fwdIPs, revIPs) {
+      // Find LCS (longest common subsequence) for alignment
+      const m = fwdIPs.length, n = revIPs.length;
+      const dp = Array.from({length: m+1}, () => Array(n+1).fill(0));
+      for (let i = 1; i <= m; i++) {
+        for (let j = 1; j <= n; j++) {
+          if (fwdIPs[i-1] === revIPs[j-1] && fwdIPs[i-1] !== '*') dp[i][j] = dp[i-1][j-1] + 1;
+          else dp[i][j] = Math.max(dp[i-1][j], dp[i][j-1]);
+        }
+      }
+      // Backtrack to find alignment
+      const result = [];
+      let i = m, j = n;
+      const tempFwd = [], tempRev = [];
+      while (i > 0 || j > 0) {
+        if (i > 0 && j > 0 && fwdIPs[i-1] === revIPs[j-1] && fwdIPs[i-1] !== '*') {
+          tempFwd.unshift(i-1); tempRev.unshift(j-1); i--; j--;
+        } else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) {
+          tempFwd.unshift(-1); tempRev.unshift(j-1); j--;
+        } else {
+          tempFwd.unshift(i-1); tempRev.unshift(-1); i--;
+        }
+      }
+      for (let k = 0; k < tempFwd.length; k++) result.push([tempFwd[k], tempRev[k]]);
+      return result;
     }
 
     function renderSingleHops(hops) {

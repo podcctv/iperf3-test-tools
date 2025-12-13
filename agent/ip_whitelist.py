@@ -190,7 +190,13 @@ class IPWhitelist:
         return False
     
     def is_allowed(self, ip: str) -> bool:
-        """Check if an IP is in the whitelist (supports CIDR matching)"""
+        """Check if an IP is in the whitelist (supports CIDR matching)
+        
+        Private/internal IPs (RFC1918) are automatically allowed:
+        - 10.0.0.0/8
+        - 172.16.0.0/12
+        - 192.168.0.0/16
+        """
         import ipaddress
         
         # Normalize IPv4-mapped IPv6 addresses (e.g., ::ffff:192.168.1.1 -> 192.168.1.1)
@@ -203,6 +209,16 @@ class IPWhitelist:
         except ValueError:
             pass  # Not a valid IP, will be handled below
         
+        # Auto-allow private/internal IPs (RFC1918)
+        try:
+            ip_obj = ipaddress.ip_address(ip)
+            if ip_obj.is_private:
+                logger.info(f"[WHITELIST] Auto-allowed private IP: {ip}")
+                return True
+        except ValueError:
+            pass
+        
+
         with self._lock:
             # Direct match
             if ip in self._allowed_ips:
