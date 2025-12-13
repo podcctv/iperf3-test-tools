@@ -290,7 +290,13 @@ case "$choice" in
         IPERF_PORT=$(prompt_required_port "iperf3 端口" "5201")
         
         echo "[INFO] 正在本地构建 agent 镜像..."
-        docker build -t iperf-agent-reverse:latest "${REPO_DIR}/agent"
+        REGION=$(detect_region)
+        BUILD_ARGS=""
+        if [ "$REGION" = "cn" ]; then
+            echo "[INFO] 检测到中国网络，使用阿里云镜像加速"
+            BUILD_ARGS="--build-arg APT_MIRROR=https://mirrors.aliyun.com --build-arg PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/ --build-arg PIP_TRUSTED_HOST=mirrors.aliyun.com"
+        fi
+        docker build $BUILD_ARGS -t iperf-agent-reverse:latest "${REPO_DIR}/agent"
         
         docker run -d \
             --name iperf-agent-reverse \

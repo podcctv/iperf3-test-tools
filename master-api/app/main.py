@@ -8484,8 +8484,8 @@ async def _run_traceroute_via_task_queue(node: Node, req: TracerouteRequest, db:
         await asyncio.sleep(poll_interval)
         elapsed += poll_interval
         
-        # Check task status
-        db.refresh(task)
+        # Check task status - expire cache to get fresh data from DB
+        db.expire_all()  # Clear SQLAlchemy cache
         task = db.get(PendingTask, task_id)
         
         if not task:
