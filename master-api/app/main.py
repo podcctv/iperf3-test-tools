@@ -6967,35 +6967,79 @@ def _trace_html() -> str:
       // Reverse the return route for proper alignment (B→A becomes A←B direction)
       const revHopsReversed = [...revHops].reverse();
       
-      // Build complete routes with source and destination
-      // Forward: srcIp -> hops -> (dstIp if not already last hop)
+      // Forward: add srcIp at start, add dstIp at end if not already there
       const fwdComplete = [{ip: srcIp, geo: {isp: srcName}, isEndpoint: true}, ...fwdHops];
       if (fwdHops.length === 0 || fwdHops[fwdHops.length - 1].ip !== dstIp) {
         fwdComplete.push({ip: dstIp, geo: {isp: dstName}, isEndpoint: true});
       }
       
-      // Reverse (after reversal): srcIp -> reversed hops -> dstIp
-      const revComplete = [{ip: srcIp, geo: {isp: srcName}, isEndpoint: true}, ...revHopsReversed];
+      // Reverse: just reverse, DON'T prepend srcIp (MTR already has destination as last hop)
+      // After reversal, first hop should be near srcIp (destination of original reverse)
+      const revComplete = [...revHopsReversed];
+      // Add dstIp at end if not already there (srcIp of original reverse route)
       if (revHopsReversed.length === 0 || revHopsReversed[revHopsReversed.length - 1].ip !== dstIp) {
         revComplete.push({ip: dstIp, geo: {isp: dstName}, isEndpoint: true});
       }
       
-      // Get hop key for matching (use ISP if available, else IP)
+      // Get hop key for matching - Tier 1/2/3 and ISP classification
       function getHopKey(hop) {
         if (!hop || hop.ip === '*') return null;
-        const isp = hop.geo?.isp || '';
-        // Use major ISP name for matching
-        if (/ntt/i.test(isp)) return 'NTT';
-        if (/jinx/i.test(isp)) return 'JINX';
-        if (/bbix/i.test(isp)) return 'BBIX';
-        if (/gtt|cyberverse/i.test(isp)) return 'GTT';
-        if (/cogent/i.test(isp)) return 'Cogent';
-        if (/telia/i.test(isp)) return 'Telia';
-        if (/lumen|level3/i.test(isp)) return 'Lumen';
-        if (/pccw/i.test(isp)) return 'PCCW';
-        if (/china\s*telecom|ct\.net|chinanet/i.test(isp)) return 'CT';
-        if (/china\s*unicom|cncgroup/i.test(isp)) return 'CU';
-        if (/china\s*mobile|cmnet/i.test(isp)) return 'CM';
+        const isp = (hop.geo?.isp || '').toLowerCase();
+        const asn = hop.geo?.asn || '';
+        
+        // Tier 1 - Global backbone carriers
+        if (/ntt|as2914/i.test(isp + asn)) return 'T1:NTT';
+        if (/lumen|level\s*3|centurylink|as3356|as3549/i.test(isp + asn)) return 'T1:Lumen';
+        if (/cogent|as174/i.test(isp + asn)) return 'T1:Cogent';
+        if (/telia|as1299/i.test(isp + asn)) return 'T1:Telia';
+        if (/gtt|cyberverse|as3257/i.test(isp + asn)) return 'T1:GTT';
+        if (/zayo|as6461/i.test(isp + asn)) return 'T1:Zayo';
+        if (/hurricane|he\.net|as6939/i.test(isp + asn)) return 'T1:HE';
+        if (/arelion/i.test(isp)) return 'T1:Arelion';
+        
+        // Tier 2 - Regional/Transit carriers
+        if (/pccw|as3491/i.test(isp + asn)) return 'T2:PCCW';
+        if (/kddi|as2516/i.test(isp + asn)) return 'T2:KDDI';
+        if (/softbank|as17676/i.test(isp + asn)) return 'T2:SoftBank';
+        if (/iij|as2497/i.test(isp + asn)) return 'T2:IIJ';
+        if (/telstra|as1221/i.test(isp + asn)) return 'T2:Telstra';
+        if (/singtel|as7473/i.test(isp + asn)) return 'T2:Singtel';
+        if (/hkt|as4515/i.test(isp + asn)) return 'T2:HKT';
+        
+        // IX/Peering points
+        if (/bbix|as23640/i.test(isp + asn)) return 'IX:BBIX';
+        if (/jinx|as37662/i.test(isp + asn)) return 'IX:JINX';
+        if (/equinix|as24115/i.test(isp + asn)) return 'IX:Equinix';
+        if (/de-cix/i.test(isp)) return 'IX:DE-CIX';
+        if (/ams-ix/i.test(isp)) return 'IX:AMS-IX';
+        if (/linx/i.test(isp)) return 'IX:LINX';
+        
+        // China carriers (Tier 2/3)
+        if (/china\s*telecom|chinanet|ct\.net|as4134|as4809/i.test(isp + asn)) return 'CN:CT';
+        if (/china\s*unicom|cncgroup|as4837|as9929/i.test(isp + asn)) return 'CN:CU';
+        if (/china\s*mobile|cmnet|as9808|as58453/i.test(isp + asn)) return 'CN:CM';
+        
+        // Cloud/CDN providers
+        if (/cloudflare|as13335/i.test(isp + asn)) return 'CDN:CF';
+        if (/akamai|as20940/i.test(isp + asn)) return 'CDN:Akamai';
+        if (/google|as15169/i.test(isp + asn)) return 'CDN:Google';
+        if (/amazon|aws|as16509/i.test(isp + asn)) return 'CDN:AWS';
+        if (/microsoft|azure|as8075/i.test(isp + asn)) return 'CDN:Azure';
+        
+        // Regional ISPs (match by name keywords)
+        if (/sakura/i.test(isp)) return 'ISP:Sakura';
+        if (/linode|akamai connected/i.test(isp)) return 'ISP:Linode';
+        if (/vultr|choopa/i.test(isp)) return 'ISP:Vultr';
+        if (/digitalocean/i.test(isp)) return 'ISP:DO';
+        if (/ovh/i.test(isp)) return 'ISP:OVH';
+        if (/hetzner/i.test(isp)) return 'ISP:Hetzner';
+        if (/fdcservers/i.test(isp)) return 'ISP:FDC';
+        if (/conus|vpg/i.test(isp)) return 'ISP:Conus';
+        if (/prime\s*security/i.test(isp)) return 'ISP:PrimeSec';
+        
+        // Local network
+        if (/local\s*network|private|internal/i.test(isp)) return 'LOCAL';
+        
         return hop.ip; // Fall back to IP for matching
       }
       
