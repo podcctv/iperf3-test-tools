@@ -6824,6 +6824,27 @@ def _trace_html() -> str:
     
     /* Chart container */
     .chart-container { position: relative; height: 200px; width: 100%; }
+    
+    /* AS Path visualization */
+    .as-node { 
+      display: inline-flex; flex-direction: column; align-items: center; 
+      padding: 8px 12px; border-radius: 10px; 
+      background: linear-gradient(135deg, rgba(51, 65, 85, 0.8), rgba(30, 41, 59, 0.9));
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      min-width: 80px; text-align: center;
+      transition: all 0.2s ease;
+    }
+    .as-node:hover { transform: translateY(-2px); border-color: rgba(6, 182, 212, 0.5); }
+    .as-asn { font-size: 11px; font-weight: 700; color: #06b6d4; }
+    .as-name { font-size: 10px; color: #94a3b8; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .as-tier { font-size: 9px; padding: 1px 6px; border-radius: 4px; margin-top: 4px; }
+    .as-tier-t1 { background: rgba(249, 115, 22, 0.3); color: #f97316; }
+    .as-tier-t2 { background: rgba(34, 197, 94, 0.3); color: #22c55e; }
+    .as-tier-t3 { background: rgba(59, 130, 246, 0.3); color: #3b82f6; }
+    .as-tier-ix { background: rgba(168, 85, 247, 0.3); color: #a855f7; }
+    .as-tier-isp { background: rgba(100, 116, 139, 0.3); color: #94a3b8; }
+    .as-arrow { color: #475569; font-size: 16px; }
+    .as-hops { font-size: 9px; color: #64748b; margin-top: 2px; }
   </style>
 </head>
 <body class="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
@@ -6836,6 +6857,7 @@ def _trace_html() -> str:
     <div class="flex border-b border-slate-700 mb-6 gap-6">
       <button onclick="switchTab('single')" id="tab-single" class="pb-3 text-sm font-semibold tab-active">🚀 单次追踪</button>
       <button onclick="switchTab('schedules')" id="tab-schedules" class="pb-3 text-sm font-semibold text-slate-400 hover:text-white">📅 定时监控</button>
+      <button onclick="switchTab('multisrc')" id="tab-multisrc" class="pb-3 text-sm font-semibold text-slate-400 hover:text-white">🌐 多源对比</button>
       <button onclick="switchTab('history')" id="tab-history" class="pb-3 text-sm font-semibold text-slate-400 hover:text-white">📜 历史记录</button>
     </div>
 
@@ -6907,6 +6929,21 @@ def _trace_html() -> str:
           </div>
         </div>
         
+        <!-- AS Path Analysis Section -->
+        <div class="mt-4 glass-card rounded-xl p-4 fade-in">
+          <h4 class="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">📊 AS 路径分析</h4>
+          <div class="space-y-4">
+            <div>
+              <div class="text-xs text-emerald-400 mb-2">→ 去程 AS 路径</div>
+              <div id="fwd-as-path" class="flex flex-wrap items-center gap-2"></div>
+            </div>
+            <div>
+              <div class="text-xs text-amber-400 mb-2">← 回程 AS 路径</div>
+              <div id="rev-as-path" class="flex flex-wrap items-center gap-2"></div>
+            </div>
+          </div>
+        </div>
+        
         <div class="mt-3 text-xs text-slate-500"><span class="inline-block w-3 h-3 bg-amber-500/30 border-l-2 border-amber-500 mr-1"></span> 去回程不同的跳点</div>
       </div>
 
@@ -6924,6 +6961,31 @@ def _trace_html() -> str:
         <div class="flex items-center justify-between mb-4"><h3 class="font-semibold">定时追踪任务</h3><button onclick="showCreateScheduleModal()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-semibold">+ 新建</button></div>
         <div id="schedule-list" class="space-y-2"><p class="text-slate-500 text-sm">加载中...</p></div>
       </div>
+    </div>
+
+    <div id="panel-multisrc" class="hidden">
+      <div class="glass-card rounded-xl p-5 mb-6">
+        <h3 class="font-semibold mb-4">🌐 多源节点对比</h3>
+        <p class="text-sm text-slate-400 mb-4">从多个节点同时追踪到同一目标，对比不同地区的路由差异。</p>
+        
+        <div class="grid gap-4 md:grid-cols-2 mb-4">
+          <div>
+            <label class="text-xs font-medium text-slate-400 mb-2 block">选择源节点（可多选）</label>
+            <div id="multisrc-nodes" class="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 bg-slate-900/50 rounded-lg border border-slate-700"></div>
+          </div>
+          <div>
+            <label class="text-xs font-medium text-slate-400 mb-2 block">目标地址</label>
+            <input id="multisrc-target" type="text" placeholder="IP 或 域名 (如 8.8.8.8 或 google.com)" class="w-full p-2.5 rounded-lg border border-slate-600 bg-slate-700 text-white text-sm">
+            <button id="multisrc-start-btn" onclick="runMultiSourceTrace()" class="w-full mt-3 px-4 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm font-bold">
+              🚀 开始多源追踪
+            </button>
+          </div>
+        </div>
+        
+        <div id="multisrc-status" class="text-sm text-slate-400"></div>
+      </div>
+      
+      <div id="multisrc-results" class="hidden space-y-4"></div>
     </div>
 
     <div id="panel-history" class="hidden">
@@ -7171,6 +7233,87 @@ def _trace_html() -> str:
       if (canvasId === 'fwd-latency-chart') fwdChart = chart;
       if (canvasId === 'rev-latency-chart') revChart = chart;
     }
+    
+    // Extract AS path from hops (group consecutive hops by ASN)
+    function extractAsPath(hops) {
+      const path = [];
+      let currentAs = null;
+      
+      for (const hop of hops) {
+        const asn = hop.geo?.asn;
+        const isp = hop.geo?.isp || '';
+        
+        if (!asn || hop.ip === '*') continue;
+        
+        if (currentAs && currentAs.asn === asn) {
+          // Same AS, increment hop count
+          currentAs.hopCount++;
+          currentAs.lastHop = hop;
+          if (hop.rtt_avg) currentAs.totalLatency += hop.rtt_avg;
+        } else {
+          // New AS
+          if (currentAs) path.push(currentAs);
+          
+          // Determine tier from cache or ISP name
+          let tier = 'ISP';
+          const cached = _asnTierCache[asn];
+          if (cached?.tier) {
+            tier = cached.tier;
+          } else {
+            // Fallback tier detection
+            const ispLower = isp.toLowerCase();
+            if (/ntt|telia|cogent|lumen|gtt|zayo|hurricane/.test(ispLower)) tier = 'T1';
+            else if (/pccw|hkt|kddi|softbank|singtel|telstra/.test(ispLower)) tier = 'T2';
+            else if (/equinix|bbix|ix|exchange/.test(ispLower)) tier = 'IX';
+          }
+          
+          currentAs = {
+            asn: asn,
+            name: isp.substring(0, 20),
+            tier: tier,
+            hopCount: 1,
+            firstHop: hop,
+            lastHop: hop,
+            totalLatency: hop.rtt_avg || 0
+          };
+        }
+      }
+      
+      if (currentAs) path.push(currentAs);
+      return path;
+    }
+    
+    // Render AS path as flow diagram
+    function renderAsPath(containerId, hops) {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      
+      const asPath = extractAsPath(hops);
+      
+      if (asPath.length === 0) {
+        container.innerHTML = '<span class="text-slate-500 text-xs">无 AS 信息</span>';
+        return;
+      }
+      
+      const html = asPath.map((as, i) => {
+        const tierClass = `as-tier-${as.tier.toLowerCase()}`;
+        const avgLatency = as.hopCount > 0 ? (as.totalLatency / as.hopCount).toFixed(0) : 0;
+        
+        const node = `
+          <div class="as-node" title="${as.name}\n${as.hopCount}跳 | 平均${avgLatency}ms">
+            <div class="as-asn">AS${as.asn}</div>
+            <div class="as-name">${as.name}</div>
+            <div class="as-tier ${tierClass}">${as.tier}</div>
+            <div class="as-hops">${as.hopCount}跳</div>
+          </div>
+        `;
+        
+        const arrow = i < asPath.length - 1 ? '<span class="as-arrow">→</span>' : '';
+        return node + arrow;
+      }).join('');
+      
+      container.innerHTML = html;
+    }
 
     function extractRouteBadges(hops) {
       const seen = new Set(), result = [];
@@ -7182,13 +7325,109 @@ def _trace_html() -> str:
     }
 
     function switchTab(tab) {
-      ['single', 'schedules', 'history'].forEach(t => {
+      ['single', 'schedules', 'multisrc', 'history'].forEach(t => {
         document.getElementById(`panel-${t}`).classList.toggle('hidden', t !== tab);
         document.getElementById(`tab-${t}`).classList.toggle('tab-active', t === tab);
         document.getElementById(`tab-${t}`).classList.toggle('text-slate-400', t !== tab);
       });
       if (tab === 'schedules') loadSchedules();
+      if (tab === 'multisrc') loadMultisrcNodes();
       if (tab === 'history') loadHistory();
+    }
+    
+    function loadMultisrcNodes() {
+      const container = document.getElementById('multisrc-nodes');
+      if (!nodes.length) {
+        container.innerHTML = '<p class="text-slate-500 text-xs col-span-2">加载中...</p>';
+        return;
+      }
+      container.innerHTML = nodes.map(n => `
+        <label class="flex items-center gap-2 p-2 rounded-lg hover:bg-slate-800/50 cursor-pointer text-sm">
+          <input type="checkbox" class="multisrc-node-cb rounded border-slate-600 bg-slate-700 text-cyan-500" value="${n.id}" data-name="${n.name}" data-ip="${n.ip}">
+          <span>${n.name}</span>
+        </label>
+      `).join('');
+    }
+    
+    async function runMultiSourceTrace() {
+      const checkboxes = document.querySelectorAll('.multisrc-node-cb:checked');
+      const target = document.getElementById('multisrc-target').value.trim();
+      const status = document.getElementById('multisrc-status');
+      const results = document.getElementById('multisrc-results');
+      const btn = document.getElementById('multisrc-start-btn');
+      
+      if (checkboxes.length < 2) { alert('请至少选择 2 个源节点'); return; }
+      if (!target) { alert('请输入目标地址'); return; }
+      
+      btn.disabled = true;
+      btn.textContent = '⏳ 追踪中...';
+      status.textContent = `正在从 ${checkboxes.length} 个节点追踪到 ${target}...`;
+      results.classList.add('hidden');
+      results.innerHTML = '';
+      
+      const selectedNodes = Array.from(checkboxes).map(cb => ({
+        id: cb.value,
+        name: cb.dataset.name,
+        ip: cb.dataset.ip
+      }));
+      
+      try {
+        // Run traces in parallel
+        const tracePromises = selectedNodes.map(async (node) => {
+          try {
+            const res = await apiFetch(`/api/trace/run?node_id=${node.id}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ target, max_hops: 30, include_geo: true })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || 'Failed');
+            return { node, success: true, data };
+          } catch (e) {
+            return { node, success: false, error: e.message };
+          }
+        });
+        
+        const traceResults = await Promise.all(tracePromises);
+        
+        // Prefetch ASN data
+        const allHops = traceResults.filter(r => r.success).flatMap(r => r.data.hops);
+        await prefetchAsnTiers(allHops);
+        
+        // Render results
+        results.innerHTML = traceResults.map(r => {
+          if (!r.success) {
+            return `<div class="glass-card rounded-xl p-4 border-l-4 border-rose-500">
+              <div class="font-semibold text-rose-400">${r.node.name}</div>
+              <div class="text-sm text-slate-500">❌ ${r.error}</div>
+            </div>`;
+          }
+          
+          const asPath = extractAsPath(r.data.hops);
+          const asHtml = asPath.map((as, i) => {
+            const arrow = i < asPath.length - 1 ? '<span class="as-arrow text-xs">→</span>' : '';
+            return `<span class="text-xs px-2 py-0.5 bg-slate-700 rounded">AS${as.asn}</span>${arrow}`;
+          }).join('');
+          
+          return `<div class="glass-card rounded-xl p-4 fade-in border-l-4 border-cyan-500">
+            <div class="flex items-center justify-between mb-2">
+              <div class="font-semibold text-cyan-400">${r.node.name}</div>
+              <div class="text-xs text-slate-400">${r.data.total_hops}跳 | ${r.data.elapsed_ms}ms</div>
+            </div>
+            <div class="flex flex-wrap items-center gap-1 mb-2">${asHtml || '<span class="text-slate-500 text-xs">无 AS 信息</span>'}</div>
+            <div class="text-xs text-slate-500">首跳: ${r.data.hops[0]?.ip || '-'} → 末跳: ${r.data.hops[r.data.hops.length-1]?.ip || '-'}</div>
+          </div>`;
+        }).join('');
+        
+        results.classList.remove('hidden');
+        status.textContent = `✅ ${traceResults.filter(r => r.success).length}/${traceResults.length} 个节点追踪完成`;
+        
+      } catch (e) {
+        status.textContent = `❌ ${e.message}`;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '🚀 开始多源追踪';
+      }
     }
 
     async function shareAsImage() {
@@ -7616,6 +7855,9 @@ def _trace_html() -> str:
           // Render latency charts
           renderLatencyChart('fwd-latency-chart', fwdData.hops, '去程延迟');
           renderLatencyChart('rev-latency-chart', revData.hops, '回程延迟');
+          // Render AS path analysis
+          renderAsPath('fwd-as-path', fwdData.hops);
+          renderAsPath('rev-as-path', revData.hops);
         } else {
           document.getElementById('single-title').textContent = `${srcOpt.dataset.name} → ${targetName}`;
           document.getElementById('single-badges').innerHTML = fwdBadges.map(b => renderBadge(b)).join('');
