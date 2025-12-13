@@ -6755,6 +6755,8 @@ def _trace_html() -> str:
     .badge-equinix { background: #84cc16; color: black; }
     .badge-zayo { background: #7c3aed; color: white; }
     .badge-he { background: #64748b; color: white; }
+    .badge-jinx { background: #059669; color: white; }
+    .badge-singtel { background: #f97316; color: white; }
     .diff-row { background: rgba(251, 191, 36, 0.15) !important; border-left: 3px solid #fbbf24; }
     .same-row { background: rgba(34, 197, 94, 0.15) !important; border-left: 3px solid #22c55e; }
     .comp-row { display: grid; grid-template-columns: 40px 1fr 50px 1fr; gap: 8px; padding: 8px 12px; align-items: center; font-size: 13px; border-bottom: 1px solid rgba(51, 65, 85, 0.4); }
@@ -6877,6 +6879,7 @@ def _trace_html() -> str:
     let nodes = [];
 
     const ISP_RULES = [
+      // China carriers
       { match: /chinanet|china\s*telecom|ct\.net|163data/i, asn: [4134, 4812], badge: '163', label: '163' },
       { match: /cn2|ctgnet|china\s*telecom\s*global/i, asn: [4809], badge: 'cn2', label: 'CN2' },
       { match: /chinaunicom(?!.*9929)|unicom.*169|169\.net|cncgroup/i, asn: [4837, 17621, 17622], badge: '4837', label: '4837' },
@@ -6884,21 +6887,26 @@ def _trace_html() -> str:
       { match: /unicom.*global/i, asn: [10099], badge: '9929', label: 'CU-G' },
       { match: /chinamobile|cmnet|cmi/i, asn: [9808, 56040, 56041, 56042, 56044, 56046, 56047, 56048], badge: 'cmi', label: 'CMI' },
       { match: /cmin2/i, asn: [58807], badge: 'cmin2', label: 'CMIN2' },
-      { match: /ntt.*comm|ntt\s*com/i, asn: [2914], badge: 'ntt', label: 'NTT' },
-      { match: /softbank|bbtec/i, asn: [17676, 9143], badge: 'softbank', label: 'SoftBank' },
-      { match: /kddi/i, asn: [2516], badge: 'kddi', label: 'KDDI' },
-      { match: /iij/i, asn: [2497], badge: 'iij', label: 'IIJ' },
-      { match: /bbix/i, asn: [23764], badge: 'bbix', label: 'BBIX' },
-      { match: /telia/i, asn: [1299], badge: 'telia', label: 'Telia' },
-      { match: /cogent/i, asn: [174], badge: 'cogent', label: 'Cogent' },
-      { match: /lumen|level3/i, asn: [3356], badge: 'lumen', label: 'Lumen' },
-      { match: /gtt/i, asn: [3257], badge: 'gtt', label: 'GTT' },
-      { match: /zayo/i, asn: [6461], badge: 'zayo', label: 'Zayo' },
-      { match: /hurricane|he\.net/i, asn: [6939], badge: 'he', label: 'HE' },
-      { match: /pccw/i, asn: [3491], badge: 'pccw', label: 'PCCW' },
-      { match: /hkt/i, asn: [4515, 9304], badge: 'hkt', label: 'HKT' },
-      { match: /telstra/i, asn: [1221, 4637], badge: 'telstra', label: 'Telstra' },
-      { match: /equinix/i, asn: [24115], badge: 'equinix', label: 'Equinix' },
+      // Tier 1 - Global backbone
+      { match: /ntt.*comm|ntt\s*com|ntt\s*america/i, asn: [2914], badge: 'ntt', label: 'T1:NTT' },
+      { match: /telia|arelion/i, asn: [1299], badge: 'telia', label: 'T1:Telia' },
+      { match: /cogent/i, asn: [174], badge: 'cogent', label: 'T1:Cogent' },
+      { match: /lumen|level\s*3|centurylink/i, asn: [3356, 3549], badge: 'lumen', label: 'T1:Lumen' },
+      { match: /gtt|cyberverse/i, asn: [3257], badge: 'gtt', label: 'T1:GTT' },
+      { match: /zayo/i, asn: [6461], badge: 'zayo', label: 'T1:Zayo' },
+      { match: /hurricane|he\.net/i, asn: [6939], badge: 'he', label: 'T1:HE' },
+      // Tier 2 - Regional
+      { match: /softbank|bbtec/i, asn: [17676, 9143], badge: 'softbank', label: 'T2:SB' },
+      { match: /kddi/i, asn: [2516], badge: 'kddi', label: 'T2:KDDI' },
+      { match: /iij/i, asn: [2497], badge: 'iij', label: 'T2:IIJ' },
+      { match: /pccw/i, asn: [3491], badge: 'pccw', label: 'T2:PCCW' },
+      { match: /hkt/i, asn: [4515, 9304], badge: 'hkt', label: 'T2:HKT' },
+      { match: /telstra/i, asn: [1221, 4637], badge: 'telstra', label: 'T2:Telstra' },
+      { match: /singtel/i, asn: [7473], badge: 'singtel', label: 'T2:Singtel' },
+      // IX / Peering points
+      { match: /bbix/i, asn: [23764, 23640], badge: 'bbix', label: 'IX:BBIX' },
+      { match: /jinx/i, asn: [37662], badge: 'jinx', label: 'IX:JINX' },
+      { match: /equinix/i, asn: [24115], badge: 'equinix', label: 'IX:Equinix' },
     ];
 
     function detectIspBadge(isp, asn) {
