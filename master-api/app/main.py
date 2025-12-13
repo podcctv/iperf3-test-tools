@@ -23,7 +23,8 @@ from .config import settings
 from .constants import DEFAULT_IPERF_PORT
 from .database import SessionLocal, engine, get_db
 from .agent_store import AgentConfigStore
-from .models import Base, Node, TestResult, TestSchedule, ScheduleResult, PendingTask
+from .models import Base, Node, TestResult, TestSchedule, ScheduleResult, PendingTask, AsnCache
+from .asn_cache import sync_peeringdb, get_asn_info, get_asn_count
 from .remote_agent import fetch_agent_logs, redeploy_agent, remove_agent_container, RemoteCommandError
 from .schemas import (
     AgentActionResult,
@@ -363,6 +364,27 @@ async def lifespan(app):
     except Exception as e:
         print(f">>> FAILED TO LOAD SCHEDULES: {e} <<<", flush=True)
         logger.error(f"Failed to load schedules: {e}")
+    
+    # Add daily ASN sync job (PeeringDB Tier classification)
+    def _run_asn_sync():
+        """Sync ASN data from PeeringDB."""
+        try:
+            db = SessionLocal()
+            stats = sync_peeringdb(db)
+            logger.info(f"[ASN-SYNC] Daily sync complete: {stats}")
+            db.close()
+        except Exception as e:
+            logger.error(f"[ASN-SYNC] Daily sync failed: {e}")
+    
+    scheduler.add_job(
+        _run_asn_sync,
+        'interval',
+        hours=24,
+        id='asn_daily_sync',
+        replace_existing=True,
+        next_run_time=datetime.now(timezone.utc) + timedelta(minutes=5)  # First run 5 min after startup
+    )
+    logger.info("[ASN-SYNC] Daily PeeringDB sync scheduled (every 24h)")
     
     yield
     
@@ -8405,6 +8427,66 @@ def list_trace_results(
     
     results = db.scalars(query).all()
     return results
+
+
+# ============== ASN Cache API ==============
+
+@app.get("/api/asn/{asn}")
+def get_asn_details(asn: int, db: Session = Depends(get_db)):
+    """
+    Get cached ASN information from PeeringDB.
+    Returns tier classification (T1/T2/T3/IX/CDN/ISP), network type, and scope.
+    """
+    info = get_asn_info(db, asn)
+    if info:
+        return {"status": "ok", **info}
+    return {"status": "not_found", "asn": asn, "message": "ASN not in cache"}
+
+
+@app.post("/api/asn/sync")
+async def trigger_asn_sync(db: Session = Depends(get_db)):
+    """
+    Manually trigger PeeringDB ASN sync.
+    This may take several minutes for the initial sync (~15k networks).
+    """
+    import threading
+    
+    def _sync_in_background():
+        try:
+            sync_db = SessionLocal()
+            stats = sync_peeringdb(sync_db)
+            logger.info(f"[ASN-SYNC] Manual sync complete: {stats}")
+            sync_db.close()
+        except Exception as e:
+            logger.error(f"[ASN-SYNC] Manual sync failed: {e}")
+    
+    # Run in background thread to avoid blocking
+    thread = threading.Thread(target=_sync_in_background)
+    thread.start()
+    
+    return {
+        "status": "ok",
+        "message": "PeeringDB sync started in background. Check logs for progress.",
+        "current_count": get_asn_count(db)
+    }
+
+
+@app.get("/api/asn/stats")
+def get_asn_cache_stats(db: Session = Depends(get_db)):
+    """Get ASN cache statistics."""
+    count = get_asn_count(db)
+    
+    # Get tier distribution
+    tier_counts = db.execute(
+        text("SELECT tier, COUNT(*) FROM asn_cache GROUP BY tier ORDER BY COUNT(*) DESC")
+    ).fetchall()
+    
+    return {
+        "status": "ok",
+        "total_cached": count,
+        "tiers": {row[0]: row[1] for row in tier_counts if row[0]},
+        "last_sync": None  # TODO: Add last sync timestamp tracking
+    }
 
 
 def _register_trace_schedule_job(schedule: TraceSchedule):

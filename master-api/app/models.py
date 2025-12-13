@@ -154,3 +154,18 @@ class TraceResult(Base):
     schedule = relationship("TraceSchedule", foreign_keys=[schedule_id])
     src_node = relationship("Node", foreign_keys=[src_node_id])
 
+
+# ============== ASN Cache for PeeringDB Data ==============
+
+class AsnCache(Base):
+    """Cached ASN information from PeeringDB for Tier classification."""
+    __tablename__ = "asn_cache"
+    
+    asn = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    info_type = Column(String, nullable=True)  # NSP, Content, Cable/DSL/ISP, etc.
+    info_scope = Column(String, nullable=True)  # Global, Regional, etc.
+    ix_count = Column(Integer, default=0)
+    tier = Column(String, nullable=True)  # T1, T2, T3, IX, CDN, ISP
+    updated_at = Column(DateTime(timezone=True), server_default=func.now())
+
