@@ -7408,7 +7408,7 @@ def _trace_html() -> str:
       list.innerHTML = '<p class="text-slate-500 text-sm">加载中...</p>';
       
       try {
-        const res = await apiFetch('/api/trace/results?limit=50');
+        const res = await apiFetch('/api/trace/results?limit=100');
         const data = await res.json();
         
         if (!res.ok) {
@@ -7421,23 +7421,51 @@ def _trace_html() -> str:
           return;
         }
         
-        list.innerHTML = data.map(r => {
-          const time = new Date(r.executed_at).toLocaleString('zh-CN');
-          const changeClass = r.has_change ? 'border-l-amber-500' : 'border-l-slate-600';
-          const changeIcon = r.has_change ? '⚠️' : '✅';
+        // Group by source-target pair
+        const groups = {};
+        data.forEach(r => {
+          const srcNode = nodes.find(n => n.id === r.src_node_id);
+          const srcName = srcNode ? srcNode.name : `节点#${r.src_node_id}`;
+          const key = `${srcName} → ${r.target}`;
+          if (!groups[key]) groups[key] = [];
+          groups[key].push(r);
+        });
+        
+        // Render grouped
+        list.innerHTML = Object.entries(groups).map(([route, records]) => {
+          const hasChanges = records.some(r => r.has_change);
+          const routeIcon = hasChanges ? '⚠️' : '✅';
+          const headerClass = hasChanges ? 'text-amber-400' : 'text-emerald-400';
+          
+          const recordsHtml = records.slice(0, 10).map(r => {
+            const time = new Date(r.executed_at).toLocaleString('zh-CN');
+            const changeIcon = r.has_change ? '⚠️' : '✅';
+            const changeBg = r.has_change ? 'bg-amber-500/10' : 'bg-slate-800/30';
+            
+            return `
+              <div class="flex items-center justify-between p-2 ${changeBg} rounded text-xs">
+                <div class="flex items-center gap-2">
+                  <span>${changeIcon}</span>
+                  <span class="text-slate-300">${r.total_hops}跳</span>
+                  <span class="text-slate-500">${r.tool_used}</span>
+                  <span class="text-slate-500">${r.elapsed_ms}ms</span>
+                </div>
+                <span class="text-slate-400">${time}</span>
+              </div>
+            `;
+          }).join('');
           
           return `
-            <div class="p-3 rounded-lg bg-slate-900/50 border-l-4 ${changeClass}">
-              <div class="flex items-center justify-between">
-                <div>
-                  <span class="text-sm font-semibold text-cyan-400">${r.target}</span>
-                  <span class="text-xs text-slate-500 ml-2">从节点 #${r.src_node_id}</span>
-                </div>
-                <div class="text-xs text-slate-400">
-                  ${changeIcon} ${r.total_hops}跳 | ${r.tool_used} | ${r.elapsed_ms}ms | ${time}
-                </div>
+            <div class="mb-4">
+              <div class="flex items-center gap-2 mb-2 font-semibold ${headerClass}">
+                <span>${routeIcon}</span>
+                <span>${route}</span>
+                <span class="text-xs text-slate-500 font-normal">(${records.length}条记录)</span>
               </div>
-              <div class="text-xs text-slate-500 mt-1">Route Hash: ${r.route_hash.substring(0, 50)}...</div>
+              <div class="space-y-1 pl-4 border-l-2 border-slate-700">
+                ${recordsHtml}
+                ${records.length > 10 ? `<div class="text-xs text-slate-500 p-2">...还有 ${records.length - 10} 条记录</div>` : ''}
+              </div>
             </div>
           `;
         }).join('');
