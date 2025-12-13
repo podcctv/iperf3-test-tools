@@ -1727,18 +1727,29 @@ def _parse_traceroute_output(raw: str) -> list:
 def _get_hop_geo(ip: str) -> dict | None:
     """Get geographic location for an IP address."""
     if ip == '*' or ip.startswith('10.') or ip.startswith('192.168.') or ip.startswith('172.'):
-        return {"country": "Private", "city": "", "isp": "Local Network"}
+        return {"country": "Private", "city": "", "isp": "Local Network", "asn": None}
     
     try:
-        resp = requests.get(f"http://ip-api.com/json/{ip}?fields=status,country,countryCode,city,isp", timeout=2)
+        # Add 'as' field to get ASN info (format: "AS1234 Company Name")
+        resp = requests.get(f"http://ip-api.com/json/{ip}?fields=status,country,countryCode,city,isp,as", timeout=2)
         if resp.status_code == 200:
             data = resp.json()
             if data.get("status") == "success":
+                # Extract ASN from 'as' field (format: "AS1234 Company Name")
+                as_str = data.get("as", "")
+                asn = None
+                if as_str:
+                    import re
+                    match = re.match(r'^AS(\d+)', as_str, re.IGNORECASE)
+                    if match:
+                        asn = int(match.group(1))
+                
                 return {
                     "country": data.get("country", ""),
                     "country_code": data.get("countryCode", "").lower(),
                     "city": data.get("city", ""),
                     "isp": data.get("isp", ""),
+                    "asn": asn,
                 }
     except Exception:
         pass
