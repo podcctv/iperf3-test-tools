@@ -6974,8 +6974,15 @@ def _trace_html() -> str:
             <div id="multisrc-nodes" class="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 bg-slate-900/50 rounded-lg border border-slate-700"></div>
           </div>
           <div>
-            <label class="text-xs font-medium text-slate-400 mb-2 block">目标地址</label>
-            <input id="multisrc-target" type="text" placeholder="IP 或 域名 (如 8.8.8.8 或 google.com)" class="w-full p-2.5 rounded-lg border border-slate-600 bg-slate-700 text-white text-sm">
+            <label class="text-xs font-medium text-slate-400 mb-2 block">目标类型</label>
+            <select id="multisrc-target-type" onchange="toggleMultisrcTarget()" class="w-full p-2.5 rounded-lg border border-slate-600 bg-slate-700 text-white text-sm mb-2">
+              <option value="node">选择节点</option>
+              <option value="custom">自定义地址</option>
+            </select>
+            <select id="multisrc-target-node" onchange="updateMultisrcNodeDisabled()" class="w-full p-2.5 rounded-lg border border-slate-600 bg-slate-700 text-white text-sm">
+              <option value="">选择目标节点...</option>
+            </select>
+            <input id="multisrc-target" type="text" placeholder="IP 或 域名 (如 8.8.8.8 或 google.com)" class="hidden w-full p-2.5 rounded-lg border border-slate-600 bg-slate-700 text-white text-sm">
             <button id="multisrc-start-btn" onclick="runMultiSourceTrace()" class="w-full mt-3 px-4 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm font-bold">
               🚀 开始多源追踪
             </button>
@@ -7298,6 +7305,8 @@ def _trace_html() -> str:
       if (!container) return;
       
       const asPath = extractAsPath(hops);
+      console.log('[AS Path Debug] hops count:', hops.length, 'asPath count:', asPath.length);
+      if (hops.length > 0) console.log('[AS Path Debug] First hop geo:', JSON.stringify(hops[0]?.geo));
       
       if (asPath.length === 0) {
         container.innerHTML = '<span class="text-slate-500 text-xs">无 AS 信息</span>';
@@ -7346,31 +7355,75 @@ def _trace_html() -> str:
     
     function loadMultisrcNodes() {
       const container = document.getElementById('multisrc-nodes');
+      const targetSel = document.getElementById('multisrc-target-node');
       if (!nodes.length) {
         container.innerHTML = '<p class="text-slate-500 text-xs col-span-2">加载中...</p>';
         return;
       }
       container.innerHTML = nodes.map(n => `
-        <label class="flex items-center gap-2 p-2 rounded-lg hover:bg-slate-800/50 cursor-pointer text-sm">
+        <label class="flex items-center gap-2 p-2 rounded-lg hover:bg-slate-800/50 cursor-pointer text-sm" data-node-id="${n.id}">
           <input type="checkbox" class="multisrc-node-cb rounded border-slate-600 bg-slate-700 text-cyan-500" value="${n.id}" data-name="${n.name}" data-ip="${n.ip}">
           <span>${n.name}</span>
         </label>
       `).join('');
+      // Populate target node dropdown
+      targetSel.innerHTML = '<option value="">选择目标节点...</option>' + nodes.map(n => 
+        `<option value="${n.id}" data-ip="${n.ip}" data-name="${n.name}">${n.name} (${n.ip})</option>`
+      ).join('');
+    }
+    
+    function toggleMultisrcTarget() {
+      const isNode = document.getElementById('multisrc-target-type').value === 'node';
+      document.getElementById('multisrc-target-node').classList.toggle('hidden', !isNode);
+      document.getElementById('multisrc-target').classList.toggle('hidden', isNode);
+      if (isNode) updateMultisrcNodeDisabled();
+      else {
+        // Re-enable all checkboxes when custom target is selected
+        document.querySelectorAll('.multisrc-node-cb').forEach(cb => {
+          cb.disabled = false;
+          cb.closest('label').classList.remove('opacity-50', 'cursor-not-allowed');
+        });
+      }
+    }
+    
+    function updateMultisrcNodeDisabled() {
+      const targetNodeId = document.getElementById('multisrc-target-node').value;
+      document.querySelectorAll('.multisrc-node-cb').forEach(cb => {
+        const isTarget = cb.value === targetNodeId;
+        cb.disabled = isTarget;
+        cb.checked = isTarget ? false : cb.checked;  // Uncheck if it becomes disabled
+        cb.closest('label').classList.toggle('opacity-50', isTarget);
+        cb.closest('label').classList.toggle('cursor-not-allowed', isTarget);
+      });
     }
     
     async function runMultiSourceTrace() {
       const checkboxes = document.querySelectorAll('.multisrc-node-cb:checked');
-      const target = document.getElementById('multisrc-target').value.trim();
+      const targetType = document.getElementById('multisrc-target-type').value;
+      const targetNodeSel = document.getElementById('multisrc-target-node');
+      const targetInput = document.getElementById('multisrc-target');
       const status = document.getElementById('multisrc-status');
       const results = document.getElementById('multisrc-results');
       const btn = document.getElementById('multisrc-start-btn');
       
-      if (checkboxes.length < 2) { alert('请至少选择 2 个源节点'); return; }
+      // Get target based on type
+      let target, targetName;
+      if (targetType === 'node') {
+        const opt = targetNodeSel.selectedOptions[0];
+        if (!targetNodeSel.value) { alert('请选择目标节点'); return; }
+        target = opt.dataset.ip;
+        targetName = opt.dataset.name;
+      } else {
+        target = targetInput.value.trim();
+        targetName = target;
+      }
+      
+      if (checkboxes.length < 1) { alert('请至少选择 1 个源节点'); return; }
       if (!target) { alert('请输入目标地址'); return; }
       
       btn.disabled = true;
       btn.textContent = '⏳ 追踪中...';
-      status.textContent = `正在从 ${checkboxes.length} 个节点追踪到 ${target}...`;
+      status.textContent = `正在从 ${checkboxes.length} 个节点追踪到 ${targetName}...`;
       results.classList.add('hidden');
       results.innerHTML = '';
       
