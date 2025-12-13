@@ -6967,17 +6967,22 @@ def _trace_html() -> str:
       // Reverse the return route for proper alignment (B→A becomes A←B direction)
       const revHopsReversed = [...revHops].reverse();
       
+      // Prepend source IP to forward route (so it starts from A)
+      const fwdWithSrc = [{ip: srcIp, geo: {isp: srcName + ' (源)'}, rtt_avg: null, loss_pct: 0}, ...fwdHops];
+      // Prepend source IP to reversed-reverse route (original reverse destination = A)
+      const revWithDst = [{ip: srcIp, geo: {isp: srcName + ' (目标)'}, rtt_avg: null, loss_pct: 0}, ...revHopsReversed];
+      
       // Build sets of IPs for cross-reference (excluding * and private IPs at start/end)
-      const fwdIPs = new Set(fwdHops.filter(h => h.ip !== '*' && !isPrivateIP(h.ip)).map(h => h.ip));
-      const revIPs = new Set(revHopsReversed.filter(h => h.ip !== '*' && !isPrivateIP(h.ip)).map(h => h.ip));
+      const fwdIPs = new Set(fwdWithSrc.filter(h => h.ip !== '*' && !isPrivateIP(h.ip)).map(h => h.ip));
+      const revIPs = new Set(revWithDst.filter(h => h.ip !== '*' && !isPrivateIP(h.ip)).map(h => h.ip));
       const commonIPs = new Set([...fwdIPs].filter(ip => revIPs.has(ip)));
       
-      const maxLen = Math.max(fwdHops.length, revHopsReversed.length);
+      const maxLen = Math.max(fwdWithSrc.length, revWithDst.length);
       const rows = [];
       
       for (let i = 0; i < maxLen; i++) {
-        const fwd = fwdHops[i] || null;
-        const rev = revHopsReversed[i] || null;
+        const fwd = fwdWithSrc[i] || null;
+        const rev = revWithDst[i] || null;
         
         // Determine row style
         let rowClass = '';
@@ -6993,7 +6998,9 @@ def _trace_html() -> str:
           }
         }
         
-        rows.push(`<div class="comp-row ${rowClass}"><div class="text-cyan-400 font-mono font-bold text-center">${i + 1}</div>${renderHopCell(fwd)}<div class="text-slate-600 text-center">⇄</div>${renderHopCell(rev)}</div>`);
+        const rowLabel = i === 0 ? '起' : i;
+        const rowStyle = i === 0 ? 'style="background: rgba(6, 182, 212, 0.1) !important; border-left: 3px solid #06b6d4;"' : '';
+        rows.push(`<div class="comp-row ${rowClass}" ${rowStyle}><div class="text-cyan-400 font-mono font-bold text-center">${rowLabel}</div>${renderHopCell(fwd)}<div class="text-slate-600 text-center">⇄</div>${renderHopCell(rev)}</div>`);
       }
       
       // Add symmetry info if routes are very different
