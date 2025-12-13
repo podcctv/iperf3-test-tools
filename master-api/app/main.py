@@ -6963,14 +6963,21 @@ def _trace_html() -> str:
     }
 
     function renderComparisonTable(fwdHops, revHops) {
-      // Use LCS-based alignment: find common IPs and align them on same row
-      const fwdIPs = fwdHops.map(h => h.ip), revIPs = revHops.map(h => h.ip);
-      const rows = [], aligned = alignByCommonIPs(fwdIPs, revIPs);
+      // Reverse the reverse route since A→B and B→A traverse same nodes in opposite order
+      const revHopsReversed = [...revHops].reverse();
+      const fwdIPs = fwdHops.map(h => h.ip);
+      const revIPsReversed = revHopsReversed.map(h => h.ip);
       
-      let fIdx = 0, rIdx = 0, rowNum = 1;
-      for (const [fAlign, rAlign] of aligned) {
-        const fwd = fAlign >= 0 ? fwdHops[fAlign] : null;
-        const rev = rAlign >= 0 ? revHops[rAlign] : null;
+      // Find alignment using LCS on forward and reversed-reverse IPs
+      const aligned = alignByCommonIPs(fwdIPs, revIPsReversed);
+      const rows = [];
+      let rowNum = 1;
+      
+      for (const [fIdx, rIdxReversed] of aligned) {
+        const fwd = fIdx >= 0 ? fwdHops[fIdx] : null;
+        // Map reversed index back to original reverse route
+        const rIdxOriginal = rIdxReversed >= 0 ? (revHops.length - 1 - rIdxReversed) : -1;
+        const rev = rIdxOriginal >= 0 ? revHops[rIdxOriginal] : null;
         const isDiff = fwd && rev && fwd.ip !== '*' && rev.ip !== '*' && fwd.ip !== rev.ip;
         rows.push(`<div class="comp-row ${isDiff ? 'diff-row' : ''}"><div class="text-cyan-400 font-mono font-bold text-center">${rowNum++}</div>${renderHopCell(fwd)}<div class="text-slate-600 text-center">⇄</div>${renderHopCell(rev)}</div>`);
       }
@@ -7003,6 +7010,7 @@ def _trace_html() -> str:
       for (let k = 0; k < tempFwd.length; k++) result.push([tempFwd[k], tempRev[k]]);
       return result;
     }
+
 
     function renderSingleHops(hops) {
       return hops.map(hop => {
