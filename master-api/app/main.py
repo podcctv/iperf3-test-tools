@@ -7033,7 +7033,7 @@ def _trace_html() -> str:
       const revHopsReversed = [...revHops].reverse();
       
       // Forward route: srcIp → hops → dstIp
-      // Add srcIp at start, add dstIp at end if not already there
+      // MTR doesn't include source, so prepend srcIp and append dstIp if missing
       const fwdComplete = [{ip: srcIp, geo: {isp: srcName}, isEndpoint: true, endType: 'start'}];
       fwdHops.forEach(h => fwdComplete.push(h));
       const lastFwdHop = fwdHops[fwdHops.length - 1];
@@ -7044,17 +7044,30 @@ def _trace_html() -> str:
         fwdComplete[fwdComplete.length - 1].endType = 'end';
       }
       
-      // Reverse route: original was dstIp → hops → srcIp
-      // After reversal: srcIp ← hops ← dstIp (first hop is near srcIp, last is dstIp)
-      // Just use reversed data directly - DO NOT prepend srcIp (MTR already includes it)
-      // Mark first and last as endpoints for styling
+      // Reverse route after reversal: should show srcIp → ... → dstIp
+      // Original trace was dstIp → hops → srcIp (MTR doesn't include dstIp)
+      // After reversal: [..., srcIp or near srcIp]
+      // We need to ensure srcIp is at start and dstIp is at end for alignment
       const revComplete = [];
+      
+      // Check if first reversed hop is srcIp, if not prepend it
+      const firstRevHop = revHopsReversed[0];
+      if (!firstRevHop || firstRevHop.ip !== srcIp) {
+        revComplete.push({ip: srcIp, geo: {isp: srcName}, isEndpoint: true, endType: 'start'});
+      }
+      
+      // Add all reversed hops
       revHopsReversed.forEach((h, i) => {
         const copy = {...h};
-        if (i === 0) { copy.isEndpoint = true; copy.endType = 'start'; }
+        // Mark first hop as start if it's srcIp
+        if (i === 0 && h.ip === srcIp) {
+          copy.isEndpoint = true;
+          copy.endType = 'start';
+        }
         revComplete.push(copy);
       });
-      // Add dstIp at end if last hop is not already dstIp
+      
+      // Append dstIp at end if last hop is not dstIp
       const lastRevHop = revHopsReversed[revHopsReversed.length - 1];
       if (!lastRevHop || lastRevHop.ip !== dstIp) {
         revComplete.push({ip: dstIp, geo: {isp: dstName}, isEndpoint: true, endType: 'end'});
