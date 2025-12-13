@@ -6887,7 +6887,11 @@ def _trace_html() -> str:
           <div><label class="text-xs text-slate-400">名称</label><input id="sched-name" type="text" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm"></div>
           <div class="grid grid-cols-2 gap-3">
             <div><label class="text-xs text-slate-400">源节点</label><select id="sched-src" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm"></select></div>
-            <div><label class="text-xs text-slate-400">目标</label><input id="sched-target" type="text" placeholder="IP/域名" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm"></div>
+            <div><label class="text-xs text-slate-400">目标类型</label><select id="sched-target-type" onchange="toggleSchedTarget()" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm"><option value="node">选择节点</option><option value="custom">自定义 IP/域名</option></select></div>
+          </div>
+          <div class="grid grid-cols-1 gap-3">
+            <div id="sched-target-node-row"><label class="text-xs text-slate-400">目标节点</label><select id="sched-target-node" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm"></select></div>
+            <div id="sched-target-input-row" class="hidden"><label class="text-xs text-slate-400">目标地址</label><input id="sched-target" type="text" placeholder="IP 或 域名" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm"></div>
           </div>
           <div class="grid grid-cols-2 gap-3">
             <div><label class="text-xs text-slate-400">间隔(分钟)</label><input id="sched-interval" type="number" value="60" min="5" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm"></div>
@@ -7143,9 +7147,13 @@ def _trace_html() -> str:
           sel.innerHTML = '<option value="">选择...</option>';
           nodes.forEach(n => { const opt = new Option(`${n.name} (${n.ip})`, n.id); opt.dataset.ip = n.ip; opt.dataset.name = n.name; sel.appendChild(opt); });
         });
+        // Schedule modal dropdowns
         const schedSrc = document.getElementById('sched-src');
         schedSrc.innerHTML = '';
         nodes.forEach(n => schedSrc.appendChild(new Option(n.name, n.id)));
+        const schedTargetNode = document.getElementById('sched-target-node');
+        schedTargetNode.innerHTML = '<option value="">选择目标节点...</option>';
+        nodes.forEach(n => { const opt = new Option(`${n.name} (${n.ip})`, n.id); opt.dataset.ip = n.ip; schedTargetNode.appendChild(opt); });
       } catch (e) { console.error('Load nodes failed:', e); }
     }
 
@@ -7153,6 +7161,12 @@ def _trace_html() -> str:
       const isNode = document.getElementById('trace-target-type').value === 'node';
       document.getElementById('trace-target-node').classList.toggle('hidden', !isNode);
       document.getElementById('trace-target-input').classList.toggle('hidden', isNode);
+    }
+
+    function toggleSchedTarget() {
+      const isNode = document.getElementById('sched-target-type').value === 'node';
+      document.getElementById('sched-target-node-row').classList.toggle('hidden', !isNode);
+      document.getElementById('sched-target-input-row').classList.toggle('hidden', isNode);
     }
 
     function renderFlag(code) { return code ? `<img src="/flags/${code}" alt="${code}" class="inline-block w-4 h-3 rounded-sm">` : ''; }
@@ -7488,9 +7502,11 @@ def _trace_html() -> str:
         const data = await res.json();
         if (!data.length) { list.innerHTML = '<p class="text-slate-500 text-sm">暂无任务</p>'; return; }
         list.innerHTML = data.map(s => {
-          const node = nodes.find(n => n.id === s.src_node_id);
+          const srcNode = nodes.find(n => n.id === s.src_node_id);
+          const targetNode = s.target_type === 'node' && s.target_node_id ? nodes.find(n => n.id === s.target_node_id) : null;
+          const targetDisplay = targetNode ? targetNode.name : s.target_address;
           const badge = s.enabled ? '<span class="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded text-xs">运行中</span>' : '<span class="px-2 py-0.5 bg-slate-600/40 text-slate-400 rounded text-xs">暂停</span>';
-          return `<div class="flex items-center justify-between p-3 rounded-lg bg-slate-900/40 border border-slate-700"><div><div class="font-medium text-sm">${s.name}</div><div class="text-xs text-slate-400">${node?.name || '?'} → ${s.target_address} | ${Math.floor(s.interval_seconds/60)}分钟</div></div><div class="flex gap-2">${badge}<button onclick="toggleSchedule(${s.id}, ${!s.enabled})" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs">${s.enabled ? '暂停' : '启用'}</button><button onclick="deleteSchedule(${s.id})" class="px-2 py-1 bg-rose-600/30 hover:bg-rose-500/30 text-rose-300 rounded text-xs">删除</button></div></div>`;
+          return `<div class="flex items-center justify-between p-3 rounded-lg bg-slate-900/40 border border-slate-700"><div><div class="font-medium text-sm">${s.name}</div><div class="text-xs text-slate-400">${srcNode?.name || '?'} → ${targetDisplay} | ${Math.floor(s.interval_seconds/60)}分钟</div></div><div class="flex gap-2">${badge}<button onclick="toggleSchedule(${s.id}, ${!s.enabled})" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs">${s.enabled ? '暂停' : '启用'}</button><button onclick="deleteSchedule(${s.id})" class="px-2 py-1 bg-rose-600/30 hover:bg-rose-500/30 text-rose-300 rounded text-xs">删除</button></div></div>`;
         }).join('');
       } catch (e) { list.innerHTML = '<p class="text-rose-400 text-sm">加载失败</p>'; }
     }
@@ -7501,12 +7517,36 @@ def _trace_html() -> str:
     async function createSchedule() {
       const name = document.getElementById('sched-name').value.trim();
       const srcId = document.getElementById('sched-src').value;
-      const target = document.getElementById('sched-target').value.trim();
+      const targetType = document.getElementById('sched-target-type').value;
       const interval = parseInt(document.getElementById('sched-interval').value) || 60;
       const alertVal = document.getElementById('sched-alert').value === 'true';
-      if (!name || !srcId || !target) { alert('请填写完整'); return; }
+      
+      let targetNodeId = null, targetAddress = null;
+      if (targetType === 'node') {
+        targetNodeId = parseInt(document.getElementById('sched-target-node').value);
+        if (!targetNodeId) { alert('请选择目标节点'); return; }
+        const targetOpt = document.getElementById('sched-target-node').selectedOptions[0];
+        targetAddress = targetOpt.dataset.ip;  // Also store IP for display
+      } else {
+        targetAddress = document.getElementById('sched-target').value.trim();
+        if (!targetAddress) { alert('请输入目标地址'); return; }
+      }
+      
+      if (!name || !srcId) { alert('请填写完整'); return; }
       try {
-        await apiFetch('/api/trace/schedules', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, src_node_id: parseInt(srcId), target_type: 'custom', target_address: target, interval_seconds: interval * 60, alert_on_change: alertVal }) });
+        await apiFetch('/api/trace/schedules', { 
+          method: 'POST', 
+          headers: { 'Content-Type': 'application/json' }, 
+          body: JSON.stringify({ 
+            name, 
+            src_node_id: parseInt(srcId), 
+            target_type: targetType, 
+            target_node_id: targetNodeId,
+            target_address: targetAddress, 
+            interval_seconds: interval * 60, 
+            alert_on_change: alertVal 
+          }) 
+        });
         hideScheduleModal(); loadSchedules();
       } catch (e) { alert('创建失败'); }
     }
