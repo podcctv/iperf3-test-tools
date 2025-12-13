@@ -7027,31 +7027,53 @@ def _trace_html() -> str:
             const clonedBtn = element.querySelector('#share-btn');
             if (clonedBtn) clonedBtn.remove();
             
-            // Apply computed styles to grid cells to fix alignment
-            const rows = element.querySelectorAll('.comp-row');
-            rows.forEach(row => {
-              row.style.display = 'grid';
-              row.style.gridTemplateColumns = '40px 1fr 50px 1fr';
+            // Get original row for reference dimensions
+            const originalRows = container.querySelectorAll('.comp-row');
+            const clonedRows = element.querySelectorAll('.comp-row');
+            
+            // Convert grid to flexbox with fixed pixel widths
+            clonedRows.forEach((row, rowIndex) => {
+              const originalRow = originalRows[rowIndex];
+              if (!originalRow) return;
+              
+              // Replace grid with flexbox
+              row.style.display = 'flex';
+              row.style.flexDirection = 'row';
+              row.style.alignItems = 'center';
               row.style.gap = '8px';
               
-              // Apply fixed widths to children based on original
-              const children = row.children;
-              for (let i = 0; i < children.length; i++) {
-                const child = children[i];
-                const originalChild = container.querySelector('.comp-row')?.children[i];
-                if (originalChild) {
-                  const rect = originalChild.getBoundingClientRect();
-                  child.style.width = rect.width + 'px';
-                  child.style.minWidth = rect.width + 'px';
-                }
+              // Apply exact widths from original row children
+              const originalChildren = originalRow.children;
+              const clonedChildren = row.children;
+              
+              for (let i = 0; i < clonedChildren.length && i < originalChildren.length; i++) {
+                const originalRect = originalChildren[i].getBoundingClientRect();
+                clonedChildren[i].style.width = originalRect.width + 'px';
+                clonedChildren[i].style.minWidth = originalRect.width + 'px';
+                clonedChildren[i].style.maxWidth = originalRect.width + 'px';
+                clonedChildren[i].style.flexShrink = '0';
+                clonedChildren[i].style.flexGrow = '0';
               }
             });
             
-            // Also fix the header grid
-            const headerGrids = element.querySelectorAll('.grid-cols-2');
-            headerGrids.forEach(grid => {
-              grid.style.display = 'grid';
-              grid.style.gridTemplateColumns = '1fr 1fr';
+            // Fix header grids similarly
+            const originalHeaderGrids = container.querySelectorAll('.grid-cols-2');
+            const clonedHeaderGrids = element.querySelectorAll('.grid-cols-2');
+            clonedHeaderGrids.forEach((grid, idx) => {
+              const originalGrid = originalHeaderGrids[idx];
+              if (!originalGrid) return;
+              
+              grid.style.display = 'flex';
+              grid.style.flexDirection = 'row';
+              grid.style.gap = '16px';
+              
+              const originalChildren = originalGrid.children;
+              const clonedChildren = grid.children;
+              for (let i = 0; i < clonedChildren.length && i < originalChildren.length; i++) {
+                const rect = originalChildren[i].getBoundingClientRect();
+                clonedChildren[i].style.width = rect.width + 'px';
+                clonedChildren[i].style.flexShrink = '0';
+              }
             });
             
             // Mask IPs in cloned document
