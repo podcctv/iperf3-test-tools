@@ -6941,26 +6941,77 @@ def _trace_html() -> str:
       { match: /cmin2|as58807|mobile.*international.*2/i, asn: [58807], badge: 'cmin2', label: 'CMIN2' },
       { match: /cmi(?!n2)|as58453|china\s*mobile.*international(?!.*2)/i, asn: [58453], badge: 'cmi', label: 'CMI' },
       { match: /chinamobile|cmnet|china\s*mobile(?!.*international)/i, asn: [9808, 56040, 56041, 56042, 56044, 56046, 56047, 56048], badge: 'cmi', label: 'CM' },
-      // Tier 1 - Global backbone
-      { match: /ntt.*comm|ntt\s*com|ntt\s*america/i, asn: [2914], badge: 'ntt', label: 'T1:NTT' },
+      // ============ Tier 1 - Transit-Free Global Backbones ============
+      { match: /ntt.*comm|ntt\s*com|ntt\s*america|ntt\s*global/i, asn: [2914], badge: 'ntt', label: 'T1:NTT' },
       { match: /telia|arelion/i, asn: [1299], badge: 'telia', label: 'T1:Telia' },
       { match: /cogent/i, asn: [174], badge: 'cogent', label: 'T1:Cogent' },
       { match: /lumen|level\s*3|centurylink/i, asn: [3356, 3549], badge: 'lumen', label: 'T1:Lumen' },
-      { match: /gtt|cyberverse/i, asn: [3257], badge: 'gtt', label: 'T1:GTT' },
+      { match: /gtt(?!\s*express)/i, asn: [3257], badge: 'gtt', label: 'T1:GTT' },
       { match: /zayo/i, asn: [6461], badge: 'zayo', label: 'T1:Zayo' },
       { match: /hurricane|he\.net/i, asn: [6939], badge: 'he', label: 'T1:HE' },
-      // Tier 2 - Regional
-      { match: /softbank|bbtec/i, asn: [17676, 9143], badge: 'softbank', label: 'T2:SB' },
-      { match: /kddi/i, asn: [2516], badge: 'kddi', label: 'T2:KDDI' },
-      { match: /iij/i, asn: [2497], badge: 'iij', label: 'T2:IIJ' },
-      { match: /pccw/i, asn: [3491], badge: 'pccw', label: 'T2:PCCW' },
-      { match: /hkt/i, asn: [4515, 9304], badge: 'hkt', label: 'T2:HKT' },
-      { match: /telstra/i, asn: [1221, 4637], badge: 'telstra', label: 'T2:Telstra' },
-      { match: /singtel/i, asn: [7473], badge: 'singtel', label: 'T2:Singtel' },
-      // IX / Peering points
+      { match: /telecom\s*italia\s*sparkle|seabone/i, asn: [6762], badge: 'telia', label: 'T1:TI-S' },
+      { match: /liberty\s*global/i, asn: [6830], badge: 'cogent', label: 'T1:LG' },
+      // ============ Japan ============
+      { match: /softbank|bbtec|yahoo\s*bb/i, asn: [17676, 9143], badge: 'softbank', label: 'SoftBank' },
+      { match: /kddi/i, asn: [2516, 2519], badge: 'kddi', label: 'KDDI' },
+      { match: /iij|internet\s*initiative/i, asn: [2497], badge: 'iij', label: 'IIJ' },
+      { match: /ntt\s*docomo/i, asn: [9605], badge: 'ntt', label: 'Docomo' },
+      { match: /ocn/i, asn: [4713], badge: 'ntt', label: 'OCN' },
+      // ============ Hong Kong / Asia Pacific ============
+      { match: /pccw/i, asn: [3491], badge: 'pccw', label: 'PCCW' },
+      { match: /hkt/i, asn: [4515, 9304], badge: 'hkt', label: 'HKT' },
+      { match: /hgc|hutchison/i, asn: [10103], badge: 'pccw', label: 'HGC' },
+      { match: /telstra/i, asn: [1221, 4637], badge: 'telstra', label: 'Telstra' },
+      { match: /singtel/i, asn: [7473, 7474], badge: 'singtel', label: 'Singtel' },
+      { match: /starhub/i, asn: [4657], badge: 'singtel', label: 'StarHub' },
+      // ============ Korea ============
+      { match: /korea\s*telecom|kt\s*corp/i, asn: [4766], badge: 'kddi', label: 'KT' },
+      { match: /sk\s*broadband/i, asn: [9318], badge: 'kddi', label: 'SKB' },
+      { match: /lg\s*uplus/i, asn: [3786], badge: 'kddi', label: 'LGU+' },
+      // ============ Taiwan ============
+      { match: /chunghwa|cht/i, asn: [3462], badge: 'pccw', label: 'CHT' },
+      { match: /taiwanmobile|twm/i, asn: [9924], badge: 'pccw', label: 'TWM' },
+      // ============ Europe ============
+      { match: /deutsche\s*telekom|dtag/i, asn: [3320], badge: 'telia', label: 'DTAG' },
+      { match: /orange/i, asn: [5511], badge: 'cogent', label: 'Orange' },
+      { match: /vodafone/i, asn: [1273, 3209], badge: 'cogent', label: 'Vodafone' },
+      { match: /british\s*telecom|bt\s*group/i, asn: [5400], badge: 'telia', label: 'BT' },
+      { match: /swisscom/i, asn: [3303], badge: 'telia', label: 'Swisscom' },
+      // ============ US Regional ============
+      { match: /comcast/i, asn: [7922], badge: 'lumen', label: 'Comcast' },
+      { match: /verizon/i, asn: [701, 703], badge: 'lumen', label: 'Verizon' },
+      { match: /att|at&t/i, asn: [7018], badge: 'lumen', label: 'AT&T' },
+      { match: /charter|spectrum/i, asn: [20115], badge: 'lumen', label: 'Charter' },
+      // ============ Russia ============
+      { match: /rostelecom/i, asn: [12389], badge: 'telia', label: 'Rostele' },
+      // ============ Internet Exchanges ============
       { match: /bbix/i, asn: [23764, 23640], badge: 'bbix', label: 'IX:BBIX' },
-      { match: /jinx/i, asn: [37662], badge: 'jinx', label: 'IX:JINX' },
+      { match: /jpix/i, asn: [7527], badge: 'bbix', label: 'IX:JPIX' },
       { match: /equinix/i, asn: [24115], badge: 'equinix', label: 'IX:Equinix' },
+      { match: /de-cix/i, asn: [6695], badge: 'equinix', label: 'IX:DE-CIX' },
+      { match: /ams-ix/i, asn: [1200], badge: 'equinix', label: 'IX:AMS-IX' },
+      { match: /linx/i, asn: [5459], badge: 'equinix', label: 'IX:LINX' },
+      { match: /hkix/i, asn: [4635], badge: 'equinix', label: 'IX:HKIX' },
+      { match: /jinx/i, asn: [37662], badge: 'jinx', label: 'IX:JINX' },
+      // ============ CDN / Cloud ============
+      { match: /cloudflare/i, asn: [13335], badge: 'cogent', label: 'CDN:CF' },
+      { match: /akamai/i, asn: [20940, 16625], badge: 'cogent', label: 'CDN:Akamai' },
+      { match: /fastly/i, asn: [54113], badge: 'cogent', label: 'CDN:Fastly' },
+      { match: /google/i, asn: [15169, 396982], badge: 'ntt', label: 'Google' },
+      { match: /amazon|aws/i, asn: [16509, 14618], badge: 'ntt', label: 'AWS' },
+      { match: /microsoft|azure/i, asn: [8075], badge: 'ntt', label: 'Azure' },
+      { match: /alibaba|aliyun/i, asn: [45102], badge: 'pccw', label: 'Aliyun' },
+      { match: /tencent/i, asn: [132203], badge: 'pccw', label: 'Tencent' },
+      // ============ VPS / Hosting ============
+      { match: /vultr|choopa/i, asn: [20473], badge: 'he', label: 'Vultr' },
+      { match: /digitalocean/i, asn: [14061], badge: 'he', label: 'DO' },
+      { match: /linode/i, asn: [63949], badge: 'he', label: 'Linode' },
+      { match: /ovh/i, asn: [16276], badge: 'he', label: 'OVH' },
+      { match: /hetzner/i, asn: [24940], badge: 'he', label: 'Hetzner' },
+      { match: /scaleway/i, asn: [12876], badge: 'he', label: 'Scaleway' },
+      { match: /oracle.*cloud/i, asn: [31898], badge: 'ntt', label: 'Oracle' },
+      { match: /sakura/i, asn: [7684], badge: 'iij', label: 'Sakura' },
+      { match: /conoha|gmo/i, asn: [7506], badge: 'iij', label: 'ConoHa' },
     ];
 
     function detectIspBadge(isp, asn) {
