@@ -7497,18 +7497,39 @@ def _trace_html() -> str:
           }
           
           const asPath = extractAsPath(r.data.hops);
-          const asHtml = asPath.map((as, i) => {
-            const arrow = i < asPath.length - 1 ? '<span class="as-arrow text-xs">→</span>' : '';
-            return `<span class="text-xs px-2 py-0.5 bg-slate-700 rounded">AS${as.asn}</span>${arrow}`;
-          }).join('');
+          
+          // Generate AS path cards with same style as single trace
+          const tierColors = {
+            't1': '#f97316', 't2': '#22c55e', 't3': '#3b82f6', 
+            'ix': '#a855f7', 'isp': '#64748b'
+          };
+          
+          const asCardsHtml = asPath.length > 0 ? '<div class="as-path-container mt-3">' + asPath.map((as, i) => {
+            const tierClass = `as-tier-${as.tier.toLowerCase()}`;
+            const cardWidth = 100 + (as.hopCount * 25);
+            const borderColor = tierColors[as.tier.toLowerCase()] || '#64748b';
+            
+            const card = `
+              <div class="as-node" style="min-width: ${cardWidth}px; --tier-color: ${borderColor};">
+                <div class="as-header">
+                  <span class="as-tier ${tierClass}">${as.tier}</span>
+                  <span class="as-asn">AS${as.asn}</span>
+                </div>
+                <div class="as-name">${as.name}</div>
+                <div class="as-hops">${as.hopCount}跳</div>
+              </div>
+            `;
+            const arrow = i < asPath.length - 1 ? '<span class="as-arrow">→</span>' : '';
+            return card + arrow;
+          }).join('') + '</div>' : '<div class="text-slate-500 text-xs mt-2">无 AS 信息</div>';
           
           return `<div class="glass-card rounded-xl p-4 fade-in border-l-4 border-cyan-500">
             <div class="flex items-center justify-between mb-2">
-              <div class="font-semibold text-cyan-400">${r.node.name}</div>
-              <div class="text-xs text-slate-400">${r.data.total_hops}跳 | ${r.data.elapsed_ms}ms</div>
+              <div class="font-semibold text-cyan-400 text-lg">${r.node.name}</div>
+              <div class="text-sm text-slate-400">${r.data.total_hops}跳 | ${r.data.elapsed_ms}ms</div>
             </div>
-            <div class="flex flex-wrap items-center gap-1 mb-2">${asHtml || '<span class="text-slate-500 text-xs">无 AS 信息</span>'}</div>
-            <div class="text-xs text-slate-500">首跳: ${r.data.hops[0]?.ip || '-'} → 末跳: ${r.data.hops[r.data.hops.length-1]?.ip || '-'}</div>
+            <div class="text-xs text-slate-500 mb-1">首跳: ${r.data.hops[0]?.ip || '-'} → 末跳: ${r.data.hops[r.data.hops.length-1]?.ip || '-'}</div>
+            ${asCardsHtml}
           </div>`;
         }).join('');
         
