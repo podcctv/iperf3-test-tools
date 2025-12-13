@@ -7033,47 +7033,81 @@ def _trace_html() -> str:
       const revHopsReversed = [...revHops].reverse();
       
       // Forward route: srcIp → hops → dstIp
-      // MTR doesn't include source, so prepend srcIp and append dstIp if missing
-      const fwdComplete = [{ip: srcIp, geo: {isp: srcName}, isEndpoint: true, endType: 'start'}];
-      fwdHops.forEach(h => fwdComplete.push(h));
-      const lastFwdHop = fwdHops[fwdHops.length - 1];
-      if (!lastFwdHop || lastFwdHop.ip !== dstIp) {
+      // Check if srcIp/dstIp already exist in MTR data to avoid duplication
+      const srcIpExistsInFwd = fwdHops.some(h => h.ip === srcIp);
+      const dstIpExistsInFwd = fwdHops.some(h => h.ip === dstIp);
+      
+      const fwdComplete = [];
+      
+      // Only prepend srcIp if it doesn't exist in MTR data
+      if (!srcIpExistsInFwd) {
+        fwdComplete.push({ip: srcIp, geo: {isp: srcName}, isEndpoint: true, endType: 'start'});
+      }
+      
+      // Add all hops, marking srcIp as start endpoint if found
+      fwdHops.forEach(h => {
+        const copy = {...h};
+        if (h.ip === srcIp) {
+          copy.isEndpoint = true;
+          copy.endType = 'start';
+        }
+        fwdComplete.push(copy);
+      });
+      
+      // Only append dstIp if it doesn't exist in MTR data
+      if (!dstIpExistsInFwd) {
         fwdComplete.push({ip: dstIp, geo: {isp: dstName}, isEndpoint: true, endType: 'end'});
       } else {
-        fwdComplete[fwdComplete.length - 1].isEndpoint = true;
-        fwdComplete[fwdComplete.length - 1].endType = 'end';
+        // Mark existing dstIp hop as end endpoint
+        for (let i = fwdComplete.length - 1; i >= 0; i--) {
+          if (fwdComplete[i].ip === dstIp) {
+            fwdComplete[i].isEndpoint = true;
+            fwdComplete[i].endType = 'end';
+            break;
+          }
+        }
       }
       
       // Reverse route after reversal: should show srcIp → ... → dstIp
       // Original trace was dstIp → hops → srcIp (MTR doesn't include dstIp)
       // After reversal: [..., srcIp or near srcIp]
-      // We need to ensure srcIp is at start and dstIp is at end for alignment
       const revComplete = [];
       
-      // Check if first reversed hop is srcIp, if not prepend it
-      const firstRevHop = revHopsReversed[0];
-      if (!firstRevHop || firstRevHop.ip !== srcIp) {
+      // Check if srcIp exists ANYWHERE in reversed hops (not just first)
+      // MTR may have reached srcIp as a hop, so we shouldn't duplicate it
+      const srcIpExistsInRev = revHopsReversed.some(h => h.ip === srcIp);
+      
+      // Only prepend srcIp if it doesn't exist in the data
+      if (!srcIpExistsInRev) {
         revComplete.push({ip: srcIp, geo: {isp: srcName}, isEndpoint: true, endType: 'start'});
       }
       
       // Add all reversed hops
       revHopsReversed.forEach((h, i) => {
         const copy = {...h};
-        // Mark first hop as start if it's srcIp
-        if (i === 0 && h.ip === srcIp) {
+        // Mark hop as start endpoint if it's srcIp
+        if (h.ip === srcIp) {
           copy.isEndpoint = true;
           copy.endType = 'start';
         }
         revComplete.push(copy);
       });
       
-      // Append dstIp at end if last hop is not dstIp
-      const lastRevHop = revHopsReversed[revHopsReversed.length - 1];
-      if (!lastRevHop || lastRevHop.ip !== dstIp) {
+      // Check if dstIp exists ANYWHERE in reversed hops
+      const dstIpExistsInRev = revHopsReversed.some(h => h.ip === dstIp);
+      
+      // Only append dstIp if it doesn't exist in the data
+      if (!dstIpExistsInRev) {
         revComplete.push({ip: dstIp, geo: {isp: dstName}, isEndpoint: true, endType: 'end'});
-      } else if (revComplete.length > 0) {
-        revComplete[revComplete.length - 1].isEndpoint = true;
-        revComplete[revComplete.length - 1].endType = 'end';
+      } else {
+        // Mark the existing dstIp hop as end endpoint
+        for (let i = revComplete.length - 1; i >= 0; i--) {
+          if (revComplete[i].ip === dstIp) {
+            revComplete[i].isEndpoint = true;
+            revComplete[i].endType = 'end';
+            break;
+          }
+        }
       }
       
       // Get hop key for matching - Tier 1/2/3 and ISP classification
