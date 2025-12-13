@@ -6967,55 +6967,116 @@ def _trace_html() -> str:
       // Reverse the return route for proper alignment (B→A becomes A←B direction)
       const revHopsReversed = [...revHops].reverse();
       
-      // Prepend source IP to forward route (so it starts from A)
-      const fwdWithSrc = [{ip: srcIp, geo: {isp: srcName + ' (源)'}, rtt_avg: null, loss_pct: 0}, ...fwdHops];
-      // Prepend source IP to reversed-reverse route (original reverse destination = A)
-      const revWithDst = [{ip: srcIp, geo: {isp: srcName + ' (目标)'}, rtt_avg: null, loss_pct: 0}, ...revHopsReversed];
+      // Build complete routes with source and destination
+      // Forward: srcIp -> hops -> (dstIp if not already last hop)
+      const fwdComplete = [{ip: srcIp, geo: {isp: srcName}, isEndpoint: true}, ...fwdHops];
+      if (fwdHops.length === 0 || fwdHops[fwdHops.length - 1].ip !== dstIp) {
+        fwdComplete.push({ip: dstIp, geo: {isp: dstName}, isEndpoint: true});
+      }
       
-      // Build sets of IPs for cross-reference (excluding * and private IPs at start/end)
-      const fwdIPs = new Set(fwdWithSrc.filter(h => h.ip !== '*' && !isPrivateIP(h.ip)).map(h => h.ip));
-      const revIPs = new Set(revWithDst.filter(h => h.ip !== '*' && !isPrivateIP(h.ip)).map(h => h.ip));
-      const commonIPs = new Set([...fwdIPs].filter(ip => revIPs.has(ip)));
+      // Reverse (after reversal): srcIp -> reversed hops -> dstIp
+      const revComplete = [{ip: srcIp, geo: {isp: srcName}, isEndpoint: true}, ...revHopsReversed];
+      if (revHopsReversed.length === 0 || revHopsReversed[revHopsReversed.length - 1].ip !== dstIp) {
+        revComplete.push({ip: dstIp, geo: {isp: dstName}, isEndpoint: true});
+      }
       
-      const maxLen = Math.max(fwdWithSrc.length, revWithDst.length);
+      // Get hop key for matching (use ISP if available, else IP)
+      function getHopKey(hop) {
+        if (!hop || hop.ip === '*') return null;
+        const isp = hop.geo?.isp || '';
+        // Use major ISP name for matching
+        if (/ntt/i.test(isp)) return 'NTT';
+        if (/jinx/i.test(isp)) return 'JINX';
+        if (/bbix/i.test(isp)) return 'BBIX';
+        if (/gtt|cyberverse/i.test(isp)) return 'GTT';
+        if (/cogent/i.test(isp)) return 'Cogent';
+        if (/telia/i.test(isp)) return 'Telia';
+        if (/lumen|level3/i.test(isp)) return 'Lumen';
+        if (/pccw/i.test(isp)) return 'PCCW';
+        if (/china\s*telecom|ct\.net|chinanet/i.test(isp)) return 'CT';
+        if (/china\s*unicom|cncgroup/i.test(isp)) return 'CU';
+        if (/china\s*mobile|cmnet/i.test(isp)) return 'CM';
+        return hop.ip; // Fall back to IP for matching
+      }
+      
+      // ISP-based LCS alignment
+      const fwdKeys = fwdComplete.map(h => getHopKey(h));
+      const revKeys = revComplete.map(h => getHopKey(h));
+      const aligned = alignByLCS(fwdKeys, revKeys);
+      
       const rows = [];
+      let rowNum = 0;
       
-      for (let i = 0; i < maxLen; i++) {
-        const fwd = fwdWithSrc[i] || null;
-        const rev = revWithDst[i] || null;
+      for (const [fIdx, rIdx] of aligned) {
+        const fwd = fIdx >= 0 ? fwdComplete[fIdx] : null;
+        const rev = rIdx >= 0 ? revComplete[rIdx] : null;
         
         // Determine row style
         let rowClass = '';
-        if (fwd && rev) {
-          if (fwd.ip === rev.ip && fwd.ip !== '*') {
-            rowClass = 'same-row';  // Same IP = green highlight
-          } else if (fwd.ip !== '*' && rev.ip !== '*') {
-            const fwdInRev = commonIPs.has(fwd.ip);
-            const revInFwd = commonIPs.has(rev.ip);
-            if (!fwdInRev && !revInFwd) {
-              rowClass = 'diff-row';  // Both unique = yellow highlight
-            }
-          }
+        const isStartRow = rowNum === 0;
+        const isEndRow = (fIdx === fwdComplete.length - 1 || rIdx === revComplete.length - 1) && 
+                         (fwd?.isEndpoint || rev?.isEndpoint);
+        
+        if (fwd && rev && fwd.ip === rev.ip && fwd.ip !== '*') {
+          rowClass = 'same-row';
+        } else if (fwd && rev && getHopKey(fwd) === getHopKey(rev) && getHopKey(fwd)) {
+          rowClass = 'same-row';  // Same ISP = green highlight
         }
         
-        const rowLabel = i === 0 ? '起' : i;
-        const rowStyle = i === 0 ? 'style="background: rgba(6, 182, 212, 0.1) !important; border-left: 3px solid #06b6d4;"' : '';
+        const rowLabel = isStartRow ? '起' : (isEndRow && rowNum > 0 ? '终' : rowNum);
+        const rowStyle = (isStartRow || isEndRow) ? 'style="background: rgba(6, 182, 212, 0.1) !important; border-left: 3px solid #06b6d4;"' : '';
+        
         rows.push(`<div class="comp-row ${rowClass}" ${rowStyle}><div class="text-cyan-400 font-mono font-bold text-center">${rowLabel}</div>${renderHopCell(fwd)}<div class="text-slate-600 text-center">⇄</div>${renderHopCell(rev)}</div>`);
+        rowNum++;
       }
       
-      // Add symmetry info if routes are very different
-      const commonCount = commonIPs.size;
-      const totalUnique = fwdIPs.size + revIPs.size - commonCount;
-      const symmetryPct = totalUnique > 0 ? Math.round(commonCount * 2 / totalUnique * 100) : 100;
+      // Add symmetry info
+      const commonKeys = new Set(fwdKeys.filter(k => k && revKeys.includes(k)));
+      const commonCount = commonKeys.size;
+      const totalUnique = new Set([...fwdKeys, ...revKeys].filter(k => k)).size;
+      const symmetryPct = totalUnique > 0 ? Math.round(commonCount / totalUnique * 100) : 100;
       
       if (symmetryPct < 30) {
-        rows.push(`<div class="p-3 bg-amber-500/10 border-t border-amber-500/30 text-amber-400 text-sm">⚠️ 路由不对称：去回程仅 ${commonCount} 个公共跳点 (${symmetryPct}%)</div>`);
-      } else if (commonCount > 0) {
-        rows.push(`<div class="p-3 bg-slate-800/50 border-t border-slate-700 text-slate-400 text-xs">✓ ${commonCount} 个公共中间节点 | 对称度 ${symmetryPct}%</div>`);
+        rows.push(`<div class="p-3 bg-amber-500/10 border-t border-amber-500/30 text-amber-400 text-sm">⚠️ 路由不对称：去回程仅 ${commonCount} 个公共节点 (${symmetryPct}%)</div>`);
+      } else if (commonCount > 1) {
+        rows.push(`<div class="p-3 bg-slate-800/50 border-t border-slate-700 text-slate-400 text-xs">✓ ${commonCount} 个公共节点 | 对称度 ${symmetryPct}%</div>`);
       }
       
       return rows.join('');
     }
+    
+    function alignByLCS(fwdKeys, revKeys) {
+      const m = fwdKeys.length, n = revKeys.length;
+      const dp = Array.from({length: m+1}, () => Array(n+1).fill(0));
+      
+      for (let i = 1; i <= m; i++) {
+        for (let j = 1; j <= n; j++) {
+          if (fwdKeys[i-1] && fwdKeys[i-1] === revKeys[j-1]) {
+            dp[i][j] = dp[i-1][j-1] + 1;
+          } else {
+            dp[i][j] = Math.max(dp[i-1][j], dp[i][j-1]);
+          }
+        }
+      }
+      
+      // Backtrack
+      const result = [];
+      let i = m, j = n;
+      while (i > 0 || j > 0) {
+        if (i > 0 && j > 0 && fwdKeys[i-1] && fwdKeys[i-1] === revKeys[j-1]) {
+          result.unshift([i-1, j-1]);
+          i--; j--;
+        } else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) {
+          result.unshift([-1, j-1]);
+          j--;
+        } else {
+          result.unshift([i-1, -1]);
+          i--;
+        }
+      }
+      return result;
+    }
+
     
     function isPrivateIP(ip) {
       if (!ip || ip === '*') return false;
