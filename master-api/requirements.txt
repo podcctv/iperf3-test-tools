@@ -6,3 +6,4 @@ pydantic
 pydantic-settings
 psycopg2-binary
 apscheduler==3.10.4
+requests
