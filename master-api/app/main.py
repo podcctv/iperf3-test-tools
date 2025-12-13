@@ -6752,7 +6752,7 @@ def _trace_html() -> str:
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>路由追踪 - iPerf3 测试工具</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dom-to-image/2.6.0/dom-to-image.min.js"></script>
   <style>
     body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
     .tab-active { border-bottom: 2px solid #06b6d4; color: #06b6d4; }
@@ -7013,106 +7013,63 @@ def _trace_html() -> str:
         // Hide share button temporarily
         btn.style.display = 'none';
         
-        // Capture as image with onclone to fix grid layout and mask IPs
-        const canvas = await html2canvas(container, {
-          backgroundColor: '#1e293b',
-          scale: 2,
-          logging: false,
-          useCORS: true,
-          allowTaint: true,
-          scrollX: 0,
-          scrollY: -window.scrollY,
-          onclone: (clonedDoc, element) => {
-            // Remove share button from clone
-            const clonedBtn = element.querySelector('#share-btn');
-            if (clonedBtn) clonedBtn.remove();
-            
-            // Get original row for reference dimensions
-            const originalRows = container.querySelectorAll('.comp-row');
-            const clonedRows = element.querySelectorAll('.comp-row');
-            
-            // Convert grid to flexbox with fixed pixel widths
-            clonedRows.forEach((row, rowIndex) => {
-              const originalRow = originalRows[rowIndex];
-              if (!originalRow) return;
-              
-              // Replace grid with flexbox
-              row.style.display = 'flex';
-              row.style.flexDirection = 'row';
-              row.style.alignItems = 'center';
-              row.style.gap = '8px';
-              
-              // Apply exact widths from original row children
-              const originalChildren = originalRow.children;
-              const clonedChildren = row.children;
-              
-              for (let i = 0; i < clonedChildren.length && i < originalChildren.length; i++) {
-                const originalRect = originalChildren[i].getBoundingClientRect();
-                clonedChildren[i].style.width = originalRect.width + 'px';
-                clonedChildren[i].style.minWidth = originalRect.width + 'px';
-                clonedChildren[i].style.maxWidth = originalRect.width + 'px';
-                clonedChildren[i].style.flexShrink = '0';
-                clonedChildren[i].style.flexGrow = '0';
-              }
-            });
-            
-            // Fix header grids similarly
-            const originalHeaderGrids = container.querySelectorAll('.grid-cols-2');
-            const clonedHeaderGrids = element.querySelectorAll('.grid-cols-2');
-            clonedHeaderGrids.forEach((grid, idx) => {
-              const originalGrid = originalHeaderGrids[idx];
-              if (!originalGrid) return;
-              
-              grid.style.display = 'flex';
-              grid.style.flexDirection = 'row';
-              grid.style.gap = '16px';
-              
-              const originalChildren = originalGrid.children;
-              const clonedChildren = grid.children;
-              for (let i = 0; i < clonedChildren.length && i < originalChildren.length; i++) {
-                const rect = originalChildren[i].getBoundingClientRect();
-                clonedChildren[i].style.width = rect.width + 'px';
-                clonedChildren[i].style.flexShrink = '0';
-              }
-            });
-            
-            // Mask IPs in cloned document
-            const walker = clonedDoc.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
-            const textNodes = [];
-            while (walker.nextNode()) textNodes.push(walker.currentNode);
-            textNodes.forEach(node => {
-              node.textContent = node.textContent.replace(
-                /(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/g,
-                '$1.$2.**.**'
-              );
-            });
+        // Store original text content and mask IPs temporarily
+        const textNodes = [];
+        const originalTexts = [];
+        const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
+        while (walker.nextNode()) {
+          textNodes.push(walker.currentNode);
+          originalTexts.push(walker.currentNode.textContent);
+        }
+        
+        // Mask all IPs (xxx.xxx.xxx.xxx -> xxx.xxx.**.** )
+        textNodes.forEach(node => {
+          node.textContent = node.textContent.replace(
+            /(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/g,
+            '$1.$2.**.**'
+          );
+        });
+        
+        // Small delay for DOM to update
+        await new Promise(r => setTimeout(r, 100));
+        
+        // Capture using dom-to-image (better CSS support than html2canvas)
+        const blob = await domtoimage.toBlob(container, {
+          bgcolor: '#1e293b',
+          quality: 1,
+          style: {
+            transform: 'scale(1)',
+            transformOrigin: 'top left'
           }
+        });
+        
+        // Restore original text
+        textNodes.forEach((node, i) => {
+          node.textContent = originalTexts[i];
         });
         
         // Show share button again
         btn.style.display = '';
         
         // Copy to clipboard
-        canvas.toBlob(async (blob) => {
-          try {
-            await navigator.clipboard.write([
-              new ClipboardItem({ 'image/png': blob })
-            ]);
-            btn.innerHTML = '<span>✅</span><span>已复制!</span>';
-            setTimeout(() => { btn.innerHTML = originalText; btn.disabled = false; }, 2000);
-          } catch (e) {
-            console.error('Clipboard write failed:', e);
-            // Fallback: download as file
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'traceroute_' + new Date().toISOString().slice(0,10) + '.png';
-            a.click();
-            URL.revokeObjectURL(url);
-            btn.innerHTML = '<span>📥</span><span>已下载</span>';
-            setTimeout(() => { btn.innerHTML = originalText; btn.disabled = false; }, 2000);
-          }
-        }, 'image/png');
+        try {
+          await navigator.clipboard.write([
+            new ClipboardItem({ 'image/png': blob })
+          ]);
+          btn.innerHTML = '<span>✅</span><span>已复制!</span>';
+          setTimeout(() => { btn.innerHTML = originalText; btn.disabled = false; }, 2000);
+        } catch (e) {
+          console.error('Clipboard write failed:', e);
+          // Fallback: download as file
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'traceroute_' + new Date().toISOString().slice(0,10) + '.png';
+          a.click();
+          URL.revokeObjectURL(url);
+          btn.innerHTML = '<span>📥</span><span>已下载</span>';
+          setTimeout(() => { btn.innerHTML = originalText; btn.disabled = false; }, 2000);
+        }
         
       } catch (e) {
         console.error('Share as image failed:', e);
