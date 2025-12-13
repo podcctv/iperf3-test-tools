@@ -283,6 +283,11 @@ case "$choice" in
         while [ -z "$MASTER_URL" ]; do
             read -rp "Master URL 不能为空，请重新输入: " MASTER_URL
         done
+        # Auto-add https:// if no scheme provided
+        if [[ ! "$MASTER_URL" =~ ^https?:// ]]; then
+            MASTER_URL="https://$MASTER_URL"
+            echo "[INFO] 自动补全 URL scheme: $MASTER_URL"
+        fi
         read -rp "请输入节点名称 (用于在主控中显示): " NODE_NAME
         while [ -z "$NODE_NAME" ]; do
             read -rp "节点名称不能为空，请重新输入: " NODE_NAME
@@ -430,6 +435,11 @@ case "$choice" in
         while [ -z "$MASTER_URL" ]; do
             read -rp "Master URL 不能为空，请重新输入: " MASTER_URL
         done
+        # Auto-add https:// if no scheme provided
+        if [[ ! "$MASTER_URL" =~ ^https?:// ]]; then
+            MASTER_URL="https://$MASTER_URL"
+            echo "[INFO] 自动补全 URL scheme: $MASTER_URL"
+        fi
         read -rp "请输入节点名称 (用于在主控中显示): " NODE_NAME
         while [ -z "$NODE_NAME" ]; do
             read -rp "节点名称不能为空，请重新输入: " NODE_NAME
