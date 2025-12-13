@@ -8431,16 +8431,22 @@ def list_trace_results(
 
 # ============== ASN Cache API ==============
 
-@app.get("/api/asn/{asn}")
-def get_asn_details(asn: int, db: Session = Depends(get_db)):
-    """
-    Get cached ASN information from PeeringDB.
-    Returns tier classification (T1/T2/T3/IX/CDN/ISP), network type, and scope.
-    """
-    info = get_asn_info(db, asn)
-    if info:
-        return {"status": "ok", **info}
-    return {"status": "not_found", "asn": asn, "message": "ASN not in cache"}
+@app.get("/api/asn/stats")
+def get_asn_cache_stats(db: Session = Depends(get_db)):
+    """Get ASN cache statistics."""
+    count = get_asn_count(db)
+    
+    # Get tier distribution
+    tier_counts = db.execute(
+        text("SELECT tier, COUNT(*) FROM asn_cache GROUP BY tier ORDER BY COUNT(*) DESC")
+    ).fetchall()
+    
+    return {
+        "status": "ok",
+        "total_cached": count,
+        "tiers": {row[0]: row[1] for row in tier_counts if row[0]},
+        "last_sync": None  # TODO: Add last sync timestamp tracking
+    }
 
 
 @app.post("/api/asn/sync")
@@ -8471,22 +8477,16 @@ async def trigger_asn_sync(db: Session = Depends(get_db)):
     }
 
 
-@app.get("/api/asn/stats")
-def get_asn_cache_stats(db: Session = Depends(get_db)):
-    """Get ASN cache statistics."""
-    count = get_asn_count(db)
-    
-    # Get tier distribution
-    tier_counts = db.execute(
-        text("SELECT tier, COUNT(*) FROM asn_cache GROUP BY tier ORDER BY COUNT(*) DESC")
-    ).fetchall()
-    
-    return {
-        "status": "ok",
-        "total_cached": count,
-        "tiers": {row[0]: row[1] for row in tier_counts if row[0]},
-        "last_sync": None  # TODO: Add last sync timestamp tracking
-    }
+@app.get("/api/asn/{asn}")
+def get_asn_details(asn: int, db: Session = Depends(get_db)):
+    """
+    Get cached ASN information from PeeringDB.
+    Returns tier classification (T1/T2/T3/IX/CDN/ISP), network type, and scope.
+    """
+    info = get_asn_info(db, asn)
+    if info:
+        return {"status": "ok", **info}
+    return {"status": "not_found", "asn": asn, "message": "ASN not in cache"}
 
 
 def _register_trace_schedule_job(schedule: TraceSchedule):
