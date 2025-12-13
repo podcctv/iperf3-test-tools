@@ -907,6 +907,14 @@ async def lookup_geo_info(ip: str) -> dict | None:
         _geo_cache[cache_key] = (None, now)
         return None
 
+    def _parse_asn_from_as_string(as_str: str) -> int | None:
+        """Extract ASN number from 'AS1234 Company Name' format."""
+        if not as_str:
+            return None
+        import re
+        match = re.match(r'^AS(\d+)', as_str, re.IGNORECASE)
+        return int(match.group(1)) if match else None
+
     async def _fetch_from_ipapi(client: httpx.AsyncClient, target_ip: str) -> dict | None:
         try:
             resp = await client.get(f"https://ipapi.co/{target_ip}/json/")
@@ -914,8 +922,9 @@ async def lookup_geo_info(ip: str) -> dict | None:
                 data = resp.json()
                 code = data.get("country_code")
                 isp = data.get("org") or data.get("asn") 
+                asn = _parse_asn_from_as_string(data.get("asn"))  # ipapi.co returns asn as "AS1234"
                 if code:
-                    return {"country_code": code.upper(), "isp": isp}
+                    return {"country_code": code.upper(), "isp": isp, "asn": asn}
         except Exception:
             pass
         return None
@@ -929,9 +938,11 @@ async def lookup_geo_info(ip: str) -> dict | None:
                 data = resp.json()
                 if data.get("status") == "success":
                     code = data.get("countryCode")
-                    isp = data.get("isp") or data.get("org") or data.get("as")
+                    isp = data.get("isp") or data.get("org")
+                    as_str = data.get("as") or ""  # format: "AS1234 Company Name"
+                    asn = _parse_asn_from_as_string(as_str)
                     if isinstance(code, str) and len(code) == 2:
-                        return {"country_code": code.upper(), "isp": isp}
+                        return {"country_code": code.upper(), "isp": isp, "asn": asn}
         except Exception:
             pass
         return None
