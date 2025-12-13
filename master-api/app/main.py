@@ -7113,6 +7113,11 @@ def _trace_html() -> str:
       // Get hop key for matching - Tier 1/2/3 and ISP classification
       function getHopKey(hop) {
         if (!hop || hop.ip === '*') return null;
+        
+        // CRITICAL: For endpoint hops (start/end), use IP to ensure alignment
+        // This prevents misalignment when same IP has different ISP info in forward vs reverse
+        if (hop.isEndpoint) return 'ENDPOINT:' + hop.ip;
+        
         const isp = (hop.geo?.isp || '').toLowerCase();
         const asn = hop.geo?.asn || '';
         
