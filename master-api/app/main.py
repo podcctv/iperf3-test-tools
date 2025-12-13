@@ -6964,20 +6964,23 @@ def _trace_html() -> str:
     }
 
     function renderComparisonTable(fwdHops, revHops, srcIp, srcName, dstIp, dstName) {
+      // Reverse the return route for proper alignment (B→A becomes A←B direction)
+      const revHopsReversed = [...revHops].reverse();
+      
       // Build sets of IPs for cross-reference (excluding * and private IPs at start/end)
       const fwdIPs = new Set(fwdHops.filter(h => h.ip !== '*' && !isPrivateIP(h.ip)).map(h => h.ip));
-      const revIPs = new Set(revHops.filter(h => h.ip !== '*' && !isPrivateIP(h.ip)).map(h => h.ip));
+      const revIPs = new Set(revHopsReversed.filter(h => h.ip !== '*' && !isPrivateIP(h.ip)).map(h => h.ip));
       const commonIPs = new Set([...fwdIPs].filter(ip => revIPs.has(ip)));
       
-      const maxLen = Math.max(fwdHops.length, revHops.length);
+      const maxLen = Math.max(fwdHops.length, revHopsReversed.length);
       const rows = [];
       
       // Add START row (source nodes)
-      rows.push(`<div class="comp-row" style="background: rgba(6, 182, 212, 0.1) !important; border-left: 3px solid #06b6d4;"><div class="text-cyan-400 font-mono font-bold text-center">起</div><div class="hop-cell"><div class="flex items-center gap-1"><span class="text-cyan-400 font-mono">${srcIp}</span></div><div class="hop-isp text-cyan-400/70">${srcName} (源)</div></div><div class="text-slate-600 text-center">⇄</div><div class="hop-cell"><div class="flex items-center gap-1"><span class="text-cyan-400 font-mono">${dstIp}</span></div><div class="hop-isp text-cyan-400/70">${dstName} (源)</div></div></div>`);
+      rows.push(`<div class="comp-row" style="background: rgba(6, 182, 212, 0.1) !important; border-left: 3px solid #06b6d4;"><div class="text-cyan-400 font-mono font-bold text-center">起</div><div class="hop-cell"><div class="flex items-center gap-1"><span class="text-cyan-400 font-mono">${srcIp}</span></div><div class="hop-isp text-cyan-400/70">${srcName} (源)</div></div><div class="text-slate-600 text-center">⇄</div><div class="hop-cell"><div class="flex items-center gap-1"><span class="text-cyan-400 font-mono">${srcIp}</span></div><div class="hop-isp text-cyan-400/70">${srcName} (目标)</div></div></div>`);
       
       for (let i = 0; i < maxLen; i++) {
         const fwd = fwdHops[i] || null;
-        const rev = revHops[i] || null;
+        const rev = revHopsReversed[i] || null;
         
         // Determine row style
         let rowClass = '';
@@ -6996,8 +6999,8 @@ def _trace_html() -> str:
         rows.push(`<div class="comp-row ${rowClass}"><div class="text-cyan-400 font-mono font-bold text-center">${i + 1}</div>${renderHopCell(fwd)}<div class="text-slate-600 text-center">⇄</div>${renderHopCell(rev)}</div>`);
       }
       
-      // Add END row (destination nodes)
-      rows.push(`<div class="comp-row" style="background: rgba(6, 182, 212, 0.1) !important; border-left: 3px solid #06b6d4;"><div class="text-cyan-400 font-mono font-bold text-center">终</div><div class="hop-cell"><div class="flex items-center gap-1"><span class="text-cyan-400 font-mono">${dstIp}</span></div><div class="hop-isp text-cyan-400/70">${dstName} (目标)</div></div><div class="text-slate-600 text-center">⇄</div><div class="hop-cell"><div class="flex items-center gap-1"><span class="text-cyan-400 font-mono">${srcIp}</span></div><div class="hop-isp text-cyan-400/70">${srcName} (目标)</div></div></div>`);
+      // Add END row (destination nodes - after reversal, reverse route ends at srcIp)
+      rows.push(`<div class="comp-row" style="background: rgba(6, 182, 212, 0.1) !important; border-left: 3px solid #06b6d4;"><div class="text-cyan-400 font-mono font-bold text-center">终</div><div class="hop-cell"><div class="flex items-center gap-1"><span class="text-cyan-400 font-mono">${dstIp}</span></div><div class="hop-isp text-cyan-400/70">${dstName} (目标)</div></div><div class="text-slate-600 text-center">⇄</div><div class="hop-cell"><div class="flex items-center gap-1"><span class="text-cyan-400 font-mono">${dstIp}</span></div><div class="hop-isp text-cyan-400/70">${dstName} (源)</div></div></div>`);
       
       // Add symmetry info if routes are very different
       const commonCount = commonIPs.size;
