@@ -6900,6 +6900,29 @@ def _trace_html() -> str:
     const apiFetch = (url, opt = {}) => fetch(url, { credentials: 'include', ...opt });
     let nodes = [];
 
+    // ASN Tier cache - populated from API
+    const _asnTierCache = {};
+    
+    // Fetch ASN tier from API (async)
+    async function fetchAsnTier(asn) {
+      if (!asn || _asnTierCache[asn]) return _asnTierCache[asn];
+      try {
+        const res = await fetch(`/api/asn/${asn}`);
+        const data = await res.json();
+        if (data.status === 'ok' && data.tier) {
+          _asnTierCache[asn] = { tier: data.tier, name: data.name };
+          return _asnTierCache[asn];
+        }
+      } catch (e) { console.log('ASN lookup failed:', asn); }
+      return null;
+    }
+    
+    // Pre-fetch ASN tiers for all hops (batched)
+    async function prefetchAsnTiers(hops) {
+      const asns = [...new Set(hops.filter(h => h.geo?.asn).map(h => h.geo.asn))];
+      await Promise.all(asns.map(a => fetchAsnTier(a)));
+    }
+    
     const ISP_RULES = [
       // China carriers
       { match: /chinanet|china\s*telecom|ct\.net|163data/i, asn: [4134, 4812], badge: '163', label: '163' },
@@ -6932,6 +6955,18 @@ def _trace_html() -> str:
     ];
 
     function detectIspBadge(isp, asn) {
+      // First check dynamic cache from API
+      if (asn && _asnTierCache[asn]) {
+        const cached = _asnTierCache[asn];
+        // Map tier to badge style
+        const tierBadgeMap = {
+          'T1': 'ntt', 'T2': 'pccw', 'T3': 'iij', 'IX': 'jinx', 'CDN': 'cogent', 'ISP': 'he'
+        };
+        const badge = tierBadgeMap[cached.tier] || 'he';
+        return { badge, label: cached.tier };
+      }
+      
+      // Fallback to hardcoded rules
       if (!isp) return null;
       for (const rule of ISP_RULES) {
         if (rule.match.test(isp) || (asn && rule.asn.includes(asn))) return { badge: rule.badge, label: rule.label };
@@ -7228,12 +7263,16 @@ def _trace_html() -> str:
           document.getElementById('rev-title').textContent = `${targetName} → ${srcOpt.dataset.name}`;
           document.getElementById('rev-badges').innerHTML = revBadges.map(b => renderBadge(b)).join('');
           document.getElementById('rev-stats').textContent = `${revData.total_hops}跳 | ${revData.elapsed_ms}ms`;
+          // Prefetch ASN tier data before rendering
+          await prefetchAsnTiers([...fwdData.hops, ...revData.hops]);
           document.getElementById('comparison-body').innerHTML = renderComparisonTable(fwdData.hops, revData.hops, srcOpt.dataset.ip, srcOpt.dataset.name, targetIp, targetName);
           document.getElementById('trace-results').classList.remove('hidden');
         } else {
           document.getElementById('single-title').textContent = `${srcOpt.dataset.name} → ${targetName}`;
           document.getElementById('single-badges').innerHTML = fwdBadges.map(b => renderBadge(b)).join('');
           document.getElementById('single-stats').textContent = `${fwdData.total_hops}跳 | ${fwdData.elapsed_ms}ms | ${fwdData.tool_used}`;
+          // Prefetch ASN tier data before rendering
+          await prefetchAsnTiers(fwdData.hops);
           document.getElementById('single-hops').innerHTML = renderSingleHops(fwdData.hops);
           document.getElementById('single-result').classList.remove('hidden');
         }
