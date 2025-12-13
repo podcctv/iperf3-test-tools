@@ -6753,41 +6753,77 @@ def _trace_html() -> str:
   <title>路由追踪 - iPerf3 测试工具</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/dom-to-image/2.6.0/dom-to-image.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    
+    /* Animations */
+    @keyframes fadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes pulse-glow { 0%, 100% { box-shadow: 0 0 15px rgba(6, 182, 212, 0.3); } 50% { box-shadow: 0 0 25px rgba(6, 182, 212, 0.5); } }
+    .fade-in { animation: fadeInUp 0.4s ease forwards; }
+    .pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
+    
+    /* Glassmorphism */
+    .glass-card { background: rgba(30, 41, 59, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(148, 163, 184, 0.15); }
+    .glass-card:hover { border-color: rgba(148, 163, 184, 0.25); }
+    
+    /* Latency Heatmap Colors */
+    .latency-excellent { color: #22c55e; } /* <20ms - green */
+    .latency-good { color: #84cc16; }      /* 20-50ms - lime */
+    .latency-fair { color: #eab308; }      /* 50-100ms - yellow */
+    .latency-slow { color: #f97316; }      /* 100-200ms - orange */
+    .latency-bad { color: #ef4444; }       /* >200ms - red */
+    
+    .latency-bg-excellent { background: rgba(34, 197, 94, 0.15); }
+    .latency-bg-good { background: rgba(132, 204, 22, 0.15); }
+    .latency-bg-fair { background: rgba(234, 179, 8, 0.15); }
+    .latency-bg-slow { background: rgba(249, 115, 22, 0.15); }
+    .latency-bg-bad { background: rgba(239, 68, 68, 0.15); }
+    
+    /* Tabs */
     .tab-active { border-bottom: 2px solid #06b6d4; color: #06b6d4; }
-    .badge { padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; margin-right: 3px; white-space: nowrap; }
-    .badge-163 { background: #ef4444; color: white; }
-    .badge-cn2 { background: #f97316; color: white; }
-    .badge-9929 { background: #eab308; color: black; }
-    .badge-4837 { background: #22c55e; color: white; }
-    .badge-cmi { background: #06b6d4; color: white; }
-    .badge-cmin2 { background: #8b5cf6; color: white; }
-    .badge-ntt { background: #3b82f6; color: white; }
-    .badge-softbank { background: #ec4899; color: white; }
-    .badge-kddi { background: #f472b6; color: white; }
-    .badge-iij { background: #a78bfa; color: white; }
-    .badge-bbix { background: #fbbf24; color: black; }
-    .badge-telia { background: #14b8a6; color: white; }
-    .badge-cogent { background: #6366f1; color: white; }
-    .badge-lumen { background: #a855f7; color: white; }
-    .badge-gtt { background: #10b981; color: white; }
-    .badge-pccw { background: #f59e0b; color: white; }
-    .badge-hkt { background: #0ea5e9; color: white; }
-    .badge-telstra { background: #dc2626; color: white; }
-    .badge-equinix { background: #84cc16; color: black; }
-    .badge-zayo { background: #7c3aed; color: white; }
-    .badge-he { background: #64748b; color: white; }
-    .badge-jinx { background: #059669; color: white; }
-    .badge-singtel { background: #f97316; color: white; }
+    .tab-btn { transition: all 0.2s ease; }
+    .tab-btn:hover { color: #22d3ee; }
+    
+    /* Badges with glow effect */
+    .badge { padding: 2px 8px; border-radius: 6px; font-size: 10px; font-weight: 600; margin-right: 4px; white-space: nowrap; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+    .badge-163 { background: linear-gradient(135deg, #ef4444, #dc2626); color: white; }
+    .badge-cn2 { background: linear-gradient(135deg, #f97316, #ea580c); color: white; }
+    .badge-9929 { background: linear-gradient(135deg, #eab308, #ca8a04); color: black; }
+    .badge-4837 { background: linear-gradient(135deg, #22c55e, #16a34a); color: white; }
+    .badge-cmi { background: linear-gradient(135deg, #06b6d4, #0891b2); color: white; }
+    .badge-cmin2 { background: linear-gradient(135deg, #8b5cf6, #7c3aed); color: white; }
+    .badge-ntt { background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; }
+    .badge-softbank { background: linear-gradient(135deg, #ec4899, #db2777); color: white; }
+    .badge-kddi { background: linear-gradient(135deg, #f472b6, #ec4899); color: white; }
+    .badge-iij { background: linear-gradient(135deg, #a78bfa, #8b5cf6); color: white; }
+    .badge-bbix { background: linear-gradient(135deg, #fbbf24, #f59e0b); color: black; }
+    .badge-telia { background: linear-gradient(135deg, #14b8a6, #0d9488); color: white; }
+    .badge-cogent { background: linear-gradient(135deg, #6366f1, #4f46e5); color: white; }
+    .badge-lumen { background: linear-gradient(135deg, #a855f7, #9333ea); color: white; }
+    .badge-gtt { background: linear-gradient(135deg, #10b981, #059669); color: white; }
+    .badge-pccw { background: linear-gradient(135deg, #f59e0b, #d97706); color: white; }
+    .badge-hkt { background: linear-gradient(135deg, #0ea5e9, #0284c7); color: white; }
+    .badge-telstra { background: linear-gradient(135deg, #dc2626, #b91c1c); color: white; }
+    .badge-equinix { background: linear-gradient(135deg, #84cc16, #65a30d); color: black; }
+    .badge-zayo { background: linear-gradient(135deg, #7c3aed, #6d28d9); color: white; }
+    .badge-he { background: linear-gradient(135deg, #64748b, #475569); color: white; }
+    .badge-jinx { background: linear-gradient(135deg, #059669, #047857); color: white; }
+    .badge-singtel { background: linear-gradient(135deg, #f97316, #ea580c); color: white; }
+    
+    /* Comparison rows */
     .diff-row { background: rgba(251, 191, 36, 0.15) !important; border-left: 3px solid #fbbf24; }
     .same-row { background: rgba(34, 197, 94, 0.15) !important; border-left: 3px solid #22c55e; }
-    .comp-row { display: grid; grid-template-columns: 40px 1fr 50px 1fr; gap: 8px; padding: 8px 12px; align-items: center; font-size: 13px; border-bottom: 1px solid rgba(51, 65, 85, 0.4); }
-    .comp-row:nth-child(odd) { background: rgba(15, 23, 42, 0.3); }
-    .comp-row:nth-child(even) { background: rgba(30, 41, 59, 0.3); }
-    .hop-cell { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-    .hop-ip { font-family: monospace; font-size: 12px; }
+    .comp-row { display: grid; grid-template-columns: 40px 1fr 50px 1fr; gap: 8px; padding: 10px 14px; align-items: center; font-size: 13px; border-bottom: 1px solid rgba(51, 65, 85, 0.3); transition: all 0.2s ease; }
+    .comp-row:hover { background: rgba(51, 65, 85, 0.4) !important; }
+    .comp-row:nth-child(odd) { background: rgba(15, 23, 42, 0.4); }
+    .comp-row:nth-child(even) { background: rgba(30, 41, 59, 0.4); }
+    .hop-cell { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+    .hop-ip { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 12px; letter-spacing: -0.5px; }
     .hop-isp { font-size: 11px; color: #94a3b8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    
+    /* Chart container */
+    .chart-container { position: relative; height: 200px; width: 100%; }
   </style>
 </head>
 <body class="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
@@ -6854,6 +6890,23 @@ def _trace_html() -> str:
           </div>
           <div id="comparison-body"></div>
         </div>
+        
+        <!-- Latency Chart Section -->
+        <div id="latency-charts" class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="glass-card rounded-xl p-4 fade-in">
+            <h4 class="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">📈 去程延迟分布</h4>
+            <div class="chart-container">
+              <canvas id="fwd-latency-chart"></canvas>
+            </div>
+          </div>
+          <div class="glass-card rounded-xl p-4 fade-in">
+            <h4 class="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">📉 回程延迟分布</h4>
+            <div class="chart-container">
+              <canvas id="rev-latency-chart"></canvas>
+            </div>
+          </div>
+        </div>
+        
         <div class="mt-3 text-xs text-slate-500"><span class="inline-block w-3 h-3 bg-amber-500/30 border-l-2 border-amber-500 mr-1"></span> 去回程不同的跳点</div>
       </div>
 
@@ -7039,6 +7092,85 @@ def _trace_html() -> str:
     }
 
     function renderBadge(b) { return b ? `<span class="badge badge-${b.badge}">${b.label}</span>` : ''; }
+    
+    // Latency heatmap color helper
+    function getLatencyClass(rtt) {
+      if (!rtt || rtt <= 0) return '';
+      if (rtt < 20) return 'latency-excellent';
+      if (rtt < 50) return 'latency-good';
+      if (rtt < 100) return 'latency-fair';
+      if (rtt < 200) return 'latency-slow';
+      return 'latency-bad';
+    }
+    
+    function getLatencyColor(rtt) {
+      if (!rtt || rtt <= 0) return '#64748b';  // gray for unknown
+      if (rtt < 20) return '#22c55e';  // green
+      if (rtt < 50) return '#84cc16';  // lime
+      if (rtt < 100) return '#eab308'; // yellow
+      if (rtt < 200) return '#f97316'; // orange
+      return '#ef4444';                 // red
+    }
+    
+    // Chart instances
+    let fwdChart = null, revChart = null;
+    
+    function renderLatencyChart(canvasId, hops, label) {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+      
+      const ctx = canvas.getContext('2d');
+      const labels = hops.map((h, i) => `#${i + 1}`);
+      const data = hops.map(h => h.rtt_avg || 0);
+      const colors = hops.map(h => getLatencyColor(h.rtt_avg));
+      
+      // Destroy existing chart if any
+      if (canvasId === 'fwd-latency-chart' && fwdChart) { fwdChart.destroy(); }
+      if (canvasId === 'rev-latency-chart' && revChart) { revChart.destroy(); }
+      
+      const chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: label,
+            data: data,
+            backgroundColor: colors,
+            borderColor: colors.map(c => c.replace(')', ', 0.8)').replace('rgb', 'rgba')),
+            borderWidth: 1,
+            borderRadius: 4,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                title: (items) => hops[items[0].dataIndex]?.ip || 'Unknown',
+                label: (item) => `延迟: ${item.raw.toFixed(1)}ms`
+              }
+            }
+          },
+          scales: {
+            y: { 
+              beginAtZero: true,
+              title: { display: true, text: 'ms', color: '#94a3b8' },
+              ticks: { color: '#94a3b8' },
+              grid: { color: 'rgba(51, 65, 85, 0.3)' }
+            },
+            x: { 
+              ticks: { color: '#94a3b8' },
+              grid: { display: false }
+            }
+          }
+        }
+      });
+      
+      if (canvasId === 'fwd-latency-chart') fwdChart = chart;
+      if (canvasId === 'rev-latency-chart') revChart = chart;
+    }
 
     function extractRouteBadges(hops) {
       const seen = new Set(), result = [];
@@ -7175,7 +7307,7 @@ def _trace_html() -> str:
       if (!hop) return '<div class="hop-cell text-slate-600">-</div>';
       const geo = hop.geo || {}, badge = detectIspBadge(geo.isp, geo.asn), flag = renderFlag(geo.country_code);
       const rtt = hop.rtt_avg ? `${hop.rtt_avg.toFixed(0)}ms` : '-';
-      const rttClass = hop.rtt_avg > 100 ? 'text-amber-400' : hop.rtt_avg > 50 ? 'text-yellow-400' : 'text-emerald-400';
+      const rttClass = getLatencyClass(hop.rtt_avg) || 'text-slate-400';
       const loss = hop.loss_pct > 0 ? `<span class="text-rose-400 text-xs">${hop.loss_pct}%</span>` : '';
       const isp = geo.isp ? geo.isp.substring(0, 22) : '';
       return `<div class="hop-cell"><div class="flex items-center gap-1">${renderBadge(badge)}<span class="hop-ip ${hop.ip === '*' ? 'text-slate-500' : ''}">${hop.ip}</span><span class="${rttClass} text-xs">${rtt}</span>${loss}</div><div class="hop-isp flex items-center gap-1">${flag} ${isp}</div></div>`;
@@ -7481,6 +7613,9 @@ def _trace_html() -> str:
           await prefetchAsnTiers([...fwdData.hops, ...revData.hops]);
           document.getElementById('comparison-body').innerHTML = renderComparisonTable(fwdData.hops, revData.hops, srcOpt.dataset.ip, srcOpt.dataset.name, targetIp, targetName);
           document.getElementById('trace-results').classList.remove('hidden');
+          // Render latency charts
+          renderLatencyChart('fwd-latency-chart', fwdData.hops, '去程延迟');
+          renderLatencyChart('rev-latency-chart', revData.hops, '回程延迟');
         } else {
           document.getElementById('single-title').textContent = `${srcOpt.dataset.name} → ${targetName}`;
           document.getElementById('single-badges').innerHTML = fwdBadges.map(b => renderBadge(b)).join('');
