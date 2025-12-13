@@ -2160,14 +2160,16 @@ def _reverse_mode_report_result(task_id: int, result: dict):
         "result": result,
     }
     
+    print(f"[REVERSE] Reporting result for task {task_id} to {result_url}...", flush=True)
+    
     try:
-        resp = requests.post(result_url, json=payload, timeout=10)
+        resp = requests.post(result_url, json=payload, timeout=30)
         if resp.ok:
-            app.logger.info(f"[REVERSE] Result reported for task {task_id}")
+            print(f"[REVERSE] ✓ Result reported for task {task_id} (status: {result.get('status', 'unknown')})", flush=True)
         else:
-            app.logger.warning(f"[REVERSE] Failed to report result: {resp.status_code}")
+            print(f"[REVERSE] ✗ Failed to report result: HTTP {resp.status_code} - {resp.text[:200]}", flush=True)
     except Exception as e:
-        app.logger.warning(f"[REVERSE] Report error: {e}")
+        print(f"[REVERSE] ✗ Report error for task {task_id}: {e}", flush=True)
 
 
 def _reverse_mode_loop():

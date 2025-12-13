@@ -8480,6 +8480,8 @@ async def _run_traceroute_via_task_queue(node: Node, req: TracerouteRequest, db:
     poll_interval = 2
     elapsed = 0
     
+    print(f"[TRACE-QUEUE] Created task {task_id}, waiting for result (max {max_wait}s)...", flush=True)
+    
     while elapsed < max_wait:
         await asyncio.sleep(poll_interval)
         elapsed += poll_interval
@@ -8491,8 +8493,13 @@ async def _run_traceroute_via_task_queue(node: Node, req: TracerouteRequest, db:
         if not task:
             raise HTTPException(status_code=500, detail="Task disappeared")
         
+        # Log status every 10 seconds
+        if elapsed % 10 == 0:
+            print(f"[TRACE-QUEUE] Task {task_id} status: {task.status} (elapsed: {elapsed}s)", flush=True)
+        
         if task.status == "completed" and task.result_data:
             result = task.result_data
+            print(f"[TRACE-QUEUE] Task {task_id} completed with {result.get('total_hops', 0)} hops", flush=True)
             
             # Clean up task
             db.delete(task)
@@ -8517,6 +8524,7 @@ async def _run_traceroute_via_task_queue(node: Node, req: TracerouteRequest, db:
             raise HTTPException(status_code=500, detail=error_msg)
     
     # Timeout - mark task as expired
+    print(f"[TRACE-QUEUE] Task {task_id} TIMEOUT after {elapsed}s (last status: {task.status})", flush=True)
     task.status = "expired"
     db.commit()
     raise HTTPException(status_code=504, detail=f"Traceroute timed out waiting for reverse agent {node.name}")
