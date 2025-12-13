@@ -6732,10 +6732,8 @@ def _trace_html() -> str:
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-    .hop-row:nth-child(odd) { background: rgba(15, 23, 42, 0.4); }
-    .hop-row:nth-child(even) { background: rgba(30, 41, 59, 0.4); }
     .tab-active { border-bottom: 2px solid #06b6d4; color: #06b6d4; }
-    .badge { padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; margin-right: 4px; }
+    .badge { padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; margin-right: 3px; white-space: nowrap; }
     .badge-163 { background: #ef4444; color: white; }
     .badge-cn2 { background: #f97316; color: white; }
     .badge-9929 { background: #eab308; color: black; }
@@ -6744,6 +6742,9 @@ def _trace_html() -> str:
     .badge-cmin2 { background: #8b5cf6; color: white; }
     .badge-ntt { background: #3b82f6; color: white; }
     .badge-softbank { background: #ec4899; color: white; }
+    .badge-kddi { background: #f472b6; color: white; }
+    .badge-iij { background: #a78bfa; color: white; }
+    .badge-bbix { background: #fbbf24; color: black; }
     .badge-telia { background: #14b8a6; color: white; }
     .badge-cogent { background: #6366f1; color: white; }
     .badge-lumen { background: #a855f7; color: white; }
@@ -6751,151 +6752,120 @@ def _trace_html() -> str:
     .badge-pccw { background: #f59e0b; color: white; }
     .badge-hkt { background: #0ea5e9; color: white; }
     .badge-telstra { background: #dc2626; color: white; }
+    .badge-equinix { background: #84cc16; color: black; }
+    .badge-zayo { background: #7c3aed; color: white; }
+    .badge-he { background: #64748b; color: white; }
+    .diff-row { background: rgba(251, 191, 36, 0.15) !important; border-left: 3px solid #fbbf24; }
+    .comp-row { display: grid; grid-template-columns: 40px 1fr 50px 1fr; gap: 8px; padding: 8px 12px; align-items: center; font-size: 13px; border-bottom: 1px solid rgba(51, 65, 85, 0.4); }
+    .comp-row:nth-child(odd) { background: rgba(15, 23, 42, 0.3); }
+    .comp-row:nth-child(even) { background: rgba(30, 41, 59, 0.3); }
+    .hop-cell { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .hop-ip { font-family: monospace; font-size: 12px; }
+    .hop-isp { font-size: 11px; color: #94a3b8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   </style>
 </head>
 <body class="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
-  <div class="max-w-7xl mx-auto px-6 py-10">
-    
-    <!-- Header -->
-    <div class="flex items-center justify-between mb-8">
-      <div>
-        <a href="/web" class="text-sm text-slate-400 hover:text-white transition mb-2 inline-block">← 返回主页</a>
-        <h1 class="text-3xl font-bold">🌐 Traceroute 路由追踪</h1>
-        <p class="text-slate-400 mt-1">从指定节点到目标地址进行路由追踪，分析网络路径和延迟</p>
-      </div>
+  <div class="max-w-7xl mx-auto px-4 py-8">
+    <div class="mb-6">
+      <a href="/web" class="text-sm text-slate-400 hover:text-white transition">← 返回主页</a>
+      <h1 class="text-2xl font-bold mt-2">🌐 Traceroute 路由追踪</h1>
     </div>
 
-    <!-- Tabs -->
     <div class="flex border-b border-slate-700 mb-6 gap-6">
       <button onclick="switchTab('single')" id="tab-single" class="pb-3 text-sm font-semibold tab-active">🚀 单次追踪</button>
       <button onclick="switchTab('schedules')" id="tab-schedules" class="pb-3 text-sm font-semibold text-slate-400 hover:text-white">📅 定时监控</button>
       <button onclick="switchTab('history')" id="tab-history" class="pb-3 text-sm font-semibold text-slate-400 hover:text-white">📜 历史记录</button>
     </div>
 
-    <!-- Tab: Single Trace -->
     <div id="panel-single">
-      <!-- Config Panel -->
-      <div class="rounded-2xl border border-slate-700 bg-slate-800/60 p-6 mb-6">
-        <div class="grid gap-6 md:grid-cols-3">
-          <div class="space-y-2">
-            <label class="text-sm font-medium text-slate-300">节点 A</label>
-            <select id="trace-src-node" class="w-full rounded-lg border border-slate-600 bg-slate-700 p-3 text-white focus:border-cyan-500 focus:outline-none">
-              <option value="">选择节点...</option>
-            </select>
+      <div class="rounded-xl border border-slate-700 bg-slate-800/60 p-5 mb-6">
+        <div class="grid gap-4 md:grid-cols-4">
+          <div>
+            <label class="text-xs font-medium text-slate-400">节点 A</label>
+            <select id="trace-src-node" class="w-full mt-1 rounded-lg border border-slate-600 bg-slate-700 p-2.5 text-sm text-white"><option value="">选择...</option></select>
           </div>
-          <div class="space-y-2">
-            <label class="text-sm font-medium text-slate-300">目标类型</label>
-            <select id="trace-target-type" onchange="toggleTargetInput()" class="w-full rounded-lg border border-slate-600 bg-slate-700 p-3 text-white focus:border-cyan-500 focus:outline-none">
-              <option value="node" selected>选择节点（双向）</option>
+          <div>
+            <label class="text-xs font-medium text-slate-400">目标类型</label>
+            <select id="trace-target-type" onchange="toggleTargetInput()" class="w-full mt-1 rounded-lg border border-slate-600 bg-slate-700 p-2.5 text-sm text-white">
+              <option value="node" selected>选择节点（双向对比）</option>
               <option value="custom">自定义地址（单向）</option>
             </select>
           </div>
-          <div class="space-y-2">
-            <label class="text-sm font-medium text-slate-300">节点 B / 目标地址</label>
-            <select id="trace-target-node" class="w-full rounded-lg border border-slate-600 bg-slate-700 p-3 text-white focus:border-cyan-500 focus:outline-none">
-              <option value="">选择节点...</option>
-            </select>
-            <input type="text" id="trace-target-input" placeholder="例如: google.com 或 8.8.8.8" class="hidden w-full rounded-lg border border-slate-600 bg-slate-700 p-3 text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none">
+          <div>
+            <label class="text-xs font-medium text-slate-400">节点 B / 目标</label>
+            <select id="trace-target-node" class="w-full mt-1 rounded-lg border border-slate-600 bg-slate-700 p-2.5 text-sm text-white"><option value="">选择...</option></select>
+            <input type="text" id="trace-target-input" placeholder="IP或域名" class="hidden w-full mt-1 rounded-lg border border-slate-600 bg-slate-700 p-2.5 text-sm text-white">
+          </div>
+          <div class="flex items-end">
+            <button id="trace-start-btn" onclick="runBidirectionalTrace()" class="w-full px-4 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm font-bold">🚀 开始追踪</button>
           </div>
         </div>
-        <div class="mt-6 flex items-center gap-4">
-          <button id="trace-start-btn" onclick="runBidirectionalTrace()" class="px-6 py-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-sm font-bold transition inline-flex items-center gap-2">
-            <span>🚀</span> 开始追踪
-          </button>
-          <span id="trace-status" class="text-sm text-slate-400"></span>
-        </div>
+        <div id="trace-status" class="mt-3 text-sm text-slate-400"></div>
       </div>
 
-      <!-- Results Container -->
-      <div id="trace-results" class="hidden space-y-6">
-        <!-- Forward Trace -->
-        <div id="forward-trace" class="rounded-2xl border border-slate-700 bg-slate-800/60 overflow-hidden">
-          <div class="px-6 py-4 border-b border-slate-700">
-            <div class="flex items-center justify-between">
-              <h2 class="text-lg font-semibold flex items-center gap-2">
-                <span class="text-emerald-400">→</span> <span id="forward-title">去程</span>
-              </h2>
-              <div id="forward-meta" class="text-sm text-slate-400"></div>
+      <div id="trace-results" class="hidden">
+        <div class="mb-4 p-4 rounded-xl border border-slate-700 bg-slate-800/60">
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <div class="flex items-center gap-2 mb-2"><span class="text-emerald-400 text-lg">→</span><span class="font-semibold" id="fwd-title">去程</span></div>
+              <div class="flex flex-wrap items-center gap-2 text-sm"><span id="fwd-badges"></span><span class="text-slate-400" id="fwd-stats"></span></div>
             </div>
-            <div id="forward-badges" class="mt-2 flex flex-wrap gap-1"></div>
-          </div>
-          <div class="hop-table">
-            <div class="px-6 py-2 bg-slate-900/60 grid grid-cols-12 gap-4 text-xs font-semibold text-slate-400 uppercase">
-              <div class="col-span-1">跳</div>
-              <div class="col-span-3">IP</div>
-              <div class="col-span-2 text-right">延迟</div>
-              <div class="col-span-1 text-right">丢包</div>
-              <div class="col-span-5">运营商 / 位置</div>
+            <div>
+              <div class="flex items-center gap-2 mb-2"><span class="text-amber-400 text-lg">←</span><span class="font-semibold" id="rev-title">回程</span></div>
+              <div class="flex flex-wrap items-center gap-2 text-sm"><span id="rev-badges"></span><span class="text-slate-400" id="rev-stats"></span></div>
             </div>
-            <div id="forward-hops" class="max-h-[400px] overflow-y-auto"></div>
           </div>
         </div>
+        <div class="rounded-xl border border-slate-700 bg-slate-800/60 overflow-hidden">
+          <div class="grid grid-cols-2">
+            <div class="px-4 py-3 bg-slate-900/60 font-semibold text-emerald-400 border-b border-slate-700">→ 去程路由</div>
+            <div class="px-4 py-3 bg-slate-900/60 font-semibold text-amber-400 border-b border-slate-700">← 回程路由</div>
+          </div>
+          <div id="comparison-body" class="max-h-[600px] overflow-y-auto"></div>
+        </div>
+        <div class="mt-3 text-xs text-slate-500"><span class="inline-block w-3 h-3 bg-amber-500/30 border-l-2 border-amber-500 mr-1"></span> 去回程不同的跳点</div>
+      </div>
 
-        <!-- Reverse Trace (only for node-to-node) -->
-        <div id="reverse-trace" class="hidden rounded-2xl border border-slate-700 bg-slate-800/60 overflow-hidden">
-          <div class="px-6 py-4 border-b border-slate-700">
-            <div class="flex items-center justify-between">
-              <h2 class="text-lg font-semibold flex items-center gap-2">
-                <span class="text-amber-400">←</span> <span id="reverse-title">回程</span>
-              </h2>
-              <div id="reverse-meta" class="text-sm text-slate-400"></div>
-            </div>
-            <div id="reverse-badges" class="mt-2 flex flex-wrap gap-1"></div>
-          </div>
-          <div class="hop-table">
-            <div class="px-6 py-2 bg-slate-900/60 grid grid-cols-12 gap-4 text-xs font-semibold text-slate-400 uppercase">
-              <div class="col-span-1">跳</div>
-              <div class="col-span-3">IP</div>
-              <div class="col-span-2 text-right">延迟</div>
-              <div class="col-span-1 text-right">丢包</div>
-              <div class="col-span-5">运营商 / 位置</div>
-            </div>
-            <div id="reverse-hops" class="max-h-[400px] overflow-y-auto"></div>
-          </div>
+      <div id="single-result" class="hidden rounded-xl border border-slate-700 bg-slate-800/60 overflow-hidden">
+        <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
+          <span class="font-semibold" id="single-title">追踪结果</span>
+          <div class="flex items-center gap-2 text-sm"><span id="single-badges"></span><span class="text-slate-400" id="single-stats"></span></div>
         </div>
+        <div id="single-hops" class="max-h-[500px] overflow-y-auto"></div>
       </div>
     </div>
 
-    <!-- Tab: Schedules -->
     <div id="panel-schedules" class="hidden">
-      <div class="rounded-2xl border border-slate-700 bg-slate-800/60 p-6 mb-6">
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="text-lg font-semibold">定时追踪任务</h3>
-          <button onclick="showCreateScheduleModal()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-semibold">+ 新建任务</button>
-        </div>
-        <div id="schedule-list" class="space-y-3"><p class="text-slate-500 text-sm">加载中...</p></div>
+      <div class="rounded-xl border border-slate-700 bg-slate-800/60 p-5">
+        <div class="flex items-center justify-between mb-4"><h3 class="font-semibold">定时追踪任务</h3><button onclick="showCreateScheduleModal()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-semibold">+ 新建</button></div>
+        <div id="schedule-list" class="space-y-2"><p class="text-slate-500 text-sm">加载中...</p></div>
       </div>
     </div>
 
-    <!-- Tab: History -->
     <div id="panel-history" class="hidden">
-      <div class="rounded-2xl border border-slate-700 bg-slate-800/60 p-6">
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="text-lg font-semibold">历史追踪记录</h3>
-          <button onclick="loadHistory()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-semibold">🔄 刷新</button>
-        </div>
-        <div id="history-list" class="space-y-3"><p class="text-slate-500 text-sm">加载中...</p></div>
+      <div class="rounded-xl border border-slate-700 bg-slate-800/60 p-5">
+        <div class="flex items-center justify-between mb-4"><h3 class="font-semibold">历史记录</h3><button onclick="loadHistory()" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm">🔄 刷新</button></div>
+        <div id="history-list" class="space-y-2"><p class="text-slate-500 text-sm">加载中...</p></div>
       </div>
     </div>
 
-    <!-- Schedule Modal -->
     <div id="schedule-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-      <div class="bg-slate-800 rounded-2xl border border-slate-700 p-6 w-full max-w-lg">
-        <h3 class="text-xl font-bold mb-4">新建定时追踪任务</h3>
-        <div class="space-y-4">
-          <div><label class="text-sm text-slate-300">任务名称</label><input id="sched-name" type="text" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white"></div>
-          <div class="grid grid-cols-2 gap-4">
-            <div><label class="text-sm text-slate-300">源节点</label><select id="sched-src" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white"></select></div>
-            <div><label class="text-sm text-slate-300">目标</label><input id="sched-target" type="text" placeholder="IP 或域名" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white"></div>
+      <div class="bg-slate-800 rounded-xl border border-slate-700 p-5 w-full max-w-md">
+        <h3 class="font-bold mb-4">新建定时追踪</h3>
+        <div class="space-y-3">
+          <div><label class="text-xs text-slate-400">名称</label><input id="sched-name" type="text" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm"></div>
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="text-xs text-slate-400">源节点</label><select id="sched-src" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm"></select></div>
+            <div><label class="text-xs text-slate-400">目标</label><input id="sched-target" type="text" placeholder="IP/域名" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm"></div>
           </div>
-          <div class="grid grid-cols-2 gap-4">
-            <div><label class="text-sm text-slate-300">间隔（分钟）</label><input id="sched-interval" type="number" value="60" min="5" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white"></div>
-            <div><label class="text-sm text-slate-300">路由变化告警</label><select id="sched-alert" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white"><option value="true">启用</option><option value="false">禁用</option></select></div>
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="text-xs text-slate-400">间隔(分钟)</label><input id="sched-interval" type="number" value="60" min="5" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm"></div>
+            <div><label class="text-xs text-slate-400">变化告警</label><select id="sched-alert" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm"><option value="true">启用</option><option value="false">禁用</option></select></div>
           </div>
         </div>
-        <div class="flex justify-end gap-3 mt-6">
-          <button onclick="hideScheduleModal()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">取消</button>
-          <button onclick="createSchedule()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-sm font-semibold">创建</button>
+        <div class="flex justify-end gap-2 mt-5">
+          <button onclick="hideScheduleModal()" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">取消</button>
+          <button onclick="createSchedule()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-sm font-semibold">创建</button>
         </div>
       </div>
     </div>
@@ -6905,53 +6875,48 @@ def _trace_html() -> str:
     const apiFetch = (url, opt = {}) => fetch(url, { credentials: 'include', ...opt });
     let nodes = [];
 
-    // ISP Badge Detection
     const ISP_RULES = [
-      // China Telecom
       { match: /chinanet|china\s*telecom|ct\.net|163data/i, asn: [4134, 4812], badge: '163', label: '163' },
-      { match: /cn2|china\s*telecom\s*global|ctgnet/i, asn: [4809], badge: 'cn2', label: 'CN2' },
-      // China Unicom
-      { match: /chinaunicom|unicom.*169|169\.net|cncgroup/i, asn: [4837, 17621, 17622], badge: '4837', label: '4837' },
-      { match: /cu.*9929|as9929|unicom.*premium|chinaunicom.*a|cuii/i, asn: [9929], badge: '9929', label: '9929' },
-      { match: /as10099|unicom.*global|cuii/i, asn: [10099], badge: '9929', label: 'CU-G' },
-      // China Mobile
-      { match: /chinamobile|cmnet|cmi.*hk|as9808/i, asn: [9808, 56040, 56041, 56042, 56044, 56046, 56047, 56048], badge: 'cmi', label: 'CMI' },
-      { match: /cmin2|as58807/i, asn: [58807], badge: 'cmin2', label: 'CMIN2' },
-      // International Tier1
-      { match: /ntt.*comm|as2914/i, asn: [2914], badge: 'ntt', label: 'NTT' },
-      { match: /softbank|bbtec|as17676/i, asn: [17676, 9143], badge: 'softbank', label: 'SoftBank' },
-      { match: /telia|as1299/i, asn: [1299], badge: 'telia', label: 'Telia' },
-      { match: /cogent|as174/i, asn: [174], badge: 'cogent', label: 'Cogent' },
-      { match: /lumen|level3|as3356/i, asn: [3356], badge: 'lumen', label: 'Lumen' },
-      { match: /gtt|as3257/i, asn: [3257], badge: 'gtt', label: 'GTT' },
-      { match: /pccw|as3491/i, asn: [3491], badge: 'pccw', label: 'PCCW' },
-      { match: /hkt|as4515|as9304/i, asn: [4515, 9304], badge: 'hkt', label: 'HKT' },
-      { match: /telstra|as4637|as1221/i, asn: [1221, 4637], badge: 'telstra', label: 'Telstra' },
+      { match: /cn2|ctgnet|china\s*telecom\s*global/i, asn: [4809], badge: 'cn2', label: 'CN2' },
+      { match: /chinaunicom(?!.*9929)|unicom.*169|169\.net|cncgroup/i, asn: [4837, 17621, 17622], badge: '4837', label: '4837' },
+      { match: /9929|unicom.*premium|cuii/i, asn: [9929], badge: '9929', label: '9929' },
+      { match: /unicom.*global/i, asn: [10099], badge: '9929', label: 'CU-G' },
+      { match: /chinamobile|cmnet|cmi/i, asn: [9808, 56040, 56041, 56042, 56044, 56046, 56047, 56048], badge: 'cmi', label: 'CMI' },
+      { match: /cmin2/i, asn: [58807], badge: 'cmin2', label: 'CMIN2' },
+      { match: /ntt.*comm|ntt\s*com/i, asn: [2914], badge: 'ntt', label: 'NTT' },
+      { match: /softbank|bbtec/i, asn: [17676, 9143], badge: 'softbank', label: 'SoftBank' },
+      { match: /kddi/i, asn: [2516], badge: 'kddi', label: 'KDDI' },
+      { match: /iij/i, asn: [2497], badge: 'iij', label: 'IIJ' },
+      { match: /bbix/i, asn: [23764], badge: 'bbix', label: 'BBIX' },
+      { match: /telia/i, asn: [1299], badge: 'telia', label: 'Telia' },
+      { match: /cogent/i, asn: [174], badge: 'cogent', label: 'Cogent' },
+      { match: /lumen|level3/i, asn: [3356], badge: 'lumen', label: 'Lumen' },
+      { match: /gtt/i, asn: [3257], badge: 'gtt', label: 'GTT' },
+      { match: /zayo/i, asn: [6461], badge: 'zayo', label: 'Zayo' },
+      { match: /hurricane|he\.net/i, asn: [6939], badge: 'he', label: 'HE' },
+      { match: /pccw/i, asn: [3491], badge: 'pccw', label: 'PCCW' },
+      { match: /hkt/i, asn: [4515, 9304], badge: 'hkt', label: 'HKT' },
+      { match: /telstra/i, asn: [1221, 4637], badge: 'telstra', label: 'Telstra' },
+      { match: /equinix/i, asn: [24115], badge: 'equinix', label: 'Equinix' },
     ];
 
     function detectIspBadge(isp, asn) {
       if (!isp) return null;
       for (const rule of ISP_RULES) {
-        if (rule.match.test(isp) || (asn && rule.asn.includes(asn))) {
-          return { badge: rule.badge, label: rule.label };
-        }
+        if (rule.match.test(isp) || (asn && rule.asn.includes(asn))) return { badge: rule.badge, label: rule.label };
       }
       return null;
     }
 
-    function renderBadge(badgeInfo) {
-      if (!badgeInfo) return '';
-      return `<span class="badge badge-${badgeInfo.badge}">${badgeInfo.label}</span>`;
-    }
+    function renderBadge(b) { return b ? `<span class="badge badge-${b.badge}">${b.label}</span>` : ''; }
 
     function extractRouteBadges(hops) {
-      const badges = new Set();
+      const seen = new Set(), result = [];
       for (const hop of hops) {
-        const geo = hop.geo || {};
-        const badge = detectIspBadge(geo.isp, geo.asn);
-        if (badge) badges.add(JSON.stringify(badge));
+        const geo = hop.geo || {}, b = detectIspBadge(geo.isp, geo.asn);
+        if (b && !seen.has(b.label)) { seen.add(b.label); result.push(b); }
       }
-      return [...badges].map(b => JSON.parse(b));
+      return result;
     }
 
     function switchTab(tab) {
@@ -6968,154 +6933,124 @@ def _trace_html() -> str:
       try {
         const res = await apiFetch('/nodes');
         nodes = await res.json();
-        const srcSelect = document.getElementById('trace-src-node');
-        const targetSelect = document.getElementById('trace-target-node');
-        const schedSrc = document.getElementById('sched-src');
-        srcSelect.innerHTML = '<option value="">选择节点...</option>';
-        targetSelect.innerHTML = '<option value="">选择节点...</option>';
-        schedSrc.innerHTML = '';
-        nodes.forEach(n => {
-          const opt = new Option(`${n.name} (${n.ip})`, n.id);
-          opt.dataset.ip = n.ip;
-          opt.dataset.name = n.name;
-          srcSelect.appendChild(opt);
-          targetSelect.appendChild(opt.cloneNode(true));
-          schedSrc.appendChild(new Option(n.name, n.id));
+        ['trace-src-node', 'trace-target-node'].forEach(id => {
+          const sel = document.getElementById(id);
+          sel.innerHTML = '<option value="">选择...</option>';
+          nodes.forEach(n => { const opt = new Option(`${n.name} (${n.ip})`, n.id); opt.dataset.ip = n.ip; opt.dataset.name = n.name; sel.appendChild(opt); });
         });
-      } catch (e) { console.error('Failed to load nodes:', e); }
+        const schedSrc = document.getElementById('sched-src');
+        schedSrc.innerHTML = '';
+        nodes.forEach(n => schedSrc.appendChild(new Option(n.name, n.id)));
+      } catch (e) { console.error('Load nodes failed:', e); }
     }
 
     function toggleTargetInput() {
-      const type = document.getElementById('trace-target-type').value;
-      document.getElementById('trace-target-node').classList.toggle('hidden', type !== 'node');
-      document.getElementById('trace-target-input').classList.toggle('hidden', type === 'node');
+      const isNode = document.getElementById('trace-target-type').value === 'node';
+      document.getElementById('trace-target-node').classList.toggle('hidden', !isNode);
+      document.getElementById('trace-target-input').classList.toggle('hidden', isNode);
     }
 
-    function renderFlag(code) {
-      if (!code) return '';
-      return `<img src="/flags/${code}" alt="${code}" class="inline-block w-5 h-4 mr-1 rounded-sm">`;
+    function renderFlag(code) { return code ? `<img src="/flags/${code}" alt="${code}" class="inline-block w-4 h-3 rounded-sm">` : ''; }
+
+    function renderHopCell(hop) {
+      if (!hop) return '<div class="hop-cell text-slate-600">-</div>';
+      const geo = hop.geo || {}, badge = detectIspBadge(geo.isp, geo.asn), flag = renderFlag(geo.country_code);
+      const rtt = hop.rtt_avg ? `${hop.rtt_avg.toFixed(0)}ms` : '-';
+      const rttClass = hop.rtt_avg > 100 ? 'text-amber-400' : hop.rtt_avg > 50 ? 'text-yellow-400' : 'text-emerald-400';
+      const loss = hop.loss_pct > 0 ? `<span class="text-rose-400 text-xs">${hop.loss_pct}%</span>` : '';
+      const isp = geo.isp ? geo.isp.substring(0, 22) : '';
+      return `<div class="hop-cell"><div class="flex items-center gap-1">${renderBadge(badge)}<span class="hop-ip ${hop.ip === '*' ? 'text-slate-500' : ''}">${hop.ip}</span><span class="${rttClass} text-xs">${rtt}</span>${loss}</div><div class="hop-isp flex items-center gap-1">${flag} ${isp}</div></div>`;
     }
 
-    function renderHops(hops, container) {
-      container.innerHTML = hops.map(hop => {
-        const geo = hop.geo || {};
-        const flag = renderFlag(geo.country_code);
-        const badge = detectIspBadge(geo.isp, geo.asn);
-        const badgeHtml = renderBadge(badge);
-        const geoStr = [geo.city, geo.isp].filter(Boolean).join(' · ') || '-';
+    function renderComparisonTable(fwdHops, revHops) {
+      const maxLen = Math.max(fwdHops.length, revHops.length), rows = [];
+      const fwdIPs = new Set(fwdHops.filter(h => h.ip !== '*').map(h => h.ip));
+      const revIPs = new Set(revHops.filter(h => h.ip !== '*').map(h => h.ip));
+      for (let i = 0; i < maxLen; i++) {
+        const fwd = fwdHops[i], rev = revHops[i];
+        let isDiff = false;
+        if (fwd && rev && fwd.ip !== '*' && rev.ip !== '*') isDiff = fwd.ip !== rev.ip && !revIPs.has(fwd.ip) && !fwdIPs.has(rev.ip);
+        rows.push(`<div class="comp-row ${isDiff ? 'diff-row' : ''}"><div class="text-cyan-400 font-mono font-bold text-center">${i + 1}</div>${renderHopCell(fwd)}<div class="text-slate-600 text-center">⇄</div>${renderHopCell(rev)}</div>`);
+      }
+      return rows.join('');
+    }
+
+    function renderSingleHops(hops) {
+      return hops.map(hop => {
+        const geo = hop.geo || {}, badge = detectIspBadge(geo.isp, geo.asn), flag = renderFlag(geo.country_code);
         const rtt = hop.rtt_avg ? `${hop.rtt_avg.toFixed(1)}ms` : '-';
         const rttClass = hop.rtt_avg > 100 ? 'text-amber-400' : hop.rtt_avg > 50 ? 'text-yellow-400' : 'text-emerald-400';
         const loss = hop.loss_pct > 0 ? `<span class="text-rose-400">${hop.loss_pct}%</span>` : '-';
-        return `
-          <div class="hop-row px-6 py-2 grid grid-cols-12 gap-4 items-center text-sm">
-            <div class="col-span-1 font-mono text-cyan-400 font-bold">${hop.hop}</div>
-            <div class="col-span-3 font-mono ${hop.ip === '*' ? 'text-slate-500' : 'text-white'}">${hop.ip}</div>
-            <div class="col-span-2 text-right ${rttClass} font-medium">${rtt}</div>
-            <div class="col-span-1 text-right text-xs">${loss}</div>
-            <div class="col-span-5 text-slate-400 truncate flex items-center">${badgeHtml}${flag}${geoStr}</div>
-          </div>
-        `;
+        const isp = [geo.city, geo.isp].filter(Boolean).join(' · ') || '-';
+        return `<div class="px-4 py-2 grid grid-cols-12 gap-3 items-center text-sm border-b border-slate-700/50"><div class="col-span-1 font-mono text-cyan-400 font-bold">${hop.hop}</div><div class="col-span-3 font-mono ${hop.ip === '*' ? 'text-slate-500' : ''}">${hop.ip}</div><div class="col-span-2 text-right ${rttClass} font-medium">${rtt}</div><div class="col-span-1 text-right text-xs">${loss}</div><div class="col-span-5 text-slate-400 truncate flex items-center gap-1">${renderBadge(badge)} ${flag} ${isp}</div></div>`;
       }).join('');
     }
 
-    async function runSingleTrace(srcNodeId, targetIp, targetName) {
-      const res = await apiFetch(`/api/trace/run?node_id=${srcNodeId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ target: targetIp, max_hops: 30, include_geo: true })
-      });
+    async function runSingleTrace(nodeId, target) {
+      const res = await apiFetch(`/api/trace/run?node_id=${nodeId}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target, max_hops: 30, include_geo: true }) });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Traceroute failed');
+      if (!res.ok) throw new Error(data.detail || 'Failed');
       return data;
     }
 
     async function runBidirectionalTrace() {
-      const srcSelect = document.getElementById('trace-src-node');
+      const srcSel = document.getElementById('trace-src-node'), srcId = srcSel.value, srcOpt = srcSel.options[srcSel.selectedIndex];
+      if (!srcId) { alert('请选择节点 A'); return; }
       const targetType = document.getElementById('trace-target-type').value;
-      const srcNodeId = srcSelect.value;
-      const srcOpt = srcSelect.options[srcSelect.selectedIndex];
-      
-      if (!srcNodeId) { alert('请选择节点 A'); return; }
-      
-      let targetNodeId, targetIp, targetName, isBidirectional = false;
-      
+      let targetId, targetIp, targetName, isBi = false;
       if (targetType === 'node') {
-        const targetSelect = document.getElementById('trace-target-node');
-        targetNodeId = targetSelect.value;
-        if (!targetNodeId) { alert('请选择节点 B'); return; }
-        const targetOpt = targetSelect.options[targetSelect.selectedIndex];
-        targetIp = targetOpt.dataset.ip;
-        targetName = targetOpt.dataset.name;
-        isBidirectional = true;
+        const tgtSel = document.getElementById('trace-target-node');
+        targetId = tgtSel.value;
+        if (!targetId) { alert('请选择节点 B'); return; }
+        const tgtOpt = tgtSel.options[tgtSel.selectedIndex];
+        targetIp = tgtOpt.dataset.ip; targetName = tgtOpt.dataset.name; isBi = true;
       } else {
         targetIp = document.getElementById('trace-target-input').value.trim();
-        if (!targetIp) { alert('请输入目标地址'); return; }
+        if (!targetIp) { alert('请输入目标'); return; }
         targetName = targetIp;
       }
-      
-      const btn = document.getElementById('trace-start-btn');
-      const status = document.getElementById('trace-status');
-      const results = document.getElementById('trace-results');
-      
-      btn.disabled = true;
-      btn.innerHTML = '<span class="animate-pulse">⏳</span> 追踪中...';
-      results.classList.add('hidden');
-      
+      const btn = document.getElementById('trace-start-btn'), status = document.getElementById('trace-status');
+      btn.disabled = true; btn.textContent = '⏳ 追踪中...';
+      document.getElementById('trace-results').classList.add('hidden');
+      document.getElementById('single-result').classList.add('hidden');
       try {
-        // Forward trace: A -> B
-        status.textContent = `正在追踪去程: ${srcOpt.dataset.name} → ${targetName}...`;
-        const fwdData = await runSingleTrace(srcNodeId, targetIp, targetName);
-        
+        status.textContent = `正在追踪: ${srcOpt.dataset.name} → ${targetName}...`;
+        const fwdData = await runSingleTrace(srcId, targetIp);
         const fwdBadges = extractRouteBadges(fwdData.hops);
-        const fwdBadgeHtml = fwdBadges.map(b => renderBadge(b)).join('');
-        
-        document.getElementById('forward-title').textContent = `去程: ${srcOpt.dataset.name} → ${targetName}`;
-        document.getElementById('forward-meta').innerHTML = `${fwdBadgeHtml} ${fwdData.total_hops} 跳 | ${fwdData.elapsed_ms}ms | ${fwdData.tool_used}`;
-        document.getElementById('forward-badges').innerHTML = fwdBadgeHtml;
-        renderHops(fwdData.hops, document.getElementById('forward-hops'));
-        
-        // Reverse trace: B -> A (only if both are nodes)
-        const revPanel = document.getElementById('reverse-trace');
-        if (isBidirectional) {
-          status.textContent = `正在追踪回程: ${targetName} → ${srcOpt.dataset.name}...`;
-          const srcIp = srcOpt.dataset.ip;
-          const revData = await runSingleTrace(targetNodeId, srcIp, srcOpt.dataset.name);
-          
+        if (isBi) {
+          status.textContent = `正在追踪: ${targetName} → ${srcOpt.dataset.name}...`;
+          const revData = await runSingleTrace(targetId, srcOpt.dataset.ip);
           const revBadges = extractRouteBadges(revData.hops);
-          const revBadgeHtml = revBadges.map(b => renderBadge(b)).join('');
-          
-          document.getElementById('reverse-title').textContent = `回程: ${targetName} → ${srcOpt.dataset.name}`;
-          document.getElementById('reverse-meta').innerHTML = `${revBadgeHtml} ${revData.total_hops} 跳 | ${revData.elapsed_ms}ms | ${revData.tool_used}`;
-          document.getElementById('reverse-badges').innerHTML = revBadgeHtml;
-          renderHops(revData.hops, document.getElementById('reverse-hops'));
-          revPanel.classList.remove('hidden');
+          document.getElementById('fwd-title').textContent = `${srcOpt.dataset.name} → ${targetName}`;
+          document.getElementById('fwd-badges').innerHTML = fwdBadges.map(b => renderBadge(b)).join('');
+          document.getElementById('fwd-stats').textContent = `${fwdData.total_hops}跳 | ${fwdData.elapsed_ms}ms`;
+          document.getElementById('rev-title').textContent = `${targetName} → ${srcOpt.dataset.name}`;
+          document.getElementById('rev-badges').innerHTML = revBadges.map(b => renderBadge(b)).join('');
+          document.getElementById('rev-stats').textContent = `${revData.total_hops}跳 | ${revData.elapsed_ms}ms`;
+          document.getElementById('comparison-body').innerHTML = renderComparisonTable(fwdData.hops, revData.hops);
+          document.getElementById('trace-results').classList.remove('hidden');
         } else {
-          revPanel.classList.add('hidden');
+          document.getElementById('single-title').textContent = `${srcOpt.dataset.name} → ${targetName}`;
+          document.getElementById('single-badges').innerHTML = fwdBadges.map(b => renderBadge(b)).join('');
+          document.getElementById('single-stats').textContent = `${fwdData.total_hops}跳 | ${fwdData.elapsed_ms}ms | ${fwdData.tool_used}`;
+          document.getElementById('single-hops').innerHTML = renderSingleHops(fwdData.hops);
+          document.getElementById('single-result').classList.remove('hidden');
         }
-        
-        results.classList.remove('hidden');
         status.textContent = '✅ 追踪完成';
-        
-      } catch (e) {
-        status.textContent = `❌ 错误: ${e.message}`;
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<span>🚀</span> 开始追踪';
-      }
+      } catch (e) { status.textContent = `❌ ${e.message}`; }
+      finally { btn.disabled = false; btn.textContent = '🚀 开始追踪'; }
     }
 
-    // Schedule functions
     async function loadSchedules() {
       const list = document.getElementById('schedule-list');
       try {
         const res = await apiFetch('/api/trace/schedules');
-        const schedules = await res.json();
-        if (schedules.length === 0) { list.innerHTML = '<p class="text-slate-500 text-sm">暂无定时追踪任务</p>'; return; }
-        list.innerHTML = schedules.map(s => {
-          const srcNode = nodes.find(n => n.id === s.src_node_id);
-          const intervalMin = Math.floor(s.interval_seconds / 60);
-          const statusBadge = s.enabled ? '<span class="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded text-xs">运行中</span>' : '<span class="px-2 py-0.5 bg-slate-600/40 text-slate-400 rounded text-xs">已暂停</span>';
-          return `<div class="flex items-center justify-between p-4 rounded-xl border border-slate-700 bg-slate-900/40"><div><div class="font-semibold">${s.name}</div><div class="text-sm text-slate-400">${srcNode?.name || '?'} → ${s.target_address || '?'} | 每${intervalMin}分钟</div></div><div class="flex items-center gap-2">${statusBadge}<button onclick="toggleScheduleEnabled(${s.id}, ${!s.enabled})" class="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs">${s.enabled ? '暂停' : '启用'}</button><button onclick="deleteSchedule(${s.id})" class="px-3 py-1 bg-rose-600/30 hover:bg-rose-600/50 text-rose-300 rounded text-xs">删除</button></div></div>`;
+        const data = await res.json();
+        if (!data.length) { list.innerHTML = '<p class="text-slate-500 text-sm">暂无任务</p>'; return; }
+        list.innerHTML = data.map(s => {
+          const node = nodes.find(n => n.id === s.src_node_id);
+          const badge = s.enabled ? '<span class="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded text-xs">运行中</span>' : '<span class="px-2 py-0.5 bg-slate-600/40 text-slate-400 rounded text-xs">暂停</span>';
+          return `<div class="flex items-center justify-between p-3 rounded-lg bg-slate-900/40 border border-slate-700"><div><div class="font-medium text-sm">${s.name}</div><div class="text-xs text-slate-400">${node?.name || '?'} → ${s.target_address} | ${Math.floor(s.interval_seconds/60)}分钟</div></div><div class="flex gap-2">${badge}<button onclick="toggleSchedule(${s.id}, ${!s.enabled})" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs">${s.enabled ? '暂停' : '启用'}</button><button onclick="deleteSchedule(${s.id})" class="px-2 py-1 bg-rose-600/30 hover:bg-rose-500/30 text-rose-300 rounded text-xs">删除</button></div></div>`;
         }).join('');
       } catch (e) { list.innerHTML = '<p class="text-rose-400 text-sm">加载失败</p>'; }
     }
@@ -7127,23 +7062,22 @@ def _trace_html() -> str:
       const name = document.getElementById('sched-name').value.trim();
       const srcId = document.getElementById('sched-src').value;
       const target = document.getElementById('sched-target').value.trim();
-      const intervalMin = parseInt(document.getElementById('sched-interval').value) || 60;
-      const alertEnabled = document.getElementById('sched-alert').value === 'true';
-      if (!name || !srcId || !target) { alert('请填写完整信息'); return; }
+      const interval = parseInt(document.getElementById('sched-interval').value) || 60;
+      const alertVal = document.getElementById('sched-alert').value === 'true';
+      if (!name || !srcId || !target) { alert('请填写完整'); return; }
       try {
-        const res = await apiFetch('/api/trace/schedules', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, src_node_id: parseInt(srcId), target_type: 'custom', target_address: target, interval_seconds: intervalMin * 60, alert_on_change: alertEnabled }) });
-        if (!res.ok) throw new Error('创建失败');
+        await apiFetch('/api/trace/schedules', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, src_node_id: parseInt(srcId), target_type: 'custom', target_address: target, interval_seconds: interval * 60, alert_on_change: alertVal }) });
         hideScheduleModal(); loadSchedules();
-      } catch (e) { alert(e.message); }
+      } catch (e) { alert('创建失败'); }
     }
 
-    async function toggleScheduleEnabled(id, enabled) {
+    async function toggleSchedule(id, enabled) {
       await apiFetch(`/api/trace/schedules/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled }) });
       loadSchedules();
     }
 
     async function deleteSchedule(id) {
-      if (!confirm('确定删除此任务?')) return;
+      if (!confirm('确定删除?')) return;
       await apiFetch(`/api/trace/schedules/${id}`, { method: 'DELETE' });
       loadSchedules();
     }
@@ -7152,13 +7086,13 @@ def _trace_html() -> str:
       const list = document.getElementById('history-list');
       try {
         const res = await apiFetch('/api/trace/results?limit=30');
-        const results = await res.json();
-        if (results.length === 0) { list.innerHTML = '<p class="text-slate-500 text-sm">暂无历史记录</p>'; return; }
-        list.innerHTML = results.map(r => {
-          const srcNode = nodes.find(n => n.id === r.src_node_id);
+        const data = await res.json();
+        if (!data.length) { list.innerHTML = '<p class="text-slate-500 text-sm">暂无记录</p>'; return; }
+        list.innerHTML = data.map(r => {
+          const node = nodes.find(n => n.id === r.src_node_id);
           const date = new Date(r.executed_at).toLocaleString('zh-CN');
-          const changeBadge = r.has_change ? '<span class="px-2 py-0.5 bg-amber-500/20 text-amber-400 rounded text-xs">⚠ 路由变化</span>' : '';
-          return `<div class="p-4 rounded-xl border border-slate-700 bg-slate-900/40"><div class="flex items-center justify-between"><div><span class="font-medium">${srcNode?.name || '?'} → ${r.target}</span> ${changeBadge}</div><span class="text-xs text-slate-500">${date}</span></div><div class="text-sm text-slate-400 mt-1">${r.total_hops} 跳 | ${r.elapsed_ms}ms | ${r.tool_used}</div></div>`;
+          const change = r.has_change ? '<span class="px-2 py-0.5 bg-amber-500/20 text-amber-400 rounded text-xs">⚠ 变化</span>' : '';
+          return `<div class="p-3 rounded-lg bg-slate-900/40 border border-slate-700"><div class="flex justify-between"><span class="font-medium text-sm">${node?.name || '?'} → ${r.target} ${change}</span><span class="text-xs text-slate-500">${date}</span></div><div class="text-xs text-slate-400 mt-1">${r.total_hops}跳 | ${r.elapsed_ms}ms | ${r.tool_used}</div></div>`;
         }).join('');
       } catch (e) { list.innerHTML = '<p class="text-rose-400 text-sm">加载失败</p>'; }
     }
@@ -7168,6 +7102,8 @@ def _trace_html() -> str:
 </body>
 </html>
 '''
+
+
 
 
 def _admin_html() -> str:
