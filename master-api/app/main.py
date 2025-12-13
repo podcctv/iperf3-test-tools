@@ -7013,27 +7013,7 @@ def _trace_html() -> str:
         // Hide share button temporarily
         btn.style.display = 'none';
         
-        // Store original text content and mask IPs
-        const textNodes = [];
-        const originalTexts = [];
-        const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
-        while (walker.nextNode()) {
-          textNodes.push(walker.currentNode);
-          originalTexts.push(walker.currentNode.textContent);
-        }
-        
-        // Mask all IPs (xxx.xxx.xxx.xxx -> xxx.xxx.**.** )
-        textNodes.forEach(node => {
-          node.textContent = node.textContent.replace(
-            /(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/g,
-            '$1.$2.**.**'
-          );
-        });
-        
-        // Small delay for DOM to update
-        await new Promise(r => setTimeout(r, 50));
-        
-        // Capture as image from original element (preserves CSS)
+        // Capture as image with onclone to fix grid layout and mask IPs
         const canvas = await html2canvas(container, {
           backgroundColor: '#1e293b',
           scale: 2,
@@ -7041,12 +7021,50 @@ def _trace_html() -> str:
           useCORS: true,
           allowTaint: true,
           scrollX: 0,
-          scrollY: -window.scrollY
-        });
-        
-        // Restore original text
-        textNodes.forEach((node, i) => {
-          node.textContent = originalTexts[i];
+          scrollY: -window.scrollY,
+          onclone: (clonedDoc, element) => {
+            // Remove share button from clone
+            const clonedBtn = element.querySelector('#share-btn');
+            if (clonedBtn) clonedBtn.remove();
+            
+            // Apply computed styles to grid cells to fix alignment
+            const rows = element.querySelectorAll('.comp-row');
+            rows.forEach(row => {
+              row.style.display = 'grid';
+              row.style.gridTemplateColumns = '40px 1fr 50px 1fr';
+              row.style.gap = '8px';
+              
+              // Apply fixed widths to children based on original
+              const children = row.children;
+              for (let i = 0; i < children.length; i++) {
+                const child = children[i];
+                const originalChild = container.querySelector('.comp-row')?.children[i];
+                if (originalChild) {
+                  const rect = originalChild.getBoundingClientRect();
+                  child.style.width = rect.width + 'px';
+                  child.style.minWidth = rect.width + 'px';
+                }
+              }
+            });
+            
+            // Also fix the header grid
+            const headerGrids = element.querySelectorAll('.grid-cols-2');
+            headerGrids.forEach(grid => {
+              grid.style.display = 'grid';
+              grid.style.gridTemplateColumns = '1fr 1fr';
+            });
+            
+            // Mask IPs in cloned document
+            const walker = clonedDoc.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
+            const textNodes = [];
+            while (walker.nextNode()) textNodes.push(walker.currentNode);
+            textNodes.forEach(node => {
+              node.textContent = node.textContent.replace(
+                /(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/g,
+                '$1.$2.**.**'
+              );
+            });
+          }
         });
         
         // Show share button again
