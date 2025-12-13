@@ -6752,6 +6752,7 @@ def _trace_html() -> str:
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>路由追踪 - iPerf3 测试工具</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
   <style>
     body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
     .tab-active { border-bottom: 2px solid #06b6d4; color: #06b6d4; }
@@ -6830,15 +6831,20 @@ def _trace_html() -> str:
 
       <div id="trace-results" class="hidden">
         <div class="mb-4 p-4 rounded-xl border border-slate-700 bg-slate-800/60">
-          <div class="grid grid-cols-2 gap-4">
-            <div>
-              <div class="flex items-center gap-2 mb-2"><span class="text-emerald-400 text-lg">→</span><span class="font-semibold" id="fwd-title">去程</span></div>
-              <div class="flex flex-wrap items-center gap-2 text-sm"><span id="fwd-badges"></span><span class="text-slate-400" id="fwd-stats"></span></div>
+          <div class="flex items-start justify-between gap-4">
+            <div class="grid grid-cols-2 gap-4 flex-1">
+              <div>
+                <div class="flex items-center gap-2 mb-2"><span class="text-emerald-400 text-lg">→</span><span class="font-semibold" id="fwd-title">去程</span></div>
+                <div class="flex flex-wrap items-center gap-2 text-sm"><span id="fwd-badges"></span><span class="text-slate-400" id="fwd-stats"></span></div>
+              </div>
+              <div>
+                <div class="flex items-center gap-2 mb-2"><span class="text-amber-400 text-lg">←</span><span class="font-semibold" id="rev-title">回程</span></div>
+                <div class="flex flex-wrap items-center gap-2 text-sm"><span id="rev-badges"></span><span class="text-slate-400" id="rev-stats"></span></div>
+              </div>
             </div>
-            <div>
-              <div class="flex items-center gap-2 mb-2"><span class="text-amber-400 text-lg">←</span><span class="font-semibold" id="rev-title">回程</span></div>
-              <div class="flex flex-wrap items-center gap-2 text-sm"><span id="rev-badges"></span><span class="text-slate-400" id="rev-stats"></span></div>
-            </div>
+            <button id="share-btn" onclick="shareAsImage()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+              <span>📋</span><span>分享图片</span>
+            </button>
           </div>
         </div>
         <div class="rounded-xl border border-slate-700 bg-slate-800/60 overflow-hidden">
@@ -6993,6 +6999,81 @@ def _trace_html() -> str:
       });
       if (tab === 'schedules') loadSchedules();
       if (tab === 'history') loadHistory();
+    }
+
+    async function shareAsImage() {
+      const btn = document.getElementById('share-btn');
+      const originalText = btn.innerHTML;
+      btn.innerHTML = '<span>⏳</span><span>处理中...</span>';
+      btn.disabled = true;
+      
+      try {
+        // Clone the results container
+        const original = document.getElementById('trace-results');
+        const clone = original.cloneNode(true);
+        clone.style.position = 'absolute';
+        clone.style.left = '-9999px';
+        clone.style.width = original.offsetWidth + 'px';
+        clone.style.background = '#1e293b';
+        clone.style.padding = '16px';
+        clone.style.borderRadius = '12px';
+        
+        // Remove share button from clone
+        const clonedBtn = clone.querySelector('#share-btn');
+        if (clonedBtn) clonedBtn.remove();
+        
+        document.body.appendChild(clone);
+        
+        // Mask all IPs in the clone (format: xxx.xxx.xxx.xxx -> xxx.xxx.*.*)
+        const textNodes = [];
+        const walker = document.createTreeWalker(clone, NodeFilter.SHOW_TEXT, null, false);
+        while (walker.nextNode()) textNodes.push(walker.currentNode);
+        
+        textNodes.forEach(node => {
+          // Match IPv4 addresses and mask last two octets
+          node.textContent = node.textContent.replace(
+            /(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/g,
+            '$1.$2.**.**'
+          );
+        });
+        
+        // Capture as image
+        const canvas = await html2canvas(clone, {
+          backgroundColor: '#1e293b',
+          scale: 2,
+          logging: false,
+          useCORS: true
+        });
+        
+        document.body.removeChild(clone);
+        
+        // Copy to clipboard
+        canvas.toBlob(async (blob) => {
+          try {
+            await navigator.clipboard.write([
+              new ClipboardItem({ 'image/png': blob })
+            ]);
+            btn.innerHTML = '<span>✅</span><span>已复制!</span>';
+            setTimeout(() => { btn.innerHTML = originalText; btn.disabled = false; }, 2000);
+          } catch (e) {
+            console.error('Clipboard write failed:', e);
+            // Fallback: download as file
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'traceroute_' + new Date().toISOString().slice(0,10) + '.png';
+            a.click();
+            URL.revokeObjectURL(url);
+            btn.innerHTML = '<span>📥</span><span>已下载</span>';
+            setTimeout(() => { btn.innerHTML = originalText; btn.disabled = false; }, 2000);
+          }
+        }, 'image/png');
+        
+      } catch (e) {
+        console.error('Share as image failed:', e);
+        btn.innerHTML = '<span>❌</span><span>失败</span>';
+        setTimeout(() => { btn.innerHTML = originalText; btn.disabled = false; }, 2000);
+      }
     }
 
     async function loadNodes() {
