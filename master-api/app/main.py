@@ -6836,26 +6836,29 @@ def _trace_html() -> str:
     /* Chart container */
     .chart-container { position: relative; height: 200px; width: 100%; }
     
-    /* AS Path visualization */
+    /* AS Path visualization - redesigned */
+    .as-path-container { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; }
     .as-node { 
-      display: inline-flex; flex-direction: column; align-items: center; 
-      padding: 8px 12px; border-radius: 10px; 
-      background: linear-gradient(135deg, rgba(51, 65, 85, 0.8), rgba(30, 41, 59, 0.9));
-      border: 1px solid rgba(148, 163, 184, 0.2);
-      min-width: 80px; text-align: center;
-      transition: all 0.2s ease;
+      display: flex; flex-direction: column; 
+      padding: 10px 14px; border-radius: 12px; 
+      background: linear-gradient(145deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.95));
+      border: 2px solid var(--tier-color, rgba(100, 116, 139, 0.4));
+      min-width: 100px; text-align: left;
+      transition: all 0.25s ease;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     }
-    .as-node:hover { transform: translateY(-2px); border-color: rgba(6, 182, 212, 0.5); }
-    .as-asn { font-size: 11px; font-weight: 700; color: #06b6d4; }
-    .as-name { font-size: 10px; color: #94a3b8; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .as-tier { font-size: 9px; padding: 1px 6px; border-radius: 4px; margin-top: 4px; }
-    .as-tier-t1 { background: rgba(249, 115, 22, 0.3); color: #f97316; }
-    .as-tier-t2 { background: rgba(34, 197, 94, 0.3); color: #22c55e; }
-    .as-tier-t3 { background: rgba(59, 130, 246, 0.3); color: #3b82f6; }
-    .as-tier-ix { background: rgba(168, 85, 247, 0.3); color: #a855f7; }
-    .as-tier-isp { background: rgba(100, 116, 139, 0.3); color: #94a3b8; }
-    .as-arrow { color: #475569; font-size: 16px; }
-    .as-hops { font-size: 9px; color: #64748b; margin-top: 2px; }
+    .as-node:hover { transform: translateY(-3px) scale(1.02); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4); }
+    .as-header { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+    .as-tier { font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; }
+    .as-tier-t1 { background: linear-gradient(135deg, #f97316, #ea580c); color: #fff; }
+    .as-tier-t2 { background: linear-gradient(135deg, #22c55e, #16a34a); color: #fff; }
+    .as-tier-t3 { background: linear-gradient(135deg, #3b82f6, #2563eb); color: #fff; }
+    .as-tier-ix { background: linear-gradient(135deg, #a855f7, #9333ea); color: #fff; }
+    .as-tier-isp { background: linear-gradient(135deg, #64748b, #475569); color: #fff; }
+    .as-asn { font-size: 14px; font-weight: 800; color: #06b6d4; letter-spacing: 0.5px; }
+    .as-name { font-size: 11px; color: #cbd5e1; margin: 4px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .as-hops { font-size: 10px; color: #94a3b8; font-weight: 500; }
+    .as-arrow { color: #0ea5e9; font-size: 18px; font-weight: bold; display: flex; align-items: center; }
   </style>
 </head>
 <body class="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
@@ -7324,22 +7327,39 @@ def _trace_html() -> str:
         return;
       }
       
-      const html = asPath.map((as, i) => {
+      // Calculate max hops for proportional width scaling
+      const maxHops = Math.max(...asPath.map(a => a.hopCount), 1);
+      
+      const html = '<div class="as-path-container">' + asPath.map((as, i) => {
         const tierClass = `as-tier-${as.tier.toLowerCase()}`;
         const avgLatency = as.hopCount > 0 ? (as.totalLatency / as.hopCount).toFixed(0) : 0;
         
+        // Width proportional to hop count: base 100px + 25px per hop
+        const baseWidth = 100;
+        const widthPerHop = 25;
+        const cardWidth = baseWidth + (as.hopCount * widthPerHop);
+        
+        // Border color based on tier
+        const tierColors = {
+          't1': '#f97316', 't2': '#22c55e', 't3': '#3b82f6', 
+          'ix': '#a855f7', 'isp': '#64748b'
+        };
+        const borderColor = tierColors[as.tier.toLowerCase()] || '#64748b';
+        
         const node = `
-          <div class="as-node" title="${as.name}\n${as.hopCount}跳 | 平均${avgLatency}ms">
-            <div class="as-asn">AS${as.asn}</div>
+          <div class="as-node" style="min-width: ${cardWidth}px; --tier-color: ${borderColor};" title="${as.name}\\n${as.hopCount}跳 | 平均${avgLatency}ms">
+            <div class="as-header">
+              <span class="as-tier ${tierClass}">${as.tier}</span>
+              <span class="as-asn">AS${as.asn}</span>
+            </div>
             <div class="as-name">${as.name}</div>
-            <div class="as-tier ${tierClass}">${as.tier}</div>
             <div class="as-hops">${as.hopCount}跳</div>
           </div>
         `;
         
         const arrow = i < asPath.length - 1 ? '<span class="as-arrow">→</span>' : '';
         return node + arrow;
-      }).join('');
+      }).join('') + '</div>';
       
       container.innerHTML = html;
     }
