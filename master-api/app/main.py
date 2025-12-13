@@ -7239,9 +7239,18 @@ def _trace_html() -> str:
       const path = [];
       let currentAs = null;
       
+      // Helper to extract ASN from ISP string (format: "AS1234 Company Name" or just "AS1234")
+      function parseAsnFromIsp(isp) {
+        if (!isp) return null;
+        const match = isp.match(/^AS(\d+)/i);
+        return match ? parseInt(match[1]) : null;
+      }
+      
       for (const hop of hops) {
-        const asn = hop.geo?.asn;
         const isp = hop.geo?.isp || '';
+        // Try to get ASN from geo.asn first, then parse from ISP string
+        let asn = hop.geo?.asn;
+        if (!asn) asn = parseAsnFromIsp(isp);
         
         if (!asn || hop.ip === '*') continue;
         
