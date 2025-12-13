@@ -7652,6 +7652,43 @@ def _admin_html() -> str:
       <div id="db-result" class="mt-4 hidden"></div>
     </div>
     
+    <!-- Telegram Bot Settings Card -->
+    <div class="bg-slate-800/50 backdrop-blur border border-slate-700 rounded-2xl p-6 mb-6">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-10 h-10 bg-blue-500/20 rounded-xl flex items-center justify-center">
+          <span class="text-xl">🤖</span>
+        </div>
+        <div>
+          <h2 class="text-lg font-bold text-white">Telegram Bot 告警</h2>
+          <p class="text-xs text-slate-400">Telegram Alert Notifications</p>
+        </div>
+      </div>
+      
+      <p class="text-sm text-slate-400 mb-6">
+        配置 Telegram Bot 接收路由变化告警通知。创建 Bot 请与 <a href="https://t.me/BotFather" target="_blank" class="text-blue-400 underline">@BotFather</a> 对话。
+      </p>
+      
+      <div class="space-y-4">
+        <div>
+          <label class="text-xs text-slate-400">Bot Token</label>
+          <input id="tg-bot-token" type="text" placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm font-mono">
+        </div>
+        <div>
+          <label class="text-xs text-slate-400">Chat ID</label>
+          <input id="tg-chat-id" type="text" placeholder="-1001234567890 或 123456789" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm font-mono">
+        </div>
+        <div class="flex gap-3">
+          <button id="save-tg-settings" class="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-sm font-bold transition-colors">
+            💾 保存设置
+          </button>
+          <button id="test-tg-settings" class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-bold transition-colors">
+            📤 发送测试消息
+          </button>
+        </div>
+        <div id="tg-result" class="hidden text-sm p-3 rounded-lg"></div>
+      </div>
+    </div>
+    
     <!-- Traceroute Card -->
     <div class="bg-slate-800/50 backdrop-blur border border-slate-700 rounded-2xl p-6 mb-6">
       <div class="flex items-center gap-3 mb-4">
@@ -7759,6 +7796,62 @@ def _admin_html() -> str:
         }
       } catch (e) {
         showResult(`✗ 请求失败: ${e.message}`, true);
+      }
+    });
+    
+    // TG Settings Functions
+    function showTgResult(message, isError = false) {
+      const el = document.getElementById('tg-result');
+      el.className = `text-sm p-3 rounded-lg ${isError ? 'bg-rose-500/20 text-rose-400' : 'bg-emerald-500/20 text-emerald-400'}`;
+      el.textContent = message;
+      el.classList.remove('hidden');
+    }
+    
+    // Load TG settings on page load
+    async function loadTgSettings() {
+      try {
+        const res = await apiFetch('/api/settings/telegram');
+        if (res.ok) {
+          const data = await res.json();
+          document.getElementById('tg-bot-token').value = data.bot_token || '';
+          document.getElementById('tg-chat-id').value = data.chat_id || '';
+        }
+      } catch (e) { console.error('Failed to load TG settings:', e); }
+    }
+    loadTgSettings();
+    
+    document.getElementById('save-tg-settings').addEventListener('click', async () => {
+      const token = document.getElementById('tg-bot-token').value.trim();
+      const chatId = document.getElementById('tg-chat-id').value.trim();
+      
+      try {
+        const res = await apiFetch('/api/settings/telegram', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bot_token: token, chat_id: chatId })
+        });
+        if (res.ok) {
+          showTgResult('✓ 设置已保存');
+        } else {
+          const data = await res.json();
+          showTgResult(`✗ 保存失败: ${data.detail || '未知错误'}`, true);
+        }
+      } catch (e) {
+        showTgResult(`✗ 请求失败: ${e.message}`, true);
+      }
+    });
+    
+    document.getElementById('test-tg-settings').addEventListener('click', async () => {
+      try {
+        const res = await apiFetch('/api/settings/telegram/test', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          showTgResult('✓ 测试消息已发送！请检查 Telegram');
+        } else {
+          showTgResult(`✗ 发送失败: ${data.message || '未知错误'}`, true);
+        }
+      } catch (e) {
+        showTgResult(`✗ 请求失败: ${e.message}`, true);
       }
     });
   </script>
@@ -8631,6 +8724,91 @@ async def _run_traceroute_via_task_queue(node: Node, req: TracerouteRequest, db:
     db.commit()
     raise HTTPException(status_code=504, detail=f"Traceroute timed out waiting for reverse agent {node.name}")
 
+# ============== Telegram Settings API ==============
+
+import json
+from pathlib import Path
+
+TG_SETTINGS_FILE = Path(__file__).resolve().parent.parent / "data" / "telegram_settings.json"
+
+def _load_tg_settings() -> dict:
+    """Load Telegram settings from file."""
+    if not TG_SETTINGS_FILE.exists():
+        return {"bot_token": "", "chat_id": ""}
+    try:
+        with TG_SETTINGS_FILE.open("r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, IOError):
+        return {"bot_token": "", "chat_id": ""}
+
+def _save_tg_settings(bot_token: str, chat_id: str) -> None:
+    """Save Telegram settings to file."""
+    TG_SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with TG_SETTINGS_FILE.open("w", encoding="utf-8") as f:
+        json.dump({"bot_token": bot_token, "chat_id": chat_id}, f, indent=2)
+
+@app.get("/api/settings/telegram")
+def get_telegram_settings(request: Request):
+    """Get Telegram bot settings."""
+    from .auth import auth_manager
+    if not auth_manager().is_authenticated(request):
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    settings = _load_tg_settings()
+    # Mask token for security (show first/last 4 chars)
+    token = settings.get("bot_token", "")
+    if len(token) > 10:
+        token = token[:4] + "*" * (len(token) - 8) + token[-4:]
+    
+    return {"bot_token": token, "chat_id": settings.get("chat_id", "")}
+
+@app.post("/api/settings/telegram")
+def save_telegram_settings(request: Request, payload: dict):
+    """Save Telegram bot settings."""
+    from .auth import auth_manager
+    if not auth_manager().is_authenticated(request):
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    bot_token = payload.get("bot_token", "").strip()
+    chat_id = payload.get("chat_id", "").strip()
+    
+    # If token is masked (contains *), only update chat_id
+    if "*" in bot_token:
+        current = _load_tg_settings()
+        bot_token = current.get("bot_token", "")
+    
+    _save_tg_settings(bot_token, chat_id)
+    return {"status": "ok", "message": "Settings saved"}
+
+@app.post("/api/settings/telegram/test")
+async def test_telegram_settings(request: Request):
+    """Send a test message via Telegram."""
+    from .auth import auth_manager
+    if not auth_manager().is_authenticated(request):
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    settings = _load_tg_settings()
+    if not settings.get("bot_token") or not settings.get("chat_id"):
+        return {"success": False, "message": "Bot Token 或 Chat ID 未配置"}
+    
+    text = "🔔 *iPerf3 测试工具 - 测试消息*\n\n✅ Telegram 告警配置成功！\n\n当 traceroute 定时监控检测到路由变化时，您将收到告警通知。"
+    url = f"https://api.telegram.org/bot{settings['bot_token']}/sendMessage"
+    
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(url, json={
+                "chat_id": settings["chat_id"],
+                "text": text,
+                "parse_mode": "Markdown"
+            })
+            if response.status_code == 200:
+                return {"success": True, "message": "测试消息已发送"}
+            else:
+                error_data = response.json()
+                return {"success": False, "message": f"API 错误: {error_data.get('description', response.status_code)}"}
+    except Exception as e:
+        return {"success": False, "message": f"请求失败: {str(e)}"}
+
 
 # ============== TraceSchedule CRUD API ==============
 
@@ -8863,20 +9041,20 @@ def _register_trace_schedule_job(schedule: TraceSchedule):
 
 
 async def _send_telegram_alert(title: str, message: str) -> bool:
-    """Send alert message via Telegram bot."""
-    from .config import settings
+    """Send alert message via Telegram bot using stored settings."""
+    tg_settings = _load_tg_settings()
     
-    if not settings.telegram_bot_token or not settings.telegram_chat_id:
+    if not tg_settings.get("bot_token") or not tg_settings.get("chat_id"):
         logger.warning("Telegram alert skipped: bot token or chat_id not configured")
         return False
     
     text = f"*{title}*\n\n{message}"
-    url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
+    url = f"https://api.telegram.org/bot{tg_settings['bot_token']}/sendMessage"
     
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(url, json={
-                "chat_id": settings.telegram_chat_id,
+                "chat_id": tg_settings["chat_id"],
                 "text": text,
                 "parse_mode": "Markdown"
             })
