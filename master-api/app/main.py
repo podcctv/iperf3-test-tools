@@ -6809,33 +6809,48 @@ def _schedules_html() -> str:
         }
         
         // 解析ISO格式时间 - 服务器存储的是UTC时间
+        // 无论收到什么格式，都强制解析为UTC
         let target;
         try {
-          // Ensure UTC parsing: server stores UTC datetimes
-          // ISO format examples:
-          //   - "2025-12-14T19:05:00+00:00" (has timezone)
-          //   - "2025-12-14T19:05:00Z" (explicit UTC)
-          //   - "2025-12-14T19:05:00" (naive, treat as UTC)
           let dateStr = nextRun;
           
-          // Check if string has timezone info after the time part
-          // Look for + or - after position 19 (after YYYY-MM-DDTHH:MM:SS)
-          const hasTimezone = dateStr.endsWith('Z') || 
-                              /[+-]\d{2}:\d{2}$/.test(dateStr) ||
-                              /[+-]\d{4}$/.test(dateStr);
+          // 添加调试日志
+          console.log('Parsing next_run_at:', dateStr);
           
-          if (!hasTimezone) {
-            // No timezone info - treat as UTC
-            dateStr = dateStr + 'Z';
+          // 方法1: 如果字符串已有时区信息，直接解析
+          // 方法2: 如果没有时区信息，手动解析组件并使用Date.UTC
+          
+          // 提取日期时间组件 (格式: YYYY-MM-DDTHH:MM:SS 或含时区后缀)
+          const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
+          if (!match) {
+            console.warn('Failed to parse next_run_at:', dateStr);
+            el.textContent = '--';
+            return;
           }
           
-          target = new Date(dateStr);
+          const [, year, month, day, hour, minute, second] = match;
+          
+          // 使用 Date.UTC 强制解析为 UTC 时间
+          // 注意: month 需要减1，因为 Date.UTC 的月份是 0-based
+          const utcTimestamp = Date.UTC(
+            parseInt(year),
+            parseInt(month) - 1,
+            parseInt(day),
+            parseInt(hour),
+            parseInt(minute),
+            parseInt(second)
+          );
+          
+          target = new Date(utcTimestamp);
+          console.log('Parsed as UTC:', target.toISOString(), 'Local:', target.toString());
+          
           // 如果解析失败或无效时间
           if (isNaN(target.getTime())) {
             el.textContent = '--';
             return;
           }
         } catch (e) {
+          console.error('Error parsing next_run_at:', e);
           el.textContent = '--';
           return;
         }
