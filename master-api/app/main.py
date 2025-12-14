@@ -7328,10 +7328,16 @@ def _trace_html() -> str:
 
       <div id="single-result" class="hidden rounded-xl border border-slate-700 bg-slate-800/60 overflow-hidden">
         <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
-          <span class="font-semibold" id="single-title">追踪结果</span>
-          <div class="flex items-center gap-2 text-sm"><span id="single-badges"></span><span class="text-slate-400" id="single-stats"></span></div>
+          <div class="flex items-center gap-3">
+            <span class="font-semibold" id="single-title">追踪结果</span>
+            <span id="single-badges"></span>
+            <span class="text-slate-400 text-sm" id="single-stats"></span>
+          </div>
+          <button id="share-single-btn" onclick="shareSingleAsImage()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+            <span>📋</span><span>打码分享</span>
+          </button>
         </div>
-        <div id="single-hops" class="max-h-[500px] overflow-y-auto"></div>
+        <div id="single-hops"></div>
       </div>
     </div>
 
@@ -8172,6 +8178,84 @@ def _trace_html() -> str:
         
       } catch (e) {
         console.error('Share as image failed:', e);
+        btn.style.display = '';
+        btn.innerHTML = '<span>❌</span><span>失败</span>';
+        setTimeout(() => { btn.innerHTML = originalText; btn.disabled = false; }, 2000);
+      }
+    }
+
+    async function shareSingleAsImage() {
+      const btn = document.getElementById('share-single-btn');
+      const originalText = btn.innerHTML;
+      btn.innerHTML = '<span>⏳</span><span>处理中...</span>';
+      btn.disabled = true;
+      
+      try {
+        const container = document.getElementById('single-result');
+        
+        // Hide share button temporarily
+        btn.style.display = 'none';
+        
+        // Store original text content and mask IPs temporarily
+        const textNodes = [];
+        const originalTexts = [];
+        const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
+        while (walker.nextNode()) {
+          textNodes.push(walker.currentNode);
+          originalTexts.push(walker.currentNode.textContent);
+        }
+        
+        // Mask all IPs (xxx.xxx.xxx.xxx -> xxx.xxx.**.** )
+        textNodes.forEach(node => {
+          node.textContent = node.textContent.replace(
+            /(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/g,
+            '$1.$2.**.**'
+          );
+        });
+        
+        // Small delay for DOM to update
+        await new Promise(r => setTimeout(r, 100));
+        
+        // Capture using dom-to-image (better CSS support than html2canvas)
+        const blob = await domtoimage.toBlob(container, {
+          bgcolor: '#1e293b',
+          quality: 1,
+          style: {
+            transform: 'scale(1)',
+            transformOrigin: 'top left'
+          }
+        });
+        
+        // Restore original text
+        textNodes.forEach((node, i) => {
+          node.textContent = originalTexts[i];
+        });
+        
+        // Show share button again
+        btn.style.display = '';
+        
+        // Copy to clipboard
+        try {
+          await navigator.clipboard.write([
+            new ClipboardItem({ 'image/png': blob })
+          ]);
+          btn.innerHTML = '<span>✅</span><span>已复制!</span>';
+          setTimeout(() => { btn.innerHTML = originalText; btn.disabled = false; }, 2000);
+        } catch (e) {
+          console.error('Clipboard write failed:', e);
+          // Fallback: download as file
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'traceroute_single_' + new Date().toISOString().slice(0,10) + '.png';
+          a.click();
+          URL.revokeObjectURL(url);
+          btn.innerHTML = '<span>📥</span><span>已下载</span>';
+          setTimeout(() => { btn.innerHTML = originalText; btn.disabled = false; }, 2000);
+        }
+        
+      } catch (e) {
+        console.error('Share single as image failed:', e);
         btn.style.display = '';
         btn.innerHTML = '<span>❌</span><span>失败</span>';
         setTimeout(() => { btn.innerHTML = originalText; btn.disabled = false; }, 2000);
