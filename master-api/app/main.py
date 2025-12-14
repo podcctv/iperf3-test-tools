@@ -6855,43 +6855,19 @@ def _schedules_html() -> str:
           return;
         }
         
-        // 解析ISO格式时间 - 服务器存储的是UTC时间
-        // 无论收到什么格式，都强制解析为UTC
+        // 简化解析: 使用原生 Date 解析 ISO 字符串
+        // 如果没有时区后缀，添加 'Z' 确保解析为 UTC
         let target;
         try {
-          let dateStr = nextRun;
+          let dateStr = nextRun.trim();
           
-          // 添加调试日志
-          console.log('Parsing next_run_at:', dateStr);
-          
-          // 方法1: 如果字符串已有时区信息，直接解析
-          // 方法2: 如果没有时区信息，手动解析组件并使用Date.UTC
-          
-          // 提取日期时间组件 (格式: YYYY-MM-DDTHH:MM:SS 或含时区后缀)
-          const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
-          if (!match) {
-            console.warn('Failed to parse next_run_at:', dateStr);
-            el.textContent = '--';
-            return;
+          // 如果字符串不以 Z 或 +/- 时区结尾，添加 Z 后缀
+          if (!dateStr.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(dateStr)) {
+            dateStr += 'Z';
           }
           
-          const [, year, month, day, hour, minute, second] = match;
+          target = new Date(dateStr);
           
-          // 使用 Date.UTC 强制解析为 UTC 时间
-          // 注意: month 需要减1，因为 Date.UTC 的月份是 0-based
-          const utcTimestamp = Date.UTC(
-            parseInt(year),
-            parseInt(month) - 1,
-            parseInt(day),
-            parseInt(hour),
-            parseInt(minute),
-            parseInt(second)
-          );
-          
-          target = new Date(utcTimestamp);
-          console.log('Parsed as UTC:', target.toISOString(), 'Local:', target.toString());
-          
-          // 如果解析失败或无效时间
           if (isNaN(target.getTime())) {
             el.textContent = '--';
             return;
