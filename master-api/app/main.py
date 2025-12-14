@@ -5761,7 +5761,7 @@ def _schedules_html() -> str:
         <div class="grid grid-cols-2 gap-4">
           <div>
             <label class="text-sm font-medium text-slate-200">协议</label>
-            <select id="schedule-protocol" class="w-full mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none">
+            <select id="schedule-protocol" onchange="updateUdpBandwidthVisibility()" class="w-full mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none">
               <!-- Options populated by JS -->
             </select>
           </div>
