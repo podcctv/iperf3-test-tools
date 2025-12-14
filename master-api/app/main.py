@@ -9865,14 +9865,14 @@ async def _execute_trace_schedule(schedule_id: int):
             .limit(1)
         ).first()
         
-        # Check for route change
+        # Check for route change using smart comparison (ignores timeout variations)
         has_change = False
         change_summary = None
         previous_hash = prev_result.route_hash if prev_result else None
         
-        if prev_result and prev_result.route_hash != result.get("route_hash", ""):
-            has_change = True
-            change_summary = _compare_routes(prev_result.hops, result.get("hops", []))
+        if prev_result:
+            # Use smart comparison that ignores timeout-only changes
+            has_change, change_summary = _compare_routes(prev_result.hops, result.get("hops", []))
         
         # Save result
         trace_result = TraceResult(
@@ -9916,19 +9916,48 @@ async def _execute_trace_schedule(schedule_id: int):
         db.close()
 
 
-def _compare_routes(old_hops: list, new_hops: list) -> dict:
-    """Compare two route traces and return summary of changes."""
-    old_ips = [h.get("ip") for h in (old_hops or [])]
-    new_ips = [h.get("ip") for h in (new_hops or [])]
+def _compare_routes(old_hops: list, new_hops: list) -> tuple[bool, dict]:
+    """Compare two route traces and return (has_change, summary).
     
-    added = [ip for ip in new_ips if ip and ip != "*" and ip not in old_ips]
-    removed = [ip for ip in old_ips if ip and ip != "*" and ip not in new_ips]
+    Returns has_change=False if:
+    - Hop counts are the same AND
+    - Only difference is timeouts (*) appearing/disappearing at same hop positions
     
-    return {
+    Returns has_change=True if:
+    - Real IP addresses changed (not just timeout states)
+    """
+    old_hops = old_hops or []
+    new_hops = new_hops or []
+    
+    # Extract IPs, treating * as None for comparison
+    def get_real_ip(hop):
+        ip = hop.get("ip", "*")
+        return ip if ip != "*" else None
+    
+    # Get lists of real IPs (excluding timeouts)
+    old_real_ips = [get_real_ip(h) for h in old_hops]
+    new_real_ips = [get_real_ip(h) for h in new_hops]
+    
+    # Filter out None values for set comparison
+    old_ip_set = set(ip for ip in old_real_ips if ip)
+    new_ip_set = set(ip for ip in new_real_ips if ip)
+    
+    added = list(new_ip_set - old_ip_set)
+    removed = list(old_ip_set - new_ip_set)
+    
+    # Determine if this is a real route change
+    # If hop counts are the same and no IPs added/removed, it's just timeout variation
+    hop_count_same = len(old_hops) == len(new_hops)
+    only_timeout_changes = len(added) == 0 and len(removed) == 0
+    
+    # Real change only if actual IPs changed
+    has_change = not (hop_count_same and only_timeout_changes)
+    
+    return has_change, {
         "added_hops": added,
         "removed_hops": removed,
-        "old_hop_count": len(old_hops) if old_hops else 0,
-        "new_hop_count": len(new_hops) if new_hops else 0,
+        "old_hop_count": len(old_hops),
+        "new_hop_count": len(new_hops),
     }
 
 async def _ensure_iperf_server_running(dst: Node, requested_port: int) -> int:
