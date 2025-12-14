@@ -7287,6 +7287,7 @@ def _trace_html() -> str:
     function extractAsPath(hops) {
       const path = [];
       let currentAs = null;
+      let foundFirstPublic = false;  // Flag to skip leading local/hidden hops
       
       // Helper to extract ASN from ISP string (format: "AS1234 Company Name" or just "AS1234")
       function parseAsnFromIsp(isp) {
@@ -7309,29 +7310,21 @@ def _trace_html() -> str:
         let asn = hop.geo?.asn;
         if (!asn) asn = parseAsnFromIsp(isp);
         
-        // Handle local network IPs - group them together under "Local" pseudo-AS
-        if (isLocalNetwork(ip)) {
-          if (currentAs && currentAs.asn === 0) {
-            // Already in local network group
-            currentAs.hopCount++;
-            currentAs.lastHop = hop;
-          } else {
-            // Start new local network group
-            if (currentAs) path.push(currentAs);
-            currentAs = {
-              asn: 0,
-              name: 'Local Network',
-              tier: 'ISP',
-              hopCount: 1,
-              firstHop: hop,
-              lastHop: hop,
-              totalLatency: 0
-            };
+        // Skip leading local network and hidden hops entirely
+        if (!foundFirstPublic) {
+          if (isLocalNetwork(ip) || ip === '*' || !asn) {
+            continue;  // Skip until we find first public AS
           }
+          foundFirstPublic = true;
+        }
+        
+        // After first public AS, handle local network in middle of path
+        if (isLocalNetwork(ip)) {
+          // Just skip local network IPs in the middle - they don't add value
           continue;
         }
         
-        // Hidden hops (* - 100%) - count them but don't change AS
+        // Hidden hops (* - 100%) - count them toward current AS
         if (ip === '*' || !asn) {
           if (currentAs) {
             currentAs.hopCount++;
