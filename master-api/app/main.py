@@ -12111,6 +12111,23 @@ def create_schedule(schedule: TestScheduleCreate, db: Session = Depends(get_db))
 def list_schedules(db: Session = Depends(get_db)):
     """获取所有定时任务"""
     schedules = db.scalars(select(TestSchedule)).all()
+    
+    # 动态重新计算 cron 任务的 next_run_at
+    now = datetime.now(timezone.utc)
+    for schedule in schedules:
+        if schedule.cron_expression and schedule.enabled:
+            try:
+                cron = croniter(schedule.cron_expression, now)
+                schedule.next_run_at = cron.get_next(datetime)
+            except Exception as e:
+                logger.error(f"Failed to calculate next_run for schedule {schedule.id}: {e}")
+    
+    # 提交更新到数据库（可选，确保下次启动时值正确）
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+    
     return schedules
 
 
