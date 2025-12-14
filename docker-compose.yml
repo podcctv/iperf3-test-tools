@@ -22,6 +22,7 @@ services:
       STATE_FILE_PATH: /app/data/master_state.json
       STATE_RECENT_TESTS: ${STATE_RECENT_TESTS:-50}
       MASTER_IP: ${MASTER_IP:-}
+      EXTRA_WHITELIST_IPS: ${EXTRA_WHITELIST_IPS:-}
     ports:
       - "${MASTER_API_PORT:-9000}:8000"
       - "${MASTER_WEB_PORT:-9100}:8000"

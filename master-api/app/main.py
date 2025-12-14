@@ -10451,6 +10451,17 @@ async def _sync_whitelist_to_agents(db: Session, max_retries: int = 2, force: bo
     if master_ip and master_ip not in whitelist:
         whitelist.append(master_ip)
     
+    # Add extra IPs (for multi-master or additional trusted sources)
+    # Format: comma or space separated IPs, e.g., "103.214.22.58,160.191.28.149"
+    extra_ips_str = os.getenv("EXTRA_WHITELIST_IPS", "")
+    if extra_ips_str:
+        # Support both comma and space as separators
+        extra_ips = [ip.strip() for ip in extra_ips_str.replace(",", " ").split() if ip.strip()]
+        for ip in extra_ips:
+            if ip and ip not in whitelist:
+                whitelist.append(ip)
+        logger.info(f"Added {len(extra_ips)} extra IPs to whitelist: {extra_ips}")
+    
     logger.info(f"Syncing whitelist with {len(whitelist)} IPs to {len(nodes)} agents")
     
     # Smart sync: Check if whitelist has changed
@@ -10875,9 +10886,27 @@ async def get_whitelist_status(db: Session = Depends(get_db)):
     nodes = db.scalars(select(Node)).all()
     master_whitelist = [node.ip for node in nodes]
     
+    # Auto-detect master IP (same logic as _sync_whitelist_to_agents)
     master_ip = os.getenv("MASTER_IP", "")
+    if not master_ip:
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                resp = await client.get("https://api.ipify.org")
+                if resp.status_code == 200:
+                    master_ip = resp.text.strip()
+        except Exception:
+            pass
+    
     if master_ip and master_ip not in master_whitelist:
         master_whitelist.append(master_ip)
+    
+    # Add extra IPs (same logic as _sync_whitelist_to_agents)
+    extra_ips_str = os.getenv("EXTRA_WHITELIST_IPS", "")
+    if extra_ips_str:
+        extra_ips = [ip.strip() for ip in extra_ips_str.replace(",", " ").split() if ip.strip()]
+        for ip in extra_ips:
+            if ip and ip not in master_whitelist:
+                master_whitelist.append(ip)
     
     agent_statuses = []
     
