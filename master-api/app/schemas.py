@@ -121,7 +121,8 @@ class TestScheduleBase(BaseModel):
     duration: int = Field(default=10, gt=0)
     parallel: int = Field(default=1, gt=0)
     port: int = Field(default=DEFAULT_IPERF_PORT, ge=1, le=65535)
-    interval_seconds: int = Field(default=3600, gt=0)
+    interval_seconds: Optional[int] = Field(default=None, gt=0)  # Legacy, use cron_expression
+    cron_expression: Optional[str] = None  # Cron format: "*/5 * * * *"
     enabled: bool = True
     direction: str = "upload"  # upload, download, bidirectional
     udp_bandwidth: Optional[str] = None  # UDP bandwidth (e.g., "100M", "1G")
@@ -140,7 +141,8 @@ class TestScheduleUpdate(BaseModel):
     duration: Optional[int] = Field(default=None, gt=0)
     parallel: Optional[int] = Field(default=None, gt=0)
     port: Optional[int] = Field(default=None, ge=1, le=65535)
-    interval_seconds: Optional[int] = Field(default=None, gt=0)
+    interval_seconds: Optional[int] = Field(default=None, gt=0)  # Legacy
+    cron_expression: Optional[str] = None  # Cron format: "*/5 * * * *"
     enabled: Optional[bool] = None
     direction: Optional[str] = None
     udp_bandwidth: Optional[str] = None
@@ -151,6 +153,7 @@ class TestScheduleRead(TestScheduleBase):
     id: int
     last_run_at: Optional[datetime] = None
     next_run_at: Optional[datetime] = None
+    schedule_synced_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

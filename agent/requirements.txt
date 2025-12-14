@@ -1,2 +1,4 @@
 flask
 requests
+apscheduler>=3.10.0
+croniter>=2.0.0

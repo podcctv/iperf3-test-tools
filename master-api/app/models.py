@@ -56,12 +56,14 @@ class TestSchedule(Base):
     duration = Column(Integer, default=10)
     parallel = Column(Integer, default=1)
     port = Column(Integer, default=DEFAULT_IPERF_PORT)
-    interval_seconds = Column(Integer, nullable=False)
+    interval_seconds = Column(Integer, nullable=True)  # Legacy, nullable for cron migration
+    cron_expression = Column(String, nullable=True)    # Cron format: "*/5 * * * *"
     direction = Column(String, default="upload")  # upload, download, bidirectional
     udp_bandwidth = Column(String, nullable=True)  # UDP bandwidth (e.g., "100M", "1G")
     enabled = Column(Boolean, default=True)
     last_run_at = Column(DateTime(timezone=True), nullable=True)
     next_run_at = Column(DateTime(timezone=True), nullable=True)
+    schedule_synced_at = Column(DateTime(timezone=True), nullable=True)  # Last sync to agent
     notes = Column(String, nullable=True)
 
     src_node = relationship("Node", foreign_keys=[src_node_id])

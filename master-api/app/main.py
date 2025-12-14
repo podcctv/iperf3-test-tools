@@ -5819,13 +5819,18 @@ def _schedules_html() -> str:
             <input id="schedule-parallel" type="number" value="1" min="1" class="w-full mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none">
           </div>
           <div>
-            <label class="text-sm font-medium text-slate-200">执行间隔(分钟)</label>
-            <input id="schedule-interval" type="number" value="30" min="1" class="w-full mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none">
+            <label class="text-sm font-medium text-slate-200">执行时间 (Cron)</label>
+            <input id="schedule-cron" type="text" value="*/10 * * * *" placeholder="*/5 * * * *" class="w-full mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none font-mono">
+            <div class="flex flex-wrap gap-2 mt-2">
+              <button type="button" onclick="setCron('*/5 * * * *')" class="cron-preset px-2 py-1 text-xs rounded bg-slate-700 hover:bg-slate-600 text-slate-300">每5分钟</button>
+              <button type="button" onclick="setCron('*/10 * * * *')" class="cron-preset px-2 py-1 text-xs rounded bg-slate-700 hover:bg-slate-600 text-slate-300">每10分钟</button>
+              <button type="button" onclick="setCron('*/30 * * * *')" class="cron-preset px-2 py-1 text-xs rounded bg-slate-700 hover:bg-slate-600 text-slate-300">每30分钟</button>
+              <button type="button" onclick="setCron('0 * * * *')" class="cron-preset px-2 py-1 text-xs rounded bg-slate-700 hover:bg-slate-600 text-slate-300">每小时</button>
+              <button type="button" onclick="setCron('0 */6 * * *')" class="cron-preset px-2 py-1 text-xs rounded bg-slate-700 hover:bg-slate-600 text-slate-300">每6小时</button>
+              <button type="button" onclick="setCron('0 0 * * *')" class="cron-preset px-2 py-1 text-xs rounded bg-slate-700 hover:bg-slate-600 text-slate-300">每天0点</button>
+            </div>
+            <p class="text-xs text-slate-500 mt-1">格式: 分 时 日 月 周 (如 */10 * * * * = 每10分钟)</p>
           </div>
-        </div>
-        
-        <div>
-           <p class="text-xs text-slate-500">建议: 30分钟 = 每天48次测试</p>
         </div>
         
         <div>
@@ -6566,6 +6571,11 @@ def _schedules_html() -> str:
         }
     }
 
+    // Set cron expression from preset button
+    function setCron(expr) {
+        document.getElementById('schedule-cron').value = expr;
+    }
+
     // Modal操作
     function openModal(scheduleId = null) {
       editingScheduleId = scheduleId;
@@ -6613,7 +6623,7 @@ def _schedules_html() -> str:
         document.getElementById('schedule-dst').value = schedule.dst_node_id;
         document.getElementById('schedule-duration').value = schedule.duration;
         document.getElementById('schedule-parallel').value = schedule.parallel;
-        document.getElementById('schedule-interval').value = Math.floor(schedule.interval_seconds / 60);
+        document.getElementById('schedule-cron').value = schedule.cron_expression || '*/10 * * * *';
         document.getElementById('schedule-notes').value = schedule.notes || '';
         
         // Restore Tab state
@@ -6637,7 +6647,7 @@ def _schedules_html() -> str:
         document.getElementById('schedule-name').value = '';
         document.getElementById('schedule-duration').value = 10;
         document.getElementById('schedule-parallel').value = 1;
-        document.getElementById('schedule-interval').value = 30;
+        document.getElementById('schedule-cron').value = '*/10 * * * *';
         document.getElementById('schedule-notes').value = '';
         document.getElementById('schedule-udp-bandwidth').value = '';
         switchScheduleTab('uni');
@@ -6674,7 +6684,7 @@ def _schedules_html() -> str:
         duration: parseInt(document.getElementById('schedule-duration').value),
         parallel: parseInt(document.getElementById('schedule-parallel').value),
         port: 62001,
-        interval_seconds: parseInt(document.getElementById('schedule-interval').value) * 60,
+        cron_expression: document.getElementById('schedule-cron').value.trim(),
         enabled: true,
         direction: direction,
         udp_bandwidth: document.getElementById('schedule-udp-bandwidth').value || null,
@@ -11072,6 +11082,169 @@ async def get_whitelist_status(db: Session = Depends(get_db)):
     }
 
 
+# ============== Schedule Sync to Agents ==============
+
+async def _sync_schedule_to_agent(schedule, src_node: Node, dst_node: Node, db: Session):
+    """
+    Sync a schedule to the source agent for local cron execution.
+    
+    The agent will store the schedule and execute tests at the specified cron times.
+    """
+    if not schedule.cron_expression:
+        return {"status": "skipped", "reason": "No cron_expression set"}
+    
+    if not src_node:
+        return {"status": "error", "error": "Source node not found"}
+    
+    # Determine test direction
+    reverse = schedule.direction in ["download", "bidirectional"]
+    bidir = schedule.direction == "bidirectional"
+    
+    schedule_payload = {
+        "schedule_id": schedule.id,
+        "name": schedule.name,
+        "cron_expression": schedule.cron_expression,
+        "target_ip": dst_node.ip if dst_node else None,
+        "target_port": schedule.port or 5201,
+        "protocol": schedule.protocol or "tcp",
+        "duration": schedule.duration or 10,
+        "parallel": schedule.parallel or 1,
+        "reverse": reverse,
+        "bidir": bidir,
+        "bandwidth": schedule.udp_bandwidth,
+        "enabled": schedule.enabled,
+        "synced_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    # Normal agent - push schedule directly
+    if src_node.agent_mode != "reverse":
+        try:
+            agent_url = f"http://{src_node.ip}:{src_node.agent_port}/schedules"
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(agent_url, json=schedule_payload)
+                if resp.status_code == 200:
+                    # Update sync timestamp
+                    schedule.schedule_synced_at = datetime.now(timezone.utc)
+                    db.commit()
+                    return {"status": "ok", "agent": src_node.name}
+                else:
+                    return {"status": "error", "error": f"Agent returned {resp.status_code}"}
+        except Exception as e:
+            return {"status": "error", "error": str(e)}
+    else:
+        # Reverse/NAT agent - schedule will be synced via poll
+        # Store in a way that the agent can pick up when it polls
+        return {"status": "pending", "reason": "Reverse agent will sync on next poll"}
+
+
+async def _delete_schedule_from_agent(schedule_id: int, src_node: Node):
+    """Delete a schedule from the agent."""
+    if not src_node or src_node.agent_mode == "reverse":
+        return {"status": "skipped"}
+    
+    try:
+        agent_url = f"http://{src_node.ip}:{src_node.agent_port}/schedules/{schedule_id}"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.delete(agent_url)
+            return {"status": "ok" if resp.status_code == 200 else "error"}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+class ScheduleResultPayload(BaseModel):
+    """Payload for receiving schedule test results from agents."""
+    schedule_id: int
+    node_name: str
+    result: dict
+    executed_at: str
+
+
+@app.post("/api/schedule/result")
+async def receive_schedule_result(payload: ScheduleResultPayload, db: Session = Depends(get_db)):
+    """
+    Receive test result from agent executing a scheduled test.
+    
+    Called by agents after executing a cron-scheduled iperf3 test.
+    """
+    from .models import TestSchedule, ScheduleResult, TestResult
+    
+    schedule = db.query(TestSchedule).filter(TestSchedule.id == payload.schedule_id).first()
+    if not schedule:
+        raise HTTPException(status_code=404, detail=f"Schedule {payload.schedule_id} not found")
+    
+    # Find source node by name
+    from .models import Node
+    src_node = db.query(Node).filter(Node.name == payload.node_name).first()
+    
+    # Parse executed_at
+    try:
+        executed_at = datetime.fromisoformat(payload.executed_at.replace('Z', '+00:00'))
+    except:
+        executed_at = datetime.now(timezone.utc)
+    
+    # Create test result if iperf data present
+    test_result_id = None
+    iperf_data = payload.result.get("iperf_result")
+    if iperf_data and payload.result.get("status") == "ok":
+        # Summarize metrics with direction info
+        direction_label = "download" if schedule.direction == "download" else "upload"
+        summary = _summarize_metrics({"iperf_result": iperf_data}, direction_label=direction_label)
+        
+        test_result = TestResult(
+            src_node_id=schedule.src_node_id,
+            dst_node_id=schedule.dst_node_id,
+            protocol=schedule.protocol,
+            params={"schedule_id": schedule.id, "from_agent_cron": True},
+            raw_result=iperf_data,
+            summary=summary,
+            created_at=executed_at
+        )
+        db.add(test_result)
+        db.flush()
+        test_result_id = test_result.id
+    
+    # Create schedule result record
+    status = "success" if payload.result.get("status") == "ok" else "error"
+    error_msg = payload.result.get("error") if status == "error" else None
+    
+    schedule_result = ScheduleResult(
+        schedule_id=schedule.id,
+        test_result_id=test_result_id,
+        executed_at=executed_at,
+        status=status,
+        error_message=error_msg
+    )
+    db.add(schedule_result)
+    
+    # Update schedule last_run_at
+    schedule.last_run_at = executed_at
+    
+    db.commit()
+    
+    return {
+        "status": "ok",
+        "schedule_id": schedule.id,
+        "test_result_id": test_result_id,
+        "result_status": status
+    }
+
+
+@app.post("/api/schedules/{schedule_id}/sync")
+async def sync_schedule_to_agent(schedule_id: int, db: Session = Depends(get_db)):
+    """
+    Manually trigger sync of a schedule to its source agent.
+    """
+    from .models import TestSchedule
+    
+    schedule = db.query(TestSchedule).filter(TestSchedule.id == schedule_id).first()
+    if not schedule:
+        raise HTTPException(status_code=404, detail=f"Schedule {schedule_id} not found")
+    
+    src_node = schedule.src_node
+    dst_node = schedule.dst_node
+    
+    result = await _sync_schedule_to_agent(schedule, src_node, dst_node, db)
+    return result
 
 
 # Note: Duplicate /api/daily_traffic_stats removed - using the one at ~line 5962

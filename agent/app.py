@@ -15,6 +15,9 @@ from flask import Flask, jsonify, request, abort
 # Import IP whitelist module
 from ip_whitelist import whitelist
 
+# Import schedule manager for cron-based scheduling
+import schedule_manager
+
 app = Flask(__name__)
 
 DEFAULT_IPERF_PORT = int(Path("/app").joinpath("IPERF_PORT").read_text().strip()) if Path("/app/IPERF_PORT").exists() else 62001
@@ -2252,6 +2255,118 @@ def start_reverse_mode():
 
 # Auto-start reverse mode when module loads (after all functions are defined)
 _init_reverse_mode()
+
+# Initialize the schedule manager for cron-based scheduling
+schedule_manager.init_scheduler()
+
+
+# ============== Schedule Management API Endpoints ==============
+
+@app.route("/schedules", methods=["GET"])
+def list_schedules() -> Any:
+    """List all schedules stored locally"""
+    schedules = schedule_manager.get_schedules()
+    return jsonify({
+        "status": "ok",
+        "schedules": schedules,
+        "count": len(schedules)
+    })
+
+
+@app.route("/schedules", methods=["POST"])
+def add_or_update_schedule() -> Any:
+    """
+    Add or update a schedule from master.
+    
+    Request JSON:
+    {
+        "schedule_id": 1,
+        "name": "Test Schedule",
+        "cron_expression": "*/5 * * * *",
+        "target_ip": "1.2.3.4",
+        "target_port": 5201,
+        "protocol": "tcp",
+        "duration": 10,
+        "parallel": 1,
+        "reverse": false,
+        "bidir": false,
+        "bandwidth": null,
+        "enabled": true
+    }
+    """
+    data = request.get_json(force=True, silent=True) or {}
+    
+    schedule_id = data.get("schedule_id")
+    if not schedule_id:
+        return jsonify({"status": "error", "error": "schedule_id is required"}), 400
+    
+    cron_expr = data.get("cron_expression")
+    if not cron_expr:
+        return jsonify({"status": "error", "error": "cron_expression is required"}), 400
+    
+    target_ip = data.get("target_ip")
+    if not target_ip:
+        return jsonify({"status": "error", "error": "target_ip is required"}), 400
+    
+    schedule_data = {
+        "name": data.get("name", f"Schedule-{schedule_id}"),
+        "cron_expression": cron_expr,
+        "target_ip": target_ip,
+        "target_port": data.get("target_port", 5201),
+        "protocol": data.get("protocol", "tcp"),
+        "duration": data.get("duration", 10),
+        "parallel": data.get("parallel", 1),
+        "reverse": data.get("reverse", False),
+        "bidir": data.get("bidir", False),
+        "bandwidth": data.get("bandwidth"),
+        "enabled": data.get("enabled", True),
+        "synced_at": data.get("synced_at")
+    }
+    
+    success = schedule_manager.add_schedule(schedule_id, schedule_data)
+    
+    if success:
+        app.logger.info(f"Schedule {schedule_id} added/updated: {schedule_data.get('name')}")
+        return jsonify({
+            "status": "ok",
+            "message": f"Schedule {schedule_id} added/updated",
+            "next_run_time": schedule_manager.get_next_run_time(schedule_id)
+        })
+    else:
+        return jsonify({"status": "error", "error": "Failed to add schedule"}), 500
+
+
+@app.route("/schedules/<int:schedule_id>", methods=["DELETE"])
+def delete_schedule(schedule_id: int) -> Any:
+    """Delete a schedule"""
+    success = schedule_manager.remove_schedule(schedule_id)
+    
+    if success:
+        app.logger.info(f"Schedule {schedule_id} deleted")
+        return jsonify({"status": "ok", "message": f"Schedule {schedule_id} deleted"})
+    else:
+        return jsonify({"status": "error", "error": "Failed to delete schedule"}), 500
+
+
+@app.route("/schedules/<int:schedule_id>", methods=["GET"])
+def get_schedule(schedule_id: int) -> Any:
+    """Get a specific schedule"""
+    schedule = schedule_manager.get_schedule(schedule_id)
+    
+    if schedule:
+        return jsonify({
+            "status": "ok",
+            "schedule": schedule,
+            "next_run_time": schedule_manager.get_next_run_time(schedule_id)
+        })
+    else:
+        return jsonify({"status": "error", "error": "Schedule not found"}), 404
+
+
+@app.route("/scheduler/status", methods=["GET"])
+def scheduler_status() -> Any:
+    """Get scheduler status"""
+    return jsonify(schedule_manager.get_scheduler_status())
 
 
 if __name__ == "__main__":
