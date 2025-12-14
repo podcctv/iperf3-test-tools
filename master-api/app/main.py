@@ -6586,10 +6586,15 @@ def _schedules_html() -> str:
           return;
         }
         
-        // 解析ISO格式时间，支持 Z 和 +00:00 两种UTC格式
+        // 解析ISO格式时间 - 服务器存储的是UTC时间
         let target;
         try {
-          target = new Date(nextRun);
+          // Ensure UTC parsing: if no timezone suffix, treat as UTC
+          let dateStr = nextRun;
+          if (dateStr && !dateStr.endsWith('Z') && !dateStr.includes('+') && !dateStr.includes('-', 10)) {
+            dateStr = dateStr + 'Z';  // Append Z to force UTC interpretation
+          }
+          target = new Date(dateStr);
           // 如果解析失败或无效时间
           if (isNaN(target.getTime())) {
             el.textContent = '--';
