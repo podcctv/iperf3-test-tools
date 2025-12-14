@@ -10021,6 +10021,108 @@ def get_asn_details(asn: int, db: Session = Depends(get_db)):
     return {"status": "not_found", "asn": asn, "message": "ASN not in cache"}
 
 
+# ============== Telegram Settings API ==============
+
+TELEGRAM_SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "telegram_settings.json")
+
+
+def _load_tg_settings() -> dict:
+    """Load Telegram settings from file."""
+    try:
+        if os.path.exists(TELEGRAM_SETTINGS_FILE):
+            with open(TELEGRAM_SETTINGS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception as e:
+        logger.error(f"Failed to load Telegram settings: {e}")
+    return {}
+
+
+def _save_tg_settings(settings: dict) -> bool:
+    """Save Telegram settings to file."""
+    try:
+        os.makedirs(os.path.dirname(TELEGRAM_SETTINGS_FILE), exist_ok=True)
+        with open(TELEGRAM_SETTINGS_FILE, "w", encoding="utf-8") as f:
+            json.dump(settings, f, indent=2)
+        return True
+    except Exception as e:
+        logger.error(f"Failed to save Telegram settings: {e}")
+        return False
+
+
+@app.get("/admin/telegram")
+def get_telegram_settings():
+    """Get Telegram bot settings (token partially masked for security)."""
+    settings = _load_tg_settings()
+    # Mask the bot token for security
+    if settings.get("bot_token"):
+        token = settings["bot_token"]
+        if len(token) > 10:
+            settings["bot_token"] = token[:6] + "..." + token[-4:]
+    return settings
+
+
+class TelegramSettingsRequest(BaseModel):
+    bot_token: Optional[str] = None
+    chat_id: Optional[str] = None
+    notify_route_change: bool = True
+    notify_schedule_failure: bool = False
+    notify_node_offline: bool = False
+    notify_daily_report: bool = False
+
+
+@app.post("/admin/telegram", response_model=None)
+def save_telegram_settings_json(data: TelegramSettingsRequest):
+    """Save Telegram bot settings (JSON body)."""
+    current = _load_tg_settings()
+    
+    # Only update token if a new full token is provided (not masked)
+    if data.bot_token and "..." not in data.bot_token:
+        current["bot_token"] = data.bot_token
+    
+    if data.chat_id:
+        current["chat_id"] = data.chat_id
+    
+    current["notify_route_change"] = data.notify_route_change
+    current["notify_schedule_failure"] = data.notify_schedule_failure
+    current["notify_node_offline"] = data.notify_node_offline
+    current["notify_daily_report"] = data.notify_daily_report
+    
+    if _save_tg_settings(current):
+        return {"status": "ok", "message": "Telegram settings saved"}
+    else:
+        raise HTTPException(status_code=500, detail="Failed to save settings")
+
+
+@app.post("/admin/telegram/test")
+async def test_telegram_message():
+    """Send a test message to verify Telegram configuration."""
+    settings = _load_tg_settings()
+    
+    if not settings.get("bot_token") or not settings.get("chat_id"):
+        raise HTTPException(status_code=400, detail="Telegram bot_token or chat_id not configured")
+    
+    test_message = "🧪 *测试消息*\n\n这是来自 iperf3-test-tools 的测试通知。\n如果您收到此消息，说明 Telegram 配置正确！"
+    
+    url = f"https://api.telegram.org/bot{settings['bot_token']}/sendMessage"
+    
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(url, json={
+                "chat_id": settings["chat_id"],
+                "text": test_message,
+                "parse_mode": "Markdown"
+            })
+            
+            if response.status_code == 200:
+                return {"status": "ok", "message": "Test message sent successfully"}
+            else:
+                error_data = response.json() if response.text else {}
+                error_desc = error_data.get("description", response.text)
+                raise HTTPException(status_code=response.status_code, detail=f"Telegram API error: {error_desc}")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to connect to Telegram API: {str(e)}")
+
+
 def _register_trace_schedule_job(schedule: TraceSchedule):
     """Register or update a traceroute schedule in the APScheduler."""
     job_id = f"trace_{schedule.id}"
