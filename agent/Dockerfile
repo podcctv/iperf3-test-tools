@@ -39,6 +39,7 @@ RUN if [ -n "$PIP_TRUSTED_HOST" ]; then \
 
 COPY app.py /app/
 COPY ip_whitelist.py /app/
+COPY schedule_manager.py /app/
 
 # Create data directory for whitelist persistence
 RUN mkdir -p /app/data

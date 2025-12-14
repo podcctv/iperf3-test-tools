@@ -191,6 +191,59 @@ detect_public_ip() {
   echo "${ip:-}"
 }
 
+detect_region() {
+  # Detect if server is in China based on IP geolocation
+  # Returns "cn" for China, "global" otherwise
+  local ip country
+  ip=$(detect_public_ip)
+  
+  if [ -z "${ip}" ]; then
+    echo "global"
+    return
+  fi
+  
+  # Try multiple geolocation services
+  if command -v curl >/dev/null 2>&1; then
+    # Try ip-api.com (free, no key needed)
+    country=$(curl -fsS --connect-timeout 5 "http://ip-api.com/line/${ip}?fields=countryCode" 2>/dev/null || true)
+    
+    if [ -z "${country}" ]; then
+      # Fallback: try ipinfo.io
+      country=$(curl -fsS --connect-timeout 5 "https://ipinfo.io/${ip}/country" 2>/dev/null || true)
+    fi
+  fi
+  
+  # Check if country is China
+  case "${country}" in
+    CN|cn|China|china)
+      echo "cn"
+      ;;
+    *)
+      echo "global"
+      ;;
+  esac
+}
+
+setup_build_mirrors() {
+  # Set up pip and apt mirrors based on detected region
+  local region
+  region=$(detect_region)
+  
+  if [ "${region}" = "cn" ]; then
+    log "Detected China region - using Aliyun mirrors for pip and apt"
+    PIP_INDEX_URL="https://mirrors.aliyun.com/pypi/simple/"
+    PIP_TRUSTED_HOST="mirrors.aliyun.com"
+    APT_MIRROR="https://mirrors.aliyun.com"
+  else
+    log "Detected non-China region - using default mirrors"
+    PIP_INDEX_URL="https://pypi.org/simple/"
+    PIP_TRUSTED_HOST=""
+    APT_MIRROR=""
+  fi
+  
+  export PIP_INDEX_URL PIP_TRUSTED_HOST APT_MIRROR
+}
+
 maybe_load_port_config() {
   local config_path="${PORT_CONFIG_FILE}" candidate
 
@@ -478,8 +531,18 @@ wait_for_local_agent() {
 }
 
 start_agent() {
-  log "Building agent image (${AGENT_IMAGE})..."
-  docker build -t "${AGENT_IMAGE}" "${REPO_ROOT}/agent"
+  log "Building agent image (${AGENT_IMAGE}) with pip mirror: ${PIP_INDEX_URL:-default}, apt mirror: ${APT_MIRROR:-default}..."
+  local build_args=""
+  if [ -n "${PIP_INDEX_URL:-}" ]; then
+    build_args="${build_args} --build-arg PIP_INDEX_URL=${PIP_INDEX_URL}"
+  fi
+  if [ -n "${PIP_TRUSTED_HOST:-}" ]; then
+    build_args="${build_args} --build-arg PIP_TRUSTED_HOST=${PIP_TRUSTED_HOST}"
+  fi
+  if [ -n "${APT_MIRROR:-}" ]; then
+    build_args="${build_args} --build-arg APT_MIRROR=${APT_MIRROR}"
+  fi
+  docker build ${build_args} -t "${AGENT_IMAGE}" "${REPO_ROOT}/agent"
 
   log "Launching local agent container (ports ${AGENT_PORT} and ${IPERF_PORT})..."
   docker rm -f iperf-agent >/dev/null 2>&1 || true
@@ -605,6 +668,7 @@ main() {
   ensure_compose_file
   cleanup_existing_services
   ensure_ports_available
+  setup_build_mirrors
   start_master_stack
   start_agent
   deploy_remote_agents
