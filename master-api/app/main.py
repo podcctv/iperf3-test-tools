@@ -11,6 +11,8 @@ from typing import Dict, List, Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
+from apscheduler.triggers.cron import CronTrigger
+from croniter import croniter
 
 import httpx
 from fastapi import BackgroundTasks, Body, Depends, FastAPI, HTTPException, Query, Request, Response
@@ -5978,7 +5980,7 @@ def _schedules_html() -> str:
                   <span class="text-slate-500">|</span>
                   <span>${schedule.duration}秒</span>
                   <span class="text-slate-500">|</span>
-                  <span>每${Math.floor(schedule.interval_seconds / 60)}分钟</span>
+                  <span>${schedule.cron_expression ? schedule.cron_expression : (schedule.interval_seconds ? '每' + Math.floor(schedule.interval_seconds / 60) + '分钟' : '--')}</span>
                   <!-- Traffic Badge -->
                   <span class="px-2 py-0.5 rounded-md bg-gradient-to-r from-blue-500/20 to-cyan-500/20 border border-blue-500/30 text-xs font-semibold text-blue-200" id="traffic-badge-${schedule.id}">
                     --
@@ -11663,19 +11665,43 @@ def _add_schedule_to_scheduler(schedule: TestSchedule, next_run_time: datetime |
     if scheduler.get_job(job_id):
         scheduler.remove_job(job_id)
     
-    # 添加新任务
-    # if next_run_time is provided, we set it as the next_run_time for the job
-    scheduler.add_job(
-        func=_execute_schedule_task,
-        trigger=IntervalTrigger(seconds=schedule.interval_seconds),
-        id=job_id,
-        args=[schedule.id],
-        replace_existing=True,
-        next_run_time=next_run_time
-    )
-    
-    log_time = next_run_time if next_run_time else "interval default"
-    logger.info(f"Added schedule {schedule.id} to scheduler with interval {schedule.interval_seconds}s, next_run: {log_time}")
+    # 根据 cron_expression 或 interval_seconds 选择 trigger
+    if schedule.cron_expression:
+        # 使用 CronTrigger
+        parts = schedule.cron_expression.strip().split()
+        if len(parts) >= 5:
+            trigger = CronTrigger(
+                minute=parts[0],
+                hour=parts[1],
+                day=parts[2],
+                month=parts[3],
+                day_of_week=parts[4],
+                timezone='UTC'
+            )
+            scheduler.add_job(
+                func=_execute_schedule_task,
+                trigger=trigger,
+                id=job_id,
+                args=[schedule.id],
+                replace_existing=True
+            )
+            logger.info(f"Added schedule {schedule.id} to scheduler with cron: {schedule.cron_expression}")
+        else:
+            logger.error(f"Invalid cron expression for schedule {schedule.id}: {schedule.cron_expression}")
+    elif schedule.interval_seconds:
+        # 兼容旧的 IntervalTrigger
+        scheduler.add_job(
+            func=_execute_schedule_task,
+            trigger=IntervalTrigger(seconds=schedule.interval_seconds),
+            id=job_id,
+            args=[schedule.id],
+            replace_existing=True,
+            next_run_time=next_run_time
+        )
+        log_time = next_run_time if next_run_time else "interval default"
+        logger.info(f"Added schedule {schedule.id} to scheduler with interval {schedule.interval_seconds}s, next_run: {log_time}")
+    else:
+        logger.warning(f"Schedule {schedule.id} has no cron_expression or interval_seconds, skipping")
 
 
 def _remove_schedule_from_scheduler(schedule_id: int):
@@ -11727,8 +11753,22 @@ async def _execute_schedule_task(schedule_id: int):
         
         # 更新执行时间
         schedule.last_run_at = datetime.now(timezone.utc)
-        from datetime import timedelta
-        schedule.next_run_at = schedule.last_run_at + timedelta(seconds=schedule.interval_seconds)
+        
+        # 计算下次运行时间
+        if schedule.cron_expression:
+            # 使用 croniter 从 cron 表达式计算下次运行时间
+            try:
+                cron = croniter(schedule.cron_expression, schedule.last_run_at)
+                schedule.next_run_at = cron.get_next(datetime)
+            except Exception as e:
+                logger.error(f"Failed to parse cron expression: {e}")
+                schedule.next_run_at = schedule.last_run_at + timedelta(minutes=20)
+        elif schedule.interval_seconds:
+            # 兼容旧的 interval_seconds
+            schedule.next_run_at = schedule.last_run_at + timedelta(seconds=schedule.interval_seconds)
+        else:
+            # 默认 20 分钟
+            schedule.next_run_at = schedule.last_run_at + timedelta(minutes=20)
         
         # 执行测试
         try:
@@ -11982,15 +12022,32 @@ def create_schedule(schedule: TestScheduleCreate, db: Session = Depends(get_db))
         parallel=schedule.parallel,
         port=schedule.port,
         interval_seconds=schedule.interval_seconds,
+        cron_expression=schedule.cron_expression,
         enabled=schedule.enabled,
         direction=schedule.direction,
+        udp_bandwidth=schedule.udp_bandwidth,
         notes=schedule.notes,
     )
     
     # 计算下次执行时间
     if schedule.enabled:
-        from datetime import timedelta
-        db_schedule.next_run_at = datetime.now(timezone.utc) + timedelta(seconds=schedule.interval_seconds)
+        now = datetime.now(timezone.utc)
+        if schedule.cron_expression:
+            # 使用 croniter 从 cron 表达式计算下次运行时间
+            try:
+                cron = croniter(schedule.cron_expression, now)
+                db_schedule.next_run_at = cron.get_next(datetime)
+                logger.info(f"Calculated next run from cron '{schedule.cron_expression}': {db_schedule.next_run_at}")
+            except Exception as e:
+                logger.error(f"Failed to parse cron expression '{schedule.cron_expression}': {e}")
+                # Fallback to 20 minutes if cron parsing fails
+                db_schedule.next_run_at = now + timedelta(minutes=20)
+        elif schedule.interval_seconds:
+            # 兼容旧的 interval_seconds
+            db_schedule.next_run_at = now + timedelta(seconds=schedule.interval_seconds)
+        else:
+            # 默认 20 分钟
+            db_schedule.next_run_at = now + timedelta(minutes=20)
     
     db.add(db_schedule)
     db.commit()
