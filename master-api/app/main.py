@@ -7773,11 +7773,60 @@ def _trace_html() -> str:
         const sourceIcons = { 'scheduled': '📅', 'single': '🚀', 'multisrc': '🌐' };
         const sourceNames = { 'scheduled': '定时', 'single': '单次', 'multisrc': '多源' };
         
+        // Extract ISP badges for route change summary
+        function extractIspBadges(hops) {
+          const badges = [];
+          const seen = new Set();
+          for (const hop of (hops || [])) {
+            const geo = hop.geo || {};
+            const b = detectIspBadge(geo.isp, geo.asn);
+            if (b && !seen.has(b.label)) {
+              seen.add(b.label);
+              badges.push(b);
+            }
+          }
+          return badges;
+        }
+        
+        // Generate ISP transition text for route changes
+        function getIspTransition(oldHops, newHops) {
+          const oldBadges = extractIspBadges(oldHops);
+          const newBadges = extractIspBadges(newHops);
+          
+          if (oldBadges.length === 0 && newBadges.length === 0) return '';
+          
+          const formatBadges = (badges) => badges.slice(0, 3).map(b => 
+            `<span class="px-1.5 py-0.5 rounded text-xs font-bold ${b.colorClass || 'bg-slate-600'}">${b.label}</span>`
+          ).join('');
+          
+          if (oldBadges.length === 0) return formatBadges(newBadges);
+          if (newBadges.length === 0) return formatBadges(oldBadges);
+          
+          // Check if there's an actual difference
+          const oldLabels = oldBadges.map(b => b.label).sort().join(',');
+          const newLabels = newBadges.map(b => b.label).sort().join(',');
+          if (oldLabels === newLabels) return formatBadges(newBadges);
+          
+          return formatBadges(oldBadges) + ' <span class="text-amber-400">→</span> ' + formatBadges(newBadges);
+        }
+        
         // Render grouped
         list.innerHTML = Object.entries(groups).map(([route, records]) => {
           const hasChanges = records.some(r => r.has_change);
           const routeIcon = hasChanges ? '⚠️' : '✅';
           const headerClass = hasChanges ? 'text-amber-400' : 'text-emerald-400';
+          
+          // Get first changed record to extract ISP transition
+          const changedRecord = records.find(r => r.has_change && r.change_summary);
+          let ispTransition = '';
+          if (changedRecord) {
+            // Look for the previous record to compare ISPs
+            const idx = records.indexOf(changedRecord);
+            const prevRecord = idx + 1 < records.length ? records[idx + 1] : null;
+            if (prevRecord) {
+              ispTransition = getIspTransition(prevRecord.hops, changedRecord.hops);
+            }
+          }
           
           const recordsHtml = records.slice(0, 10).map((r, idx) => {
             const time = new Date(r.executed_at).toLocaleString('zh-CN');
@@ -7787,11 +7836,24 @@ def _trace_html() -> str:
             const srcName = sourceNames[r.source_type] || '定时';
             const recordId = `history-record-${r.id}`;
             
+            // Get changed positions from summary for highlighting
+            const changedPositions = r.change_summary?.changed_positions || [];
+            
             // Generate hop preview (first and last IP)
             const hops = r.hops || [];
             const hopPreview = hops.length > 0 
               ? `${hops[0]?.ip || '-'} → ${hops[hops.length-1]?.ip || '-'}`
               : '';
+            
+            // Generate hop detail with changed rows highlighted in red
+            const hopDetailsHtml = hops.map((h, i) => {
+              const isChanged = changedPositions.includes(i);
+              const rowClass = isChanged ? 'text-rose-400 bg-rose-500/10' : '';
+              const hopNumClass = isChanged ? 'text-rose-300' : 'text-cyan-400';
+              const ipClass = isChanged ? 'text-rose-200 font-bold' : 'text-slate-300';
+              
+              return `<div class="flex gap-2 ${rowClass}"><span class="${hopNumClass}">#${i+1}</span><span class="${ipClass}">${h.ip || '*'}</span><span class="text-slate-500">${h.rtt_avg ? h.rtt_avg.toFixed(1) + 'ms' : '-'}</span><span class="text-slate-600">${h.geo?.isp || ''}</span></div>`;
+            }).join('');
             
             return `
               <div class="cursor-pointer hover:bg-slate-700/30 ${changeBg} rounded" onclick="toggleHistoryDetail('${recordId}')">
@@ -7807,8 +7869,8 @@ def _trace_html() -> str:
                 </div>
                 <div id="${recordId}" class="hidden px-4 pb-2 text-xs text-slate-400">
                   <div class="mb-1">${hopPreview}</div>
-                  <div class="max-h-32 overflow-y-auto bg-slate-900/50 rounded p-2 font-mono">
-                    ${hops.map((h, i) => `<div class="flex gap-2"><span class="text-cyan-400">#${i+1}</span><span class="text-slate-300">${h.ip || '*'}</span><span class="text-slate-500">${h.rtt_avg ? h.rtt_avg.toFixed(1) + 'ms' : '-'}</span><span class="text-slate-600">${h.geo?.isp || ''}</span></div>`).join('')}
+                  <div class="bg-slate-900/50 rounded p-2 font-mono">
+                    ${hopDetailsHtml}
                   </div>
                 </div>
               </div>
@@ -7821,6 +7883,7 @@ def _trace_html() -> str:
                 <span>${routeIcon}</span>
                 <span>${route}</span>
                 <span class="text-xs text-slate-500 font-normal">(${records.length}条记录)</span>
+                ${ispTransition ? `<span class="ml-2 flex items-center gap-1">${ispTransition}</span>` : ''}
               </div>
               <div class="space-y-1 pl-4 border-l-2 border-slate-700">
                 ${recordsHtml}
@@ -10120,10 +10183,11 @@ def _compare_routes(old_hops: list, new_hops: list) -> tuple[bool, dict]:
     
     Returns has_change=False if:
     - Hop counts are the same AND
-    - Only difference is timeouts (*) appearing/disappearing at same hop positions
+    - At each position, IPs are either the same OR one/both is timeout (*)
     
     Returns has_change=True if:
-    - Real IP addresses changed (not just timeout states)
+    - Hop counts differ, OR
+    - At same position, both have real IPs that are different
     """
     old_hops = old_hops or []
     new_hops = new_hops or []
@@ -10133,30 +10197,41 @@ def _compare_routes(old_hops: list, new_hops: list) -> tuple[bool, dict]:
         ip = hop.get("ip", "*")
         return ip if ip != "*" else None
     
-    # Get lists of real IPs (excluding timeouts)
-    old_real_ips = [get_real_ip(h) for h in old_hops]
-    new_real_ips = [get_real_ip(h) for h in new_hops]
+    # Compare by position - find actual IP changes (not just visibility changes)
+    max_len = max(len(old_hops), len(new_hops))
+    changed_positions = []  # List of hop indices where actual IP changed
     
-    # Filter out None values for set comparison
-    old_ip_set = set(ip for ip in old_real_ips if ip)
-    new_ip_set = set(ip for ip in new_real_ips if ip)
+    for i in range(max_len):
+        old_ip = get_real_ip(old_hops[i]) if i < len(old_hops) else None
+        new_ip = get_real_ip(new_hops[i]) if i < len(new_hops) else None
+        
+        # If both have real IPs and they're different, that's a real change
+        if old_ip and new_ip and old_ip != new_ip:
+            changed_positions.append(i)
     
+    # Collect added/removed IPs for summary
+    old_ip_set = set(get_real_ip(h) for h in old_hops if get_real_ip(h))
+    new_ip_set = set(get_real_ip(h) for h in new_hops if get_real_ip(h))
     added = list(new_ip_set - old_ip_set)
     removed = list(old_ip_set - new_ip_set)
     
-    # Determine if this is a real route change
-    # If hop counts are the same and no IPs added/removed, it's just timeout variation
+    # Determine if this is a real route change:
+    # 1. Different hop count is a change
+    # 2. Same position with different real IPs is a change
     hop_count_same = len(old_hops) == len(new_hops)
-    only_timeout_changes = len(added) == 0 and len(removed) == 0
+    has_position_changes = len(changed_positions) > 0
     
-    # Real change only if actual IPs changed
-    has_change = not (hop_count_same and only_timeout_changes)
+    # Only flag as change if:
+    # - Hop count changed, OR
+    # - There are position-based IP changes
+    has_change = (not hop_count_same) or has_position_changes
     
     return has_change, {
         "added_hops": added,
         "removed_hops": removed,
         "old_hop_count": len(old_hops),
         "new_hop_count": len(new_hops),
+        "changed_positions": changed_positions,  # For UI highlighting
     }
 
 async def _ensure_iperf_server_running(dst: Node, requested_port: int) -> int:
