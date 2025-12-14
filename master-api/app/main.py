@@ -7295,13 +7295,49 @@ def _trace_html() -> str:
         return match ? parseInt(match[1]) : null;
       }
       
+      // Check if IP is private/local network
+      function isLocalNetwork(ip) {
+        if (!ip || ip === '*') return false;
+        return /^(10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|192\.168\.|127\.|169\.254\.)/.test(ip);
+      }
+      
       for (const hop of hops) {
         const isp = hop.geo?.isp || '';
+        const ip = hop.ip || '';
+        
         // Try to get ASN from geo.asn first, then parse from ISP string
         let asn = hop.geo?.asn;
         if (!asn) asn = parseAsnFromIsp(isp);
         
-        if (!asn || hop.ip === '*') continue;
+        // Handle local network IPs - group them together under "Local" pseudo-AS
+        if (isLocalNetwork(ip)) {
+          if (currentAs && currentAs.asn === 0) {
+            // Already in local network group
+            currentAs.hopCount++;
+            currentAs.lastHop = hop;
+          } else {
+            // Start new local network group
+            if (currentAs) path.push(currentAs);
+            currentAs = {
+              asn: 0,
+              name: 'Local Network',
+              tier: 'ISP',
+              hopCount: 1,
+              firstHop: hop,
+              lastHop: hop,
+              totalLatency: 0
+            };
+          }
+          continue;
+        }
+        
+        // Hidden hops (* - 100%) - count them but don't change AS
+        if (ip === '*' || !asn) {
+          if (currentAs) {
+            currentAs.hopCount++;
+          }
+          continue;
+        }
         
         if (currentAs && currentAs.asn === asn) {
           // Same AS, increment hop count
@@ -7327,7 +7363,7 @@ def _trace_html() -> str:
           
           currentAs = {
             asn: asn,
-            name: isp.substring(0, 20),
+            name: isp,  // Full ISP name, no truncation
             tier: tier,
             hopCount: 1,
             firstHop: hop,
@@ -7789,7 +7825,7 @@ def _trace_html() -> str:
       const rtt = hop.rtt_avg ? `${hop.rtt_avg.toFixed(0)}ms` : '-';
       const rttClass = getLatencyClass(hop.rtt_avg) || 'text-slate-400';
       const loss = hop.loss_pct > 0 ? `<span class="text-rose-400 text-xs">${hop.loss_pct}%</span>` : '';
-      const isp = geo.isp ? geo.isp.substring(0, 22) : '';
+      const isp = geo.isp || '';
       return `<div class="hop-cell"><div class="flex items-center gap-1">${renderBadge(badge)}<span class="hop-ip ${hop.ip === '*' ? 'text-slate-500' : ''}">${hop.ip}</span><span class="${rttClass} text-xs">${rtt}</span>${loss}</div><div class="hop-isp flex items-center gap-1">${flag} ${isp}</div></div>`;
     }
 
@@ -8049,7 +8085,7 @@ def _trace_html() -> str:
     }
 
     async function runSingleTrace(nodeId, target) {
-      const res = await apiFetch(`/api/trace/run?node_id=${nodeId}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target, max_hops: 30, include_geo: true }) });
+      const res = await apiFetch(`/api/trace/run?node_id=${nodeId}&save_result=true&source_type=single`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target, max_hops: 30, include_geo: true }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || 'Failed');
       return data;
