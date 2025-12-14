@@ -5980,7 +5980,7 @@ def _schedules_html() -> str:
                   <span class="text-slate-500">|</span>
                   <span>${schedule.duration}秒</span>
                   <span class="text-slate-500">|</span>
-                  <span>${schedule.cron_expression ? schedule.cron_expression : (schedule.interval_seconds ? '每' + Math.floor(schedule.interval_seconds / 60) + '分钟' : '--')}</span>
+                  <span>${schedule.cron_expression ? cronToChineseLabel(schedule.cron_expression) : (schedule.interval_seconds ? '每' + Math.floor(schedule.interval_seconds / 60) + '分钟' : '--')}</span>
                   <!-- Traffic Badge -->
                   <span class="px-2 py-0.5 rounded-md bg-gradient-to-r from-blue-500/20 to-cyan-500/20 border border-blue-500/30 text-xs font-semibold text-blue-200" id="traffic-badge-${schedule.id}">
                     --
@@ -6576,6 +6576,41 @@ def _schedules_html() -> str:
     // Set cron expression from preset button
     function setCron(expr) {
         document.getElementById('schedule-cron').value = expr;
+    }
+
+    // Translate cron expression to Chinese label
+    function cronToChineseLabel(cron) {
+        if (!cron) return '--';
+        const parts = cron.trim().split(/\s+/);
+        if (parts.length < 5) return cron;
+        
+        const [minute, hour, day, month, weekday] = parts;
+        
+        // Common patterns
+        // */N * * * * -> 每N分钟
+        if (minute.startsWith('*/') && hour === '*' && day === '*' && month === '*' && weekday === '*') {
+            const interval = parseInt(minute.substring(2));
+            return `每${interval}分钟`;
+        }
+        // 0 */N * * * -> 每N小时
+        if (minute === '0' && hour.startsWith('*/') && day === '*' && month === '*' && weekday === '*') {
+            const interval = parseInt(hour.substring(2));
+            return `每${interval}小时`;
+        }
+        // 0 0 * * * -> 每天0点
+        if (minute === '0' && hour === '0' && day === '*' && month === '*' && weekday === '*') {
+            return '每天0点';
+        }
+        // 0 H * * * -> 每天H点
+        if (minute === '0' && /^\d+$/.test(hour) && day === '*' && month === '*' && weekday === '*') {
+            return `每天${hour}点`;
+        }
+        // N * * * * -> 每小时第N分钟 (if N is just a number)
+        if (/^\d+$/.test(minute) && hour === '*' && day === '*' && month === '*' && weekday === '*') {
+            return `每小时第${minute}分`;
+        }
+        
+        return cron; // Fallback to raw expression
     }
 
     // Modal操作
@@ -11721,15 +11756,26 @@ def _load_schedules_on_startup():
         ).all()
         
         for schedule in schedules:
-            # Check for missed run or invalid next_run_at
-            run_at = schedule.next_run_at
             now = datetime.now(timezone.utc)
             
-            # If never run or next run is in the past (missed run due to downtime), run immediately
-            if not run_at or run_at <= now:
-                logger.warning(f"Schedule {schedule.id} ({schedule.name}) missed execution or not set. Scheduling immediately.")
-                run_at = now + timedelta(seconds=5)  # Add small buffer
-                # Note: We don't update DB here, the execution task will update next_run_at
+            # 对于 cron 表达式的任务，重新计算 next_run_at
+            if schedule.cron_expression:
+                try:
+                    cron = croniter(schedule.cron_expression, now)
+                    run_at = cron.get_next(datetime)
+                    # 更新数据库中的 next_run_at
+                    schedule.next_run_at = run_at
+                    db.commit()
+                    logger.info(f"Schedule {schedule.id} ({schedule.name}): recalculated next_run from cron '{schedule.cron_expression}' -> {run_at}")
+                except Exception as e:
+                    logger.error(f"Failed to parse cron for schedule {schedule.id}: {e}")
+                    run_at = now + timedelta(minutes=10)
+            else:
+                # 旧的间隔模式
+                run_at = schedule.next_run_at
+                if not run_at or run_at <= now:
+                    logger.warning(f"Schedule {schedule.id} ({schedule.name}) missed execution or not set. Scheduling immediately.")
+                    run_at = now + timedelta(seconds=5)
             
             _add_schedule_to_scheduler(schedule, next_run_time=run_at)
             logger.info(f"Loaded schedule {schedule.id}: {schedule.name}, next run scheduled at {run_at}")
