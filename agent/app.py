@@ -15,8 +15,14 @@ from flask import Flask, jsonify, request, abort
 # Import IP whitelist module
 from ip_whitelist import whitelist
 
-# Import schedule manager for cron-based scheduling
-import schedule_manager
+# Import schedule manager for cron-based scheduling (optional - may not be present on older agents)
+try:
+    import schedule_manager
+    SCHEDULE_MANAGER_AVAILABLE = True
+except ImportError:
+    schedule_manager = None
+    SCHEDULE_MANAGER_AVAILABLE = False
+    print("[AGENT] schedule_manager not available - cron scheduling disabled", flush=True)
 
 app = Flask(__name__)
 
@@ -2256,8 +2262,9 @@ def start_reverse_mode():
 # Auto-start reverse mode when module loads (after all functions are defined)
 _init_reverse_mode()
 
-# Initialize the schedule manager for cron-based scheduling
-schedule_manager.init_scheduler()
+# Initialize the schedule manager for cron-based scheduling (if available)
+if SCHEDULE_MANAGER_AVAILABLE:
+    schedule_manager.init_scheduler()
 
 
 # ============== Schedule Management API Endpoints ==============
@@ -2265,6 +2272,8 @@ schedule_manager.init_scheduler()
 @app.route("/schedules", methods=["GET"])
 def list_schedules() -> Any:
     """List all schedules stored locally"""
+    if not SCHEDULE_MANAGER_AVAILABLE:
+        return jsonify({"status": "error", "error": "Schedule manager not available", "schedules": [], "count": 0})
     schedules = schedule_manager.get_schedules()
     return jsonify({
         "status": "ok",
@@ -2294,6 +2303,9 @@ def add_or_update_schedule() -> Any:
         "enabled": true
     }
     """
+    if not SCHEDULE_MANAGER_AVAILABLE:
+        return jsonify({"status": "error", "error": "Schedule manager not available"}), 503
+    
     data = request.get_json(force=True, silent=True) or {}
     
     schedule_id = data.get("schedule_id")
@@ -2339,6 +2351,9 @@ def add_or_update_schedule() -> Any:
 @app.route("/schedules/<int:schedule_id>", methods=["DELETE"])
 def delete_schedule(schedule_id: int) -> Any:
     """Delete a schedule"""
+    if not SCHEDULE_MANAGER_AVAILABLE:
+        return jsonify({"status": "error", "error": "Schedule manager not available"}), 503
+    
     success = schedule_manager.remove_schedule(schedule_id)
     
     if success:
@@ -2351,6 +2366,9 @@ def delete_schedule(schedule_id: int) -> Any:
 @app.route("/schedules/<int:schedule_id>", methods=["GET"])
 def get_schedule(schedule_id: int) -> Any:
     """Get a specific schedule"""
+    if not SCHEDULE_MANAGER_AVAILABLE:
+        return jsonify({"status": "error", "error": "Schedule manager not available"}), 503
+    
     schedule = schedule_manager.get_schedule(schedule_id)
     
     if schedule:
@@ -2366,7 +2384,10 @@ def get_schedule(schedule_id: int) -> Any:
 @app.route("/scheduler/status", methods=["GET"])
 def scheduler_status() -> Any:
     """Get scheduler status"""
+    if not SCHEDULE_MANAGER_AVAILABLE:
+        return jsonify({"status": "unavailable", "error": "Schedule manager not available", "running": False, "schedule_count": 0, "job_count": 0, "jobs": []})
     return jsonify(schedule_manager.get_scheduler_status())
+
 
 
 if __name__ == "__main__":
