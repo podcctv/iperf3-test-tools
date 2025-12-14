@@ -253,6 +253,33 @@ def _ensure_reverse_mode_columns() -> None:
         connection.commit()
 
 
+def _ensure_trace_source_type_column() -> None:
+    """Add source_type column to trace_results table for distinguishing trace sources."""
+    dialect = engine.dialect.name
+    with engine.connect() as connection:
+        if dialect == "sqlite":
+            columns = connection.exec_driver_sql("PRAGMA table_info(trace_results)").fetchall()
+            column_names = {col[1] for col in columns}
+            
+            if "source_type" not in column_names:
+                connection.exec_driver_sql(
+                    "ALTER TABLE trace_results ADD COLUMN source_type VARCHAR DEFAULT 'scheduled'"
+                )
+        elif dialect == "postgresql":
+            result = connection.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='trace_results'"
+                )
+            )
+            column_names = {row[0] for row in result}
+            
+            if "source_type" not in column_names:
+                connection.execute(text("ALTER TABLE trace_results ADD COLUMN source_type VARCHAR DEFAULT 'scheduled'"))
+        
+        connection.commit()
+
+
 def _init_database_with_retry(max_attempts: int = 5, delay_seconds: float = 2.0) -> None:
     """Initialize database schema with simple retry to handle cold starts."""
 
@@ -266,6 +293,7 @@ def _init_database_with_retry(max_attempts: int = 5, delay_seconds: float = 2.0)
             _ensure_schedule_columns()
             _ensure_whitelist_sync_columns()
             _ensure_reverse_mode_columns()
+            _ensure_trace_source_type_column()
             return
         except Exception:  # pragma: no cover - best-effort bootstrap
             logger.exception(
@@ -7431,26 +7459,48 @@ def _trace_html() -> str:
           groups[key].push(r);
         });
         
+        // Source type icons
+        const sourceIcons = { 'scheduled': '📅', 'single': '🚀', 'multisrc': '🌐' };
+        const sourceNames = { 'scheduled': '定时', 'single': '单次', 'multisrc': '多源' };
+        
         // Render grouped
         list.innerHTML = Object.entries(groups).map(([route, records]) => {
           const hasChanges = records.some(r => r.has_change);
           const routeIcon = hasChanges ? '⚠️' : '✅';
           const headerClass = hasChanges ? 'text-amber-400' : 'text-emerald-400';
           
-          const recordsHtml = records.slice(0, 10).map(r => {
+          const recordsHtml = records.slice(0, 10).map((r, idx) => {
             const time = new Date(r.executed_at).toLocaleString('zh-CN');
             const changeIcon = r.has_change ? '⚠️' : '✅';
             const changeBg = r.has_change ? 'bg-amber-500/10' : 'bg-slate-800/30';
+            const srcIcon = sourceIcons[r.source_type] || '📅';
+            const srcName = sourceNames[r.source_type] || '定时';
+            const recordId = `history-record-${r.id}`;
+            
+            // Generate hop preview (first and last IP)
+            const hops = r.hops || [];
+            const hopPreview = hops.length > 0 
+              ? `${hops[0]?.ip || '-'} → ${hops[hops.length-1]?.ip || '-'}`
+              : '';
             
             return `
-              <div class="flex items-center justify-between p-2 ${changeBg} rounded text-xs">
-                <div class="flex items-center gap-2">
-                  <span>${changeIcon}</span>
-                  <span class="text-slate-300">${r.total_hops}跳</span>
-                  <span class="text-slate-500">${r.tool_used}</span>
-                  <span class="text-slate-500">${r.elapsed_ms}ms</span>
+              <div class="cursor-pointer hover:bg-slate-700/30 ${changeBg} rounded" onclick="toggleHistoryDetail('${recordId}')">
+                <div class="flex items-center justify-between p-2 text-xs">
+                  <div class="flex items-center gap-2">
+                    <span title="${srcName}">${srcIcon}</span>
+                    <span>${changeIcon}</span>
+                    <span class="text-slate-300">${r.total_hops}跳</span>
+                    <span class="text-slate-500">${r.tool_used}</span>
+                    <span class="text-slate-500">${r.elapsed_ms}ms</span>
+                  </div>
+                  <span class="text-slate-400">${time}</span>
                 </div>
-                <span class="text-slate-400">${time}</span>
+                <div id="${recordId}" class="hidden px-4 pb-2 text-xs text-slate-400">
+                  <div class="mb-1">${hopPreview}</div>
+                  <div class="max-h-32 overflow-y-auto bg-slate-900/50 rounded p-2 font-mono">
+                    ${hops.map((h, i) => `<div class="flex gap-2"><span class="text-cyan-400">#${i+1}</span><span class="text-slate-300">${h.ip || '*'}</span><span class="text-slate-500">${h.rtt_avg ? h.rtt_avg.toFixed(1) + 'ms' : '-'}</span><span class="text-slate-600">${h.geo?.isp || ''}</span></div>`).join('')}
+                  </div>
+                </div>
               </div>
             `;
           }).join('');
@@ -7473,6 +7523,11 @@ def _trace_html() -> str:
       } catch (e) {
         list.innerHTML = '<p class="text-rose-400 text-sm">加载失败: ' + e.message + '</p>';
       }
+    }
+    
+    function toggleHistoryDetail(id) {
+      const el = document.getElementById(id);
+      if (el) el.classList.toggle('hidden');
     }
     
     function toggleMultisrcTarget() {
@@ -7540,7 +7595,7 @@ def _trace_html() -> str:
         // Run traces in parallel
         const tracePromises = selectedNodes.map(async (node) => {
           try {
-            const res = await apiFetch(`/api/trace/run?node_id=${node.id}`, {
+            const res = await apiFetch(`/api/trace/run?node_id=${node.id}&save_result=true&source_type=multisrc`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ target, max_hops: 30, include_geo: true })
@@ -9153,7 +9208,13 @@ class TracerouteResponse(BaseModel):
 
 
 @app.post("/api/trace/run", response_model=TracerouteResponse)
-async def run_traceroute(node_id: int, req: TracerouteRequest, db: Session = Depends(get_db)):
+async def run_traceroute(
+    node_id: int, 
+    req: TracerouteRequest, 
+    save_result: bool = Query(False, description="Save result to history"),
+    source_type: str = Query("single", description="Source type: single, multisrc, scheduled"),
+    db: Session = Depends(get_db)
+):
     """Execute traceroute from specified node to target."""
     node = db.get(Node, node_id)
     if not node:
@@ -9164,14 +9225,36 @@ async def run_traceroute(node_id: int, req: TracerouteRequest, db: Session = Dep
     
     if is_reverse:
         # For reverse agents, create a pending task and wait for result
-        return await _run_traceroute_via_task_queue(node, req, db)
+        response = await _run_traceroute_via_task_queue(node, req, db)
     else:
         # For normal agents, check online and call directly
         node_status = await health_monitor.check_node(node)
         if node_status.status != "online":
             raise HTTPException(status_code=503, detail=f"Node {node.name} is offline")
         
-        return await _run_traceroute_direct(node, req)
+        response = await _run_traceroute_direct(node, req)
+    
+    # Save to history if requested
+    if save_result and response.status == "ok":
+        try:
+            trace_result = TraceResult(
+                src_node_id=node.id,
+                target=req.target,
+                total_hops=response.total_hops,
+                hops=response.hops,
+                route_hash=response.route_hash,
+                tool_used=response.tool_used,
+                elapsed_ms=response.elapsed_ms,
+                source_type=source_type,
+                has_change=False,
+            )
+            db.add(trace_result)
+            db.commit()
+            logger.info(f"[TRACE] Saved {source_type} trace result: {node.name} -> {req.target}")
+        except Exception as e:
+            logger.error(f"[TRACE] Failed to save result: {e}")
+    
+    return response
 
 
 async def _run_traceroute_direct(node: Node, req: TracerouteRequest) -> TracerouteResponse:
@@ -9511,6 +9594,7 @@ def list_trace_results(
                 "has_change": r.has_change,
                 "change_summary": r.change_summary,
                 "previous_route_hash": r.previous_route_hash,
+                "source_type": getattr(r, "source_type", "scheduled"),
             }
             masked_results.append(result_dict)
         return masked_results

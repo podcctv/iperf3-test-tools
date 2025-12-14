@@ -276,6 +276,7 @@ class TraceResultRead(BaseModel):
     elapsed_ms: int
     has_change: bool = False
     change_summary: Any = None
+    source_type: str = "scheduled"  # "scheduled", "single", "multisrc"
 
     class Config:
         from_attributes = True

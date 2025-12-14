@@ -150,6 +150,7 @@ class TraceResult(Base):
     has_change = Column(Boolean, default=False)  # True if route changed from previous
     change_summary = Column(JSON, nullable=True)  # Details of what changed
     previous_route_hash = Column(String, nullable=True)  # For comparison reference
+    source_type = Column(String, default="scheduled")  # "scheduled", "single", "multisrc"
     
     schedule = relationship("TraceSchedule", foreign_keys=[schedule_id])
     src_node = relationship("Node", foreign_keys=[src_node_id])
