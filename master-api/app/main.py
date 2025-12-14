@@ -12128,9 +12128,14 @@ def list_schedules(db: Session = Depends(get_db)):
         elif schedule.interval_seconds:
             # Interval 模式：基于 last_run_at 或当前时间计算下次运行
             if schedule.last_run_at:
+                # 确保 last_run_at 是 timezone-aware (假设存储的是 UTC)
+                last_run = schedule.last_run_at
+                if last_run.tzinfo is None:
+                    last_run = last_run.replace(tzinfo=timezone.utc)
+                
                 # 从上次运行时间开始计算
-                next_run = schedule.last_run_at + timedelta(seconds=schedule.interval_seconds)
-                # 如果计算出的下次时间已经过去，则从当前时间开始计算
+                next_run = last_run + timedelta(seconds=schedule.interval_seconds)
+                # 如果计算出的下次时间已经过去，则循环添加间隔直到找到未来时间
                 while next_run <= now:
                     next_run += timedelta(seconds=schedule.interval_seconds)
                 schedule.next_run_at = next_run
