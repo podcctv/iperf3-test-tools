@@ -58,6 +58,7 @@ class TestSchedule(Base):
     port = Column(Integer, default=DEFAULT_IPERF_PORT)
     interval_seconds = Column(Integer, nullable=False)
     direction = Column(String, default="upload")  # upload, download, bidirectional
+    udp_bandwidth = Column(String, nullable=True)  # UDP bandwidth (e.g., "100M", "1G")
     enabled = Column(Boolean, default=True)
     last_run_at = Column(DateTime(timezone=True), nullable=True)
     next_run_at = Column(DateTime(timezone=True), nullable=True)

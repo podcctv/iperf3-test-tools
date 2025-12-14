@@ -5631,6 +5631,13 @@ def _schedules_html() -> str:
           </div>
         </div>
         
+        <!-- UDP Bandwidth (shown when UDP or TCP+UDP is selected) -->
+        <div id="udp-bandwidth-wrapper" class="hidden">
+          <label class="text-sm font-medium text-slate-200">UDP带宽</label>
+          <input id="schedule-udp-bandwidth" type="text" placeholder="例如: 100M, 500M, 1G" class="w-full mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none">
+          <p class="text-xs text-slate-500 mt-1">留空使用默认带宽，支持 M(兆) 或 G(吉) 后缀</p>
+        </div>
+        
         <div class="grid grid-cols-3 gap-4">
           <div>
             <label class="text-sm font-medium text-slate-200">时长(秒)</label>
@@ -6347,6 +6354,18 @@ def _schedules_html() -> str:
             
             dirWrapper.classList.add('hidden');
         }
+        updateUdpBandwidthVisibility();
+    }
+    
+    // Show/hide UDP bandwidth field based on protocol
+    function updateUdpBandwidthVisibility() {
+        const proto = document.getElementById('schedule-protocol').value;
+        const wrapper = document.getElementById('udp-bandwidth-wrapper');
+        if (proto === 'udp' || proto === 'tcp_udp') {
+            wrapper.classList.remove('hidden');
+        } else {
+            wrapper.classList.add('hidden');
+        }
     }
 
     // Modal操作
@@ -6409,6 +6428,8 @@ def _schedules_html() -> str:
         }
         // Restore protocol AFTER switching tab (so options exist)
         document.getElementById('schedule-protocol').value = schedule.protocol;
+        document.getElementById('schedule-udp-bandwidth').value = schedule.udp_bandwidth || '';
+        updateUdpBandwidthVisibility();
         
         // 编辑模式：禁用核心配置字段
         resetFieldState(true);
@@ -6420,7 +6441,9 @@ def _schedules_html() -> str:
         document.getElementById('schedule-parallel').value = 1;
         document.getElementById('schedule-interval').value = 30;
         document.getElementById('schedule-notes').value = '';
+        document.getElementById('schedule-udp-bandwidth').value = '';
         switchScheduleTab('uni');
+        updateUdpBandwidthVisibility();
         
         // 新建模式：启用所有字段
         resetFieldState(false);
@@ -6456,6 +6479,7 @@ def _schedules_html() -> str:
         interval_seconds: parseInt(document.getElementById('schedule-interval').value) * 60,
         enabled: true,
         direction: direction,
+        udp_bandwidth: document.getElementById('schedule-udp-bandwidth').value || null,
         notes: document.getElementById('schedule-notes').value || null,
       };
       
