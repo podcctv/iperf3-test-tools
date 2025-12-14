@@ -546,7 +546,15 @@ def _sync_agent_config(node: Node, previous_name: str | None = None) -> None:
             pass
 
 
-def _summarize_metrics(raw: dict | None) -> dict | None:
+def _summarize_metrics(raw: dict | None, direction_label: str | None = None) -> dict | None:
+    """
+    Summarize iperf3 test metrics from raw result.
+    
+    Args:
+        raw: Raw iperf3 result dictionary
+        direction_label: Optional direction hint ("upload" or "download") for UDP tests
+                        which only have a single 'sum' field, not sum_sent/sum_received
+    """
     if not raw:
         return None
 
@@ -556,11 +564,8 @@ def _summarize_metrics(raw: dict | None) -> dict | None:
 
     sum_received = end.get("sum_received") or {}
     sum_sent = end.get("sum_sent") or {}
-    # Fallback to 'sum' only if specific fields are missing entirely, but do not blind assign
-    if not sum_received and not sum_sent:
-        sum_general = end.get("sum") or {}
-        # We cannot verify direction here safely without context, but prevents duplication
-        pass
+    sum_general = end.get("sum") or {}  # For UDP which only has 'sum'
+    
     streams = end.get("streams") or []
     first_stream = streams[0] if streams else None
     receiver_stream = (first_stream or {}).get("receiver") if isinstance(first_stream, dict) else None
@@ -577,11 +582,13 @@ def _summarize_metrics(raw: dict | None) -> dict | None:
         (receiver_stream or {}).get("bits_per_second") if receiver_stream else None,
         (sum_sent or {}).get("bits_per_second"),
         (sender_stream or {}).get("bits_per_second") if sender_stream else None,
+        sum_general.get("bits_per_second"),  # Fallback for UDP
     )
 
     jitter_ms = _metric(
         (sum_received or {}).get("jitter_ms"),
         (sum_sent or {}).get("jitter_ms"),
+        sum_general.get("jitter_ms"),  # Fallback for UDP
         (receiver_stream or {}).get("jitter_ms") if receiver_stream else None,
         (sender_stream or {}).get("jitter_ms") if sender_stream else None,
     )
@@ -589,15 +596,20 @@ def _summarize_metrics(raw: dict | None) -> dict | None:
     lost_percent = _metric(
         (sum_received or {}).get("lost_percent"),
         (sum_sent or {}).get("lost_percent"),
+        sum_general.get("lost_percent"),  # Fallback for UDP
         (receiver_stream or {}).get("lost_percent") if receiver_stream else None,
         (sender_stream or {}).get("lost_percent") if sender_stream else None,
     )
 
-    if lost_percent is None and sum_received:
-        lost_packets = sum_received.get("lost_packets")
-        packets = sum_received.get("packets")
-        if lost_packets is not None and packets:
-            lost_percent = (lost_packets / packets) * 100
+    if lost_percent is None:
+        # Try to calculate from packets if available
+        for sum_obj in [sum_received, sum_general]:
+            if sum_obj:
+                lost_packets = sum_obj.get("lost_packets")
+                packets = sum_obj.get("packets")
+                if lost_packets is not None and packets:
+                    lost_percent = (lost_packets / packets) * 100
+                    break
 
     latency_ms = _metric(
         (sender_stream or {}).get("mean_rtt") if sender_stream else None,
@@ -609,10 +621,26 @@ def _summarize_metrics(raw: dict | None) -> dict | None:
     if latency_ms is not None and latency_ms > 1000:
         latency_ms = latency_ms / 1000
 
+    # Determine upload/download bits_per_second
+    upload_bps = (sum_sent or {}).get("bits_per_second")
+    download_bps = (sum_received or {}).get("bits_per_second")
+    
+    # For UDP tests: iperf3 only provides 'sum' field, not sum_sent/sum_received
+    # Use direction_label to assign correctly
+    if not upload_bps and not download_bps and sum_general.get("bits_per_second"):
+        general_bps = sum_general.get("bits_per_second")
+        if direction_label == "upload":
+            upload_bps = general_bps
+        elif direction_label == "download":
+            download_bps = general_bps
+        else:
+            # Default to download if no direction specified (backward compat)
+            download_bps = general_bps
+
     return {
         "bits_per_second": bits_per_second,
-        "upload_bits_per_second": (sum_sent or {}).get("bits_per_second"),
-        "download_bits_per_second": (sum_received or {}).get("bits_per_second"),
+        "upload_bits_per_second": upload_bps,
+        "download_bits_per_second": download_bps,
         "jitter_ms": jitter_ms,
         "lost_percent": lost_percent,
         "latency_ms": latency_ms,
@@ -6783,11 +6811,24 @@ def _schedules_html() -> str:
         // 解析ISO格式时间 - 服务器存储的是UTC时间
         let target;
         try {
-          // Ensure UTC parsing: if no timezone suffix, treat as UTC
+          // Ensure UTC parsing: server stores UTC datetimes
+          // ISO format examples:
+          //   - "2025-12-14T19:05:00+00:00" (has timezone)
+          //   - "2025-12-14T19:05:00Z" (explicit UTC)
+          //   - "2025-12-14T19:05:00" (naive, treat as UTC)
           let dateStr = nextRun;
-          if (dateStr && !dateStr.endsWith('Z') && !dateStr.includes('+') && !dateStr.includes('-', 10)) {
-            dateStr = dateStr + 'Z';  // Append Z to force UTC interpretation
+          
+          // Check if string has timezone info after the time part
+          // Look for + or - after position 19 (after YYYY-MM-DDTHH:MM:SS)
+          const hasTimezone = dateStr.endsWith('Z') || 
+                              /[+-]\d{2}:\d{2}$/.test(dateStr) ||
+                              /[+-]\d{4}$/.test(dateStr);
+          
+          if (!hasTimezone) {
+            // No timezone info - treat as UTC
+            dateStr = dateStr + 'Z';
           }
+          
           target = new Date(dateStr);
           // 如果解析失败或无效时间
           if (isNaN(target.getTime())) {
@@ -9296,7 +9337,9 @@ async def receive_agent_result(payload: AgentResultPayload, db: Session = Depend
                     # Get schedule info for src/dst nodes
                     schedule = db.scalars(select(TestSchedule).where(TestSchedule.id == schedule_id)).first()
                     if schedule:
-                        summary = _summarize_metrics({"iperf_result": iperf_data} if iperf_data else result)
+                        # Get direction_label from task_data for proper UDP direction assignment
+                        direction_label = pending_task.task_data.get("direction_label")
+                        summary = _summarize_metrics({"iperf_result": iperf_data} if iperf_data else result, direction_label=direction_label)
                         test_result = TestResult(
                             src_node_id=schedule.src_node_id,
                             dst_node_id=schedule.dst_node_id,
@@ -11070,7 +11113,9 @@ async def create_test(test: TestCreate, db: Session = Depends(get_db)):
         health_monitor.invalidate(dst.id)
 
     try:
-        summary = _summarize_metrics(raw_data)
+        # Determine direction_label based on reverse flag for proper UDP direction assignment
+        direction_label = "download" if effective_reverse else "upload"
+        summary = _summarize_metrics(raw_data, direction_label=direction_label)
     except Exception as exc:
         snippet = response.text[:200]
         logger.exception("Failed to summarize agent response")
@@ -11165,13 +11210,15 @@ async def create_dual_suite(test: DualSuiteTestCreate, db: Session = Depends(get
                 payload["omit"] = test.omit
 
             raw_data = await _call_agent_test(src, payload, test.duration)
+            # Determine direction_label based on reverse flag
+            direction_label = "download" if reverse else "upload"
             results.append(
                 {
                     "label": label,
                     "protocol": protocol,
                     "reverse": reverse,
                     "raw": raw_data,
-                    "summary": _summarize_metrics(raw_data),
+                    "summary": _summarize_metrics(raw_data, direction_label=direction_label),
                 }
             )
 
@@ -11529,15 +11576,9 @@ async def _execute_schedule_task(schedule_id: int):
                             "bidir": test_params.get("bidir", False),
                         }
                         raw_data = await _call_agent_test(effective_src, call_params, schedule.duration)
-                        summary = _summarize_metrics(raw_data)
+                        summary = _summarize_metrics(raw_data, direction_label=direction_label)
+                        # Note: direction filtering is now handled inside _summarize_metrics
 
-                        # Filter metrics based on direction to prevent pollution
-                        # Since we're doing separate tests, always filter
-                        if summary:
-                            if direction_label == "upload":
-                                summary["download_bits_per_second"] = 0
-                            elif direction_label == "download":
-                                summary["upload_bits_per_second"] = 0
                         
                         # 保存测试结果
                         test_result = TestResult(
@@ -12216,7 +12257,9 @@ async def agent_report_result(
             if schedule:
                 try:
                     iperf_data = result.get("iperf_result", {})
-                    summary = _summarize_metrics({"iperf_result": iperf_data} if iperf_data else result)
+                    # Get direction_label from task_data for proper UDP direction assignment
+                    direction_label = task.task_data.get("direction_label")
+                    summary = _summarize_metrics({"iperf_result": iperf_data} if iperf_data else result, direction_label=direction_label)
                     
                     test_result = TestResult(
                         src_node_id=schedule.src_node_id,
