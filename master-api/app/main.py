@@ -11716,6 +11716,12 @@ def delete_schedule(schedule_id: int, db: Session = Depends(get_db)):
     # 从调度器移除
     _remove_schedule_from_scheduler(schedule_id)
     
+    # 删除相关的 PendingTask 记录
+    db.execute(
+        text("DELETE FROM pending_tasks WHERE schedule_id = :sid"),
+        {"sid": schedule_id}
+    )
+    
     # 删除相关结果
     # 注意: SQLAlchemy session.delete 不会级联删除 schedule_results, 需手动或配置 cascade
     # 这里手动删除
