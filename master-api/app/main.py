@@ -1620,6 +1620,9 @@ def _login_html() -> str:
         <button id="config-tab" onclick="setActiveSettingsTab('config')" class="rounded-full px-4 py-2 text-sm font-semibold text-slate-300 transition hover:text-white">
           📦 配置管理
         </button>
+        <button id="telegram-tab" onclick="setActiveSettingsTab('telegram')" class="rounded-full px-4 py-2 text-sm font-semibold text-slate-300 transition hover:text-white">
+          🤖 Telegram
+        </button>
         <button id="admin-tab" onclick="setActiveSettingsTab('admin')" class="rounded-full px-4 py-2 text-sm font-semibold text-slate-300 transition hover:text-white">
           🗄️ 数据库管理
         </button>
@@ -1699,6 +1702,74 @@ def _login_html() -> str:
           </div>
         </div>
         
+      </div>
+
+      <!-- Telegram Settings Panel -->
+      <div id="telegram-panel" class="hidden space-y-4">
+        <div class="rounded-xl border border-slate-800/60 bg-slate-950/40 p-4">
+          <h4 class="mb-3 text-lg font-semibold text-white">📱 Telegram 机器人设置</h4>
+          <p class="mb-4 text-sm text-slate-400">配置 Telegram 机器人以接收告警推送通知。</p>
+          
+          <div id="telegram-alert" class="alert hidden mb-4"></div>
+          
+          <div class="grid gap-4 md:grid-cols-2">
+            <div class="space-y-2">
+              <label class="text-xs font-semibold text-slate-300">Bot Token</label>
+              <input id="telegram-bot-token" type="password" class="form-input" placeholder="例如: 123456789:ABCdefGHI..." />
+              <p class="text-xs text-slate-500">从 @BotFather 获取</p>
+            </div>
+            <div class="space-y-2">
+              <label class="text-xs font-semibold text-slate-300">Chat ID</label>
+              <input id="telegram-chat-id" type="text" class="form-input" placeholder="例如: -100123456789" />
+              <p class="text-xs text-slate-500">群组或频道ID，个人使用你的User ID</p>
+            </div>
+          </div>
+          
+          <div class="mt-4 flex justify-end gap-2">
+            <button onclick="testTelegramConfig()" class="rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-sky-500">
+              🔔 发送测试消息
+            </button>
+            <button onclick="saveTelegramConfig()" class="rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 px-6 py-2 text-sm font-semibold text-white shadow-lg transition hover:scale-[1.02]">
+              保存设置
+            </button>
+          </div>
+        </div>
+        
+        <div class="rounded-xl border border-slate-800/60 bg-slate-950/40 p-4">
+          <h4 class="mb-3 text-lg font-semibold text-white">🔔 通知类型</h4>
+          <p class="mb-4 text-sm text-slate-400">选择需要推送的通知类型。</p>
+          
+          <div class="grid gap-3 md:grid-cols-2">
+            <label class="flex items-center gap-3 rounded-lg border border-slate-700 bg-slate-800/50 p-3 cursor-pointer hover:border-slate-600 transition">
+              <input type="checkbox" id="notify-route-change" class="form-checkbox" checked>
+              <div>
+                <span class="font-semibold text-white">🛤️ 路由变化告警</span>
+                <p class="text-xs text-slate-400">定时检测的路由发生变化时通知</p>
+              </div>
+            </label>
+            <label class="flex items-center gap-3 rounded-lg border border-slate-700 bg-slate-800/50 p-3 cursor-pointer hover:border-slate-600 transition">
+              <input type="checkbox" id="notify-schedule-failure" class="form-checkbox">
+              <div>
+                <span class="font-semibold text-white">⚠️ 定时任务失败</span>
+                <p class="text-xs text-slate-400">定时任务执行失败时通知</p>
+              </div>
+            </label>
+            <label class="flex items-center gap-3 rounded-lg border border-slate-700 bg-slate-800/50 p-3 cursor-pointer hover:border-slate-600 transition">
+              <input type="checkbox" id="notify-node-offline" class="form-checkbox">
+              <div>
+                <span class="font-semibold text-white">🔌 节点离线</span>
+                <p class="text-xs text-slate-400">检测到Agent节点离线时通知</p>
+              </div>
+            </label>
+            <label class="flex items-center gap-3 rounded-lg border border-slate-700 bg-slate-800/50 p-3 cursor-pointer hover:border-slate-600 transition">
+              <input type="checkbox" id="notify-daily-report" class="form-checkbox">
+              <div>
+                <span class="font-semibold text-white">📊 每日报告</span>
+                <p class="text-xs text-slate-400">每天发送测试统计摘要</p>
+              </div>
+            </label>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -1918,24 +1989,26 @@ def _login_html() -> str:
       // Buttons
       const passwordTab = document.getElementById('password-tab');
       const configTab = document.getElementById('config-tab');
+      const telegramTab = document.getElementById('telegram-tab');
+      const adminTab = document.getElementById('admin-tab');
       
       // Panels
       const passwordPanel = document.getElementById('password-panel');
       const configPanel = document.getElementById('config-panel');
-      const adminTab = document.getElementById('admin-tab');
+      const telegramPanel = document.getElementById('telegram-panel');
       const adminPanel = document.getElementById('admin-panel');
       
-      console.log('Elements found:', { passwordTab, configTab, adminTab, passwordPanel, configPanel, adminPanel });
+      console.log('Elements found:', { passwordTab, configTab, telegramTab, adminTab, passwordPanel, configPanel, telegramPanel, adminPanel });
       
       // Reset all buttons style
-      [passwordTab, configTab, adminTab].forEach(btn => {
+      [passwordTab, configTab, telegramTab, adminTab].forEach(btn => {
         if (btn) {
             btn.className = 'rounded-full px-4 py-2 text-sm font-semibold text-slate-300 transition hover:text-white';
         }
       });
       
       // Reset all panels visibility
-      [passwordPanel, configPanel, adminPanel].forEach(panel => {
+      [passwordPanel, configPanel, telegramPanel, adminPanel].forEach(panel => {
         if (panel) panel.classList.add('hidden');
       });
       
@@ -1948,15 +2021,85 @@ def _login_html() -> str:
       } else if (tabName === 'config' && configTab && configPanel) {
         configTab.className = activeBtnClass;
         configPanel.classList.remove('hidden');
-      } else if (tabName === 'admin') {
-        const adminTab = document.getElementById('admin-tab');
-        const adminPanel = document.getElementById('admin-panel');
-        if (adminTab && adminPanel) {
-          adminTab.className = activeBtnClass;
-          adminPanel.classList.remove('hidden');
-        }
+      } else if (tabName === 'telegram' && telegramTab && telegramPanel) {
+        telegramTab.className = activeBtnClass;
+        telegramPanel.classList.remove('hidden');
+        loadTelegramConfig();  // Load saved config when tab is opened
+      } else if (tabName === 'admin' && adminTab && adminPanel) {
+        adminTab.className = activeBtnClass;
+        adminPanel.classList.remove('hidden');
       }
       console.log('setActiveSettingsTab completed');
+    }
+    
+    // Telegram Functions
+    async function loadTelegramConfig() {
+      try {
+        const res = await apiFetch('/admin/telegram');
+        if (res.ok) {
+          const data = await res.json();
+          document.getElementById('telegram-bot-token').value = data.bot_token || '';
+          document.getElementById('telegram-chat-id').value = data.chat_id || '';
+          document.getElementById('notify-route-change').checked = data.notify_route_change ?? true;
+          document.getElementById('notify-schedule-failure').checked = data.notify_schedule_failure ?? false;
+          document.getElementById('notify-node-offline').checked = data.notify_node_offline ?? false;
+          document.getElementById('notify-daily-report').checked = data.notify_daily_report ?? false;
+        }
+      } catch (e) {
+        console.log('No telegram config found or error loading:', e);
+      }
+    }
+    
+    async function saveTelegramConfig() {
+      const data = {
+        bot_token: document.getElementById('telegram-bot-token').value,
+        chat_id: document.getElementById('telegram-chat-id').value,
+        notify_route_change: document.getElementById('notify-route-change').checked,
+        notify_schedule_failure: document.getElementById('notify-schedule-failure').checked,
+        notify_node_offline: document.getElementById('notify-node-offline').checked,
+        notify_daily_report: document.getElementById('notify-daily-report').checked,
+      };
+      
+      try {
+        const res = await apiFetch('/admin/telegram', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        
+        const alertEl = document.getElementById('telegram-alert');
+        if (res.ok) {
+          alertEl.className = 'alert mb-4 rounded-xl px-4 py-3 text-sm font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40';
+          alertEl.textContent = '✅ Telegram 设置已保存';
+        } else {
+          alertEl.className = 'alert mb-4 rounded-xl px-4 py-3 text-sm font-semibold bg-rose-500/20 text-rose-400 border border-rose-500/40';
+          alertEl.textContent = '❌ 保存失败';
+        }
+        alertEl.classList.remove('hidden');
+        setTimeout(() => alertEl.classList.add('hidden'), 3000);
+      } catch (e) {
+        console.error('Save telegram config error:', e);
+      }
+    }
+    
+    async function testTelegramConfig() {
+      try {
+        const res = await apiFetch('/admin/telegram/test', { method: 'POST' });
+        const alertEl = document.getElementById('telegram-alert');
+        
+        if (res.ok) {
+          alertEl.className = 'alert mb-4 rounded-xl px-4 py-3 text-sm font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40';
+          alertEl.textContent = '✅ 测试消息已发送，请检查Telegram';
+        } else {
+          const data = await res.json();
+          alertEl.className = 'alert mb-4 rounded-xl px-4 py-3 text-sm font-semibold bg-rose-500/20 text-rose-400 border border-rose-500/40';
+          alertEl.textContent = `❌ 发送失败: ${data.detail || '请检查配置'}`;
+        }
+        alertEl.classList.remove('hidden');
+        setTimeout(() => alertEl.classList.add('hidden'), 5000);
+      } catch (e) {
+        console.error('Test telegram error:', e);
+      }
     }
 
     // Admin Functions
