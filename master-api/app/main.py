@@ -1055,6 +1055,61 @@ def _login_html() -> str:
       box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
     }
     
+    /* Dropdown Menu Styles */
+    .nav-dropdown {
+      position: relative;
+      display: inline-block;
+    }
+    .nav-dropdown-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      cursor: pointer;
+    }
+    .nav-dropdown-btn::after {
+      content: '▼';
+      font-size: 0.6rem;
+      opacity: 0.7;
+      transition: transform 0.2s;
+    }
+    .nav-dropdown:hover .nav-dropdown-btn::after {
+      transform: rotate(180deg);
+    }
+    .nav-dropdown-menu {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      min-width: 160px;
+      margin-top: 0.25rem;
+      padding: 0.5rem 0;
+      background: rgba(30, 41, 59, 0.98);
+      border: 1px solid rgba(71, 85, 105, 0.5);
+      border-radius: 0.75rem;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(-8px);
+      transition: all 0.2s ease;
+      z-index: 1000;
+    }
+    .nav-dropdown:hover .nav-dropdown-menu {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0);
+    }
+    .nav-dropdown-item {
+      display: block;
+      padding: 0.625rem 1rem;
+      color: #e2e8f0;
+      font-size: 0.875rem;
+      text-decoration: none;
+      transition: all 0.15s;
+    }
+    .nav-dropdown-item:hover {
+      background: rgba(56, 189, 248, 0.1);
+      color: #38bdf8;
+    }
+    
     /* Login Specifics */
     .login-container {
       display: flex;
@@ -1251,14 +1306,31 @@ def _login_html() -> str:
               <div class="flex flex-wrap items-center gap-3">
                 <a href="/web/trace" class="rounded-lg border border-slate-600 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-cyan-500 hover:text-cyan-200 inline-flex items-center gap-2">
                   <span class="text-base">🌐</span>
-                  <span>路由追踪</span>
+                  <span>路由追踪测试</span>
                 </a>
-                <a href="/web/tests" class="rounded-lg border border-slate-600 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200">单次测试</a>
-                <a href="/web/schedules" class="rounded-lg border border-slate-600 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-emerald-500 hover:text-emerald-200">定时任务</a>
-                <a href="/web/whitelist" class="guest-hide rounded-lg border border-slate-600 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-amber-500 hover:text-amber-200">白名单管理</a>
-                <button id="open-settings" onclick="toggleSettingsModal(true)" class="guest-hide rounded-lg border border-slate-600 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-indigo-500 hover:text-indigo-200 inline-flex items-center gap-2">
-                  <span class="text-base">⚙️</span>
-                  <span>设置</span>
+                <div class="nav-dropdown">
+                  <div class="nav-dropdown-btn rounded-lg border border-slate-600 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200">
+                    <span class="text-base">📊</span>
+                    <span>iperf测试</span>
+                  </div>
+                  <div class="nav-dropdown-menu">
+                    <a href="/web/tests" class="nav-dropdown-item">🚀 单次测试</a>
+                    <a href="/web/schedules" class="nav-dropdown-item">📅 定时任务</a>
+                  </div>
+                </div>
+                <div class="nav-dropdown guest-hide">
+                  <div class="nav-dropdown-btn rounded-lg border border-slate-600 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-indigo-500 hover:text-indigo-200">
+                    <span class="text-base">⚙️</span>
+                    <span>设置</span>
+                  </div>
+                  <div class="nav-dropdown-menu">
+                    <a href="/web/whitelist" class="nav-dropdown-item">🛡️ 白名单管理</a>
+                    <a href="javascript:void(0)" onclick="toggleSettingsModal(true)" class="nav-dropdown-item">⚙️ 系统设置</a>
+                  </div>
+                </div>
+                <button onclick="togglePasswordModal(true)" class="guest-hide rounded-lg border border-slate-600 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-amber-500 hover:text-amber-200 inline-flex items-center gap-2">
+                  <span class="text-base">🔑</span>
+                  <span>修改密码</span>
                 </button>
                 <button id="logout-btn" class="rounded-lg border border-slate-600 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-rose-500 hover:text-rose-200">退出登录</button>
               </div>
@@ -1712,6 +1784,16 @@ def _login_html() -> str:
           modal.classList.add('hidden');
           modal.classList.remove('flex');
         }
+      }
+    }
+    
+    // Open Settings Modal directly to Password tab
+    function togglePasswordModal(show) {
+      if (show) {
+        toggleSettingsModal(true);
+        setActiveSettingsTab('password');
+      } else {
+        toggleSettingsModal(false);
       }
     }
     
