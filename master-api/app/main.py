@@ -12210,7 +12210,20 @@ def toggle_schedule(schedule_id: int, db: Session = Depends(get_db)):
     
     if db_schedule.enabled:
         # 计算下次执行时间
-        next_run_at = datetime.now(timezone.utc) + timedelta(seconds=db_schedule.interval_seconds)
+        now = datetime.now(timezone.utc)
+        if db_schedule.cron_expression:
+            # 使用 croniter 从 cron 表达式计算
+            try:
+                cron = croniter(db_schedule.cron_expression, now)
+                next_run_at = cron.get_next(datetime)
+            except Exception as e:
+                logger.error(f"Failed to parse cron for toggle: {e}")
+                next_run_at = now + timedelta(minutes=10)
+        elif db_schedule.interval_seconds:
+            next_run_at = now + timedelta(seconds=db_schedule.interval_seconds)
+        else:
+            next_run_at = now + timedelta(minutes=10)
+        
         db_schedule.next_run_at = next_run_at
         # 关键修复：传递next_run_time参数到调度器
         _add_schedule_to_scheduler(db_schedule, next_run_time=next_run_at)
