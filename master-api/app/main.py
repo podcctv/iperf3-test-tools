@@ -8291,20 +8291,6 @@ def _trace_html() -> str:
       loadSchedules();
     }
 
-    async function loadHistory() {
-      const list = document.getElementById('history-list');
-      try {
-        const res = await apiFetch('/api/trace/results?limit=30');
-        const data = await res.json();
-        if (!data.length) { list.innerHTML = '<p class="text-slate-500 text-sm">暂无记录</p>'; return; }
-        list.innerHTML = data.map(r => {
-          const node = nodes.find(n => n.id === r.src_node_id);
-          const date = new Date(r.executed_at).toLocaleString('zh-CN');
-          const change = r.has_change ? '<span class="px-2 py-0.5 bg-amber-500/20 text-amber-400 rounded text-xs">⚠ 变化</span>' : '';
-          return `<div class="p-3 rounded-lg bg-slate-900/40 border border-slate-700"><div class="flex justify-between"><span class="font-medium text-sm">${node?.name || '?'} → ${r.target} ${change}</span><span class="text-xs text-slate-500">${date}</span></div><div class="text-xs text-slate-400 mt-1">${r.total_hops}跳 | ${r.elapsed_ms}ms | ${r.tool_used}</div></div>`;
-        }).join('');
-      } catch (e) { list.innerHTML = '<p class="text-rose-400 text-sm">加载失败</p>'; }
-    }
 
     document.addEventListener('DOMContentLoaded', loadNodes);
   </script>
