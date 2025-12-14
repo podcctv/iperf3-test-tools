@@ -6861,12 +6861,20 @@ def _schedules_html() -> str:
         try {
           let dateStr = nextRun.trim();
           
+          // DEBUG: 输出原始值
+          console.log('[Countdown Debug] Raw nextRun:', nextRun);
+          
           // 如果字符串不以 Z 或 +/- 时区结尾，添加 Z 后缀
           if (!dateStr.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(dateStr)) {
             dateStr += 'Z';
+            console.log('[Countdown Debug] Added Z suffix:', dateStr);
           }
           
           target = new Date(dateStr);
+          
+          // DEBUG: 输出解析结果
+          console.log('[Countdown Debug] Parsed target:', target.toISOString(), '| Local:', target.toLocaleString());
+          console.log('[Countdown Debug] Current now:', now.toISOString(), '| Local:', now.toLocaleString());
           
           if (isNaN(target.getTime())) {
             el.textContent = '--';
@@ -6879,6 +6887,7 @@ def _schedules_html() -> str:
         }
         
         const diff = target - now;
+        console.log('[Countdown Debug] Diff (ms):', diff, '| Hours:', (diff / 3600000).toFixed(2));
         
         if (diff <= 0) {
           el.textContent = 'Running...';
