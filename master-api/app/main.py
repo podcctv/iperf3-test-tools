@@ -6309,6 +6309,33 @@ def _schedules_html() -> str:
       
       // 更新日期显示
       document.getElementById(`date-${scheduleId}`).textContent = date;
+      
+      // 更新流量徽章以匹配当前显示的日期
+      const trafficBadge = document.getElementById(`traffic-badge-${scheduleId}`);
+      if (trafficBadge && results.length > 0) {
+        // Calculate total traffic for this day from results
+        let totalBytes = 0;
+        results.forEach(r => {
+          const s = r.test_result?.summary;
+          if (s) {
+            // Add both upload and download traffic
+            if (s.upload_bytes) totalBytes += s.upload_bytes;
+            if (s.download_bytes) totalBytes += s.download_bytes;
+            // Fallback to bytes_transferred
+            if (!s.upload_bytes && !s.download_bytes && s.bytes) {
+              totalBytes += s.bytes;
+            }
+          }
+        });
+        
+        // Format traffic display
+        const totalGB = totalBytes / (1024 * 1024 * 1024);
+        const today = new Date().toISOString().split('T')[0];
+        const dateLabel = (date === today) ? '今日' : date.substring(5); // MM-DD format
+        trafficBadge.textContent = `${dateLabel}: ${totalGB.toFixed(2)}G`;
+      } else if (trafficBadge) {
+        trafficBadge.textContent = '--';
+      }
     }
 
     // 切换日期
