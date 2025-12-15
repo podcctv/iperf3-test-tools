@@ -416,6 +416,27 @@ async def lifespan(app):
     )
     logger.info("[ASN-SYNC] Daily PeeringDB sync scheduled (every 24h)")
     
+    # Add periodic whitelist sync job (every 1 hour)
+    async def _run_whitelist_sync():
+        """Sync whitelist to all agents periodically."""
+        try:
+            db = SessionLocal()
+            results = await _sync_whitelist_to_agents(db)
+            logger.info(f"[WHITELIST-SYNC] Periodic sync complete: {results['success']}/{results['total_agents']} agents synced")
+            db.close()
+        except Exception as e:
+            logger.error(f"[WHITELIST-SYNC] Periodic sync failed: {e}")
+    
+    scheduler.add_job(
+        _run_whitelist_sync,
+        'interval',
+        hours=1,
+        id='whitelist_hourly_sync',
+        replace_existing=True,
+        next_run_time=datetime.now(timezone.utc) + timedelta(minutes=2)  # First run 2 min after startup
+    )
+    logger.info("[WHITELIST-SYNC] Hourly whitelist sync scheduled")
+    
     yield
     
     # Shutdown: 关闭调度器
@@ -12162,15 +12183,17 @@ def create_schedule(schedule: TestScheduleCreate, db: Session = Depends(get_db))
     if schedule.enabled:
         now = datetime.now(timezone.utc)
         if schedule.cron_expression:
-            # 使用 croniter 从 cron 表达式计算下次运行时间
+            # 验证并使用 croniter 从 cron 表达式计算下次运行时间
             try:
                 cron = croniter(schedule.cron_expression, now)
                 db_schedule.next_run_at = cron.get_next(datetime)
                 logger.info(f"Calculated next run from cron '{schedule.cron_expression}': {db_schedule.next_run_at}")
             except Exception as e:
-                logger.error(f"Failed to parse cron expression '{schedule.cron_expression}': {e}")
-                # Fallback to 20 minutes if cron parsing fails
-                db_schedule.next_run_at = now + timedelta(minutes=20)
+                logger.error(f"Invalid cron expression '{schedule.cron_expression}': {e}")
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"无效的 cron 表达式: {schedule.cron_expression}. 错误: {str(e)}"
+                )
         elif schedule.interval_seconds:
             # 兼容旧的 interval_seconds
             db_schedule.next_run_at = now + timedelta(seconds=schedule.interval_seconds)
