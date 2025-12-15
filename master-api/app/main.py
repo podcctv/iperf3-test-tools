@@ -12745,7 +12745,6 @@ async def agent_register(
     print(f"[REGISTER] Success: node_id={node.id}, agent_mode={node.agent_mode}", flush=True)
     
     # Check if agent needs update
-    from update_manager import compare_versions
     update_available = False
     update_info = None
     
