@@ -730,6 +730,143 @@ async def cleanup_old_data(
         "deleted": deleted_counts
     }
 
+
+# ============================================================================
+# Webhook Notification System
+# ============================================================================
+
+import httpx
+from pathlib import Path
+
+_webhook_config_file = Path(os.getenv("DATA_DIR", "/app/data")) / "webhook_config.json"
+
+def _load_webhook_config() -> dict:
+    """Load webhook configuration from file."""
+    try:
+        if _webhook_config_file.exists():
+            import json
+            return json.loads(_webhook_config_file.read_text())
+    except Exception as e:
+        logger.error(f"Failed to load webhook config: {e}")
+    return {"enabled": False, "url": "", "type": "generic"}
+
+def _save_webhook_config(config: dict) -> bool:
+    """Save webhook configuration to file."""
+    try:
+        import json
+        _webhook_config_file.parent.mkdir(parents=True, exist_ok=True)
+        _webhook_config_file.write_text(json.dumps(config, indent=2))
+        return True
+    except Exception as e:
+        logger.error(f"Failed to save webhook config: {e}")
+        return False
+
+async def send_webhook_notification(title: str, message: str, level: str = "info"):
+    """Send notification to configured webhook."""
+    config = _load_webhook_config()
+    if not config.get("enabled") or not config.get("url"):
+        return
+    
+    try:
+        webhook_type = config.get("type", "generic")
+        url = config["url"]
+        
+        # Format payload based on webhook type
+        if webhook_type == "telegram":
+            # Telegram Bot API format
+            payload = {
+                "chat_id": config.get("chat_id", ""),
+                "text": f"*{title}*\n{message}",
+                "parse_mode": "Markdown"
+            }
+        elif webhook_type == "discord":
+            # Discord webhook format
+            color = {"info": 3447003, "warning": 16776960, "error": 15158332}.get(level, 3447003)
+            payload = {
+                "embeds": [{
+                    "title": title,
+                    "description": message,
+                    "color": color
+                }]
+            }
+        else:
+            # Generic webhook format
+            payload = {
+                "title": title,
+                "message": message,
+                "level": level,
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+        
+        async with httpx.AsyncClient(timeout=10) as client:
+            await client.post(url, json=payload)
+            
+    except Exception as e:
+        logger.error(f"Webhook notification failed: {e}")
+
+
+@app.get("/api/webhook/config")
+async def get_webhook_config(request: Request):
+    """Get current webhook configuration (admin only)."""
+    if not auth_manager().is_authenticated(request):
+        raise HTTPException(status_code=401, detail="unauthorized")
+    
+    config = _load_webhook_config()
+    # Don't expose full URL for security
+    if config.get("url"):
+        config["url_configured"] = True
+        config["url"] = config["url"][:20] + "..." if len(config.get("url", "")) > 20 else config.get("url", "")
+    return config
+
+
+@app.post("/api/webhook/config")
+async def set_webhook_config(
+    request: Request,
+    enabled: bool = True,
+    url: str = "",
+    webhook_type: str = "generic",
+    chat_id: str = "",
+    db: Session = Depends(get_db)
+):
+    """Configure webhook notifications (admin only)."""
+    if not auth_manager().is_authenticated(request):
+        raise HTTPException(status_code=401, detail="unauthorized")
+    
+    config = {
+        "enabled": enabled,
+        "url": url,
+        "type": webhook_type,
+        "chat_id": chat_id
+    }
+    
+    if _save_webhook_config(config):
+        client_ip = _get_client_ip(request)
+        audit_log(db, "webhook_config_changed", actor_ip=client_ip,
+                  details={"enabled": enabled, "type": webhook_type})
+        return {"status": "ok", "message": "Webhook configuration saved"}
+    
+    raise HTTPException(status_code=500, detail="Failed to save configuration")
+
+
+@app.post("/api/webhook/test")
+async def test_webhook(request: Request):
+    """Send a test notification to configured webhook (admin only)."""
+    if not auth_manager().is_authenticated(request):
+        raise HTTPException(status_code=401, detail="unauthorized")
+    
+    config = _load_webhook_config()
+    if not config.get("enabled") or not config.get("url"):
+        raise HTTPException(status_code=400, detail="Webhook not configured")
+    
+    await send_webhook_notification(
+        "🔔 测试通知",
+        "这是来自 iPerf3 测试工具的测试通知。如果您看到此消息，表示 Webhook 配置正确！",
+        "info"
+    )
+    
+    return {"status": "ok", "message": "Test notification sent"}
+
+
 def _agent_config_from_node(node: Node) -> AgentConfigCreate:
     return AgentConfigCreate(
         name=node.name,
