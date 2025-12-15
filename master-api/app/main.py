@@ -519,6 +519,84 @@ async def readiness_probe():
         return JSONResponse(status_code=503, content={"status": "not_ready"})
 
 
+# ============================================================================
+# Database Backup Export API
+# ============================================================================
+
+@app.get("/api/backup/export")
+async def export_backup(request: Request, db: Session = Depends(get_db)):
+    """Export database backup as JSON (admin only)."""
+    if not auth_manager().is_authenticated(request):
+        raise HTTPException(status_code=401, detail="unauthorized")
+    
+    from datetime import datetime, timezone
+    from .models import Node, TestResult, TestSchedule, TraceSchedule, TraceResult
+    
+    # Export nodes
+    nodes_data = []
+    for node in db.scalars(select(Node)).all():
+        nodes_data.append({
+            "id": node.id,
+            "name": node.name,
+            "ip": node.ip,
+            "agent_port": node.agent_port,
+            "iperf_port": node.iperf_port,
+            "description": node.description,
+            "is_internal": node.is_internal,
+            "agent_mode": node.agent_mode
+        })
+    
+    # Export test schedules
+    schedules_data = []
+    for sched in db.scalars(select(TestSchedule)).all():
+        schedules_data.append({
+            "id": sched.id,
+            "name": sched.name,
+            "src_node_id": sched.src_node_id,
+            "dst_node_id": sched.dst_node_id,
+            "protocol": sched.protocol,
+            "params": sched.params,
+            "interval": sched.interval,
+            "enabled": sched.enabled
+        })
+    
+    # Export trace schedules
+    trace_schedules_data = []
+    for ts in db.scalars(select(TraceSchedule)).all():
+        trace_schedules_data.append({
+            "id": ts.id,
+            "name": ts.name,
+            "src_node_id": ts.src_node_id,
+            "target": ts.target,
+            "interval_minutes": ts.interval_minutes,
+            "enabled": ts.enabled
+        })
+    
+    # Get counts (don't export full test results for size)
+    test_result_count = db.scalar(select(func.count(TestResult.id))) or 0
+    trace_result_count = db.scalar(select(func.count(TraceResult.id))) or 0
+    
+    backup_data = {
+        "backup_timestamp": datetime.now(timezone.utc).isoformat(),
+        "version": EXPECTED_AGENT_VERSION,
+        "nodes": nodes_data,
+        "test_schedules": schedules_data,
+        "trace_schedules": trace_schedules_data,
+        "stats": {
+            "test_result_count": test_result_count,
+            "trace_result_count": trace_result_count
+        }
+    }
+    
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        content=backup_data,
+        headers={
+            "Content-Disposition": f"attachment; filename=iperf3_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        }
+    )
+
+
 def _agent_config_from_node(node: Node) -> AgentConfigCreate:
     return AgentConfigCreate(
         name=node.name,
