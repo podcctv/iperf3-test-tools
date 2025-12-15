@@ -7315,6 +7315,10 @@ def _trace_html() -> str:
   <style>
     body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
     
+    /* Guest mode - hide elements by default, shown via JS for authenticated users */
+    .guest-hide { display: none !important; }
+    body.authenticated .guest-hide { display: inline-flex !important; }
+    
     /* Animations */
     @keyframes fadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     @keyframes pulse-glow { 0%, 100% { box-shadow: 0 0 15px rgba(6, 182, 212, 0.3); } 50% { box-shadow: 0 0 25px rgba(6, 182, 212, 0.5); } }
@@ -7608,17 +7612,20 @@ def _trace_html() -> str:
         window.isGuest = data.isGuest === true;
         
         if (window.isGuest) {
-          // Hide operation tabs for guests
-          document.querySelectorAll('.guest-hide').forEach(el => el.classList.add('hidden'));
-          // Hide operation panels for guests
+          // Hide operation panels for guests (tabs already hidden by CSS)
           document.getElementById('panel-single')?.classList.add('hidden');
           document.getElementById('panel-schedules')?.classList.add('hidden');
           document.getElementById('panel-multisrc')?.classList.add('hidden');
           // Auto-switch to history tab
           switchTab('history');
+        } else {
+          // Show tabs for authenticated users
+          document.body.classList.add('authenticated');
         }
       } catch (e) {
         console.error('Guest mode check failed:', e);
+        // Default to show for error case (fail-open for usability)
+        document.body.classList.add('authenticated');
       }
     })();
 
