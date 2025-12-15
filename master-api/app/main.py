@@ -3405,7 +3405,7 @@ def _login_html() -> str:
           }
           
           // Version Mismatch Badge - only show when agent reports a different version
-          const expectedVersion = '1.2.0';
+          const expectedVersion = '1.3.0';
           let versionBadge = '';
           if (node.agent_version && node.agent_version !== expectedVersion) {
               versionBadge = `<span class="inline-flex items-center rounded-md bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-400 ring-1 ring-inset ring-amber-500/20 cursor-help" title="Agent版本 ${node.agent_version} 与预期版本 ${expectedVersion} 不一致，请更新">⬆️ 需更新</span>`;
@@ -3417,7 +3417,17 @@ def _login_html() -> str:
           if (node.agent_mode === 'reverse') {
               internalBadge = `<span class="inline-flex items-center rounded-md bg-violet-500/10 px-2 py-0.5 text-xs font-medium text-violet-400 ring-1 ring-inset ring-violet-500/20 cursor-help" title="内网穿透模式 (反向注册模式)">🔗 内网穿透</span>`;
           }
-
+          
+          // Auto-Update Status Badge
+          let updateBadge = '';
+          if (node.update_status === 'updated') {
+              const updateTime = node.update_at ? new Date(node.update_at).toLocaleString('zh-CN') : '';
+              updateBadge = `<span class="inline-flex items-center rounded-md bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-400 ring-1 ring-inset ring-emerald-500/20 cursor-help" title="${node.update_message || '自动更新成功'} (${updateTime})">✅ 自动更新</span>`;
+          } else if (node.update_status === 'pending') {
+              updateBadge = `<span class="inline-flex items-center rounded-md bg-yellow-500/10 px-2 py-0.5 text-xs font-medium text-yellow-400 ring-1 ring-inset ring-yellow-500/20 cursor-help" title="${node.update_message || '更新中...'}">⏳ 更新中</span>`;
+          } else if (node.update_status === 'failed') {
+              updateBadge = `<span class="inline-flex items-center rounded-md bg-rose-500/10 px-2 py-0.5 text-xs font-medium text-rose-400 ring-1 ring-inset ring-rose-500/20 cursor-help" title="${node.update_message || '自动更新失败'}">❌ 更新失败</span>`;
+          }
 
           const ports = node.detected_iperf_port ? `${node.detected_iperf_port}` : `${node.iperf_port}`;
           const agentPort = node.detected_agent_port || node.agent_port;
@@ -3442,6 +3452,7 @@ def _login_html() -> str:
                 ${syncBadge}
                 ${versionBadge}
                 ${internalBadge}
+                ${updateBadge}
                 <span class="text-base font-semibold text-white drop-shadow">${node.name}</span>
                 ${!window.isGuest ? `<button type="button" class="${styles.iconButton}" data-privacy-toggle="${node.id}" aria-label="切换 IP 隐藏">
                   <span class="text-base">${ipPrivacyState[node.id] ? '🙈' : '👁️'}</span>
