@@ -13581,3 +13581,219 @@ async def agent_pending_count(
         "node_name": node_name
     }
 
+
+# ============================================================================
+# System Admin Page
+# ============================================================================
+
+def _admin_html():
+    """Generate system admin HTML page."""
+    return """<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>系统管理 - iPerf3 测试工具</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); min-height: 100vh; }
+    .card { background: rgba(30, 41, 59, 0.5); backdrop-filter: blur(10px); border: 1px solid rgba(71, 85, 105, 0.5); border-radius: 1rem; }
+    .btn { padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 500; transition: all 0.2s; }
+    .btn-primary { background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4); }
+    .btn-danger { background: linear-gradient(135deg, #ef4444, #dc2626); color: white; }
+    .btn-success { background: linear-gradient(135deg, #22c55e, #16a34a); color: white; }
+    .stat-card { background: rgba(15, 23, 42, 0.6); border-radius: 0.75rem; padding: 1rem; }
+  </style>
+</head>
+<body class="text-white p-6">
+  <div class="max-w-6xl mx-auto">
+    <a href="/web" class="text-slate-400 hover:text-white text-sm mb-4 inline-block">← 返回主页</a>
+    <h1 class="text-2xl font-bold mb-6 flex items-center gap-3">⚙️ 系统管理</h1>
+    
+    <!-- System Stats Card -->
+    <div class="card p-6 mb-6">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-10 h-10 bg-blue-500/20 rounded-xl flex items-center justify-center"><span class="text-xl">📊</span></div>
+        <div><h2 class="text-lg font-bold">系统状态</h2><p class="text-xs text-slate-400">System Statistics</p></div>
+        <button onclick="loadStats()" class="ml-auto btn btn-primary text-sm">🔄 刷新</button>
+      </div>
+      <div id="stats-grid" class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="stat-card"><div class="text-slate-400 text-xs">加载中...</div></div>
+      </div>
+    </div>
+    
+    <!-- Backup Export Card -->
+    <div class="card p-6 mb-6">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-10 h-10 bg-green-500/20 rounded-xl flex items-center justify-center"><span class="text-xl">💾</span></div>
+        <div><h2 class="text-lg font-bold">数据备份</h2><p class="text-xs text-slate-400">Backup Export</p></div>
+      </div>
+      <p class="text-sm text-slate-400 mb-4">导出节点配置、定时任务等数据为 JSON 文件。</p>
+      <button onclick="exportBackup()" class="btn btn-success">📥 导出备份</button>
+    </div>
+    
+    <!-- Data Cleanup Card -->
+    <div class="card p-6 mb-6">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-10 h-10 bg-orange-500/20 rounded-xl flex items-center justify-center"><span class="text-xl">🗑️</span></div>
+        <div><h2 class="text-lg font-bold">数据清理</h2><p class="text-xs text-slate-400">Clean Old Data</p></div>
+      </div>
+      <p class="text-sm text-slate-400 mb-4">清理旧的测试结果和路由追踪数据以释放存储空间。</p>
+      <div class="flex items-center gap-4">
+        <label class="text-sm">保留天数：<input type="number" id="cleanup-days" value="30" min="7" class="w-20 bg-slate-800 border border-slate-600 rounded px-2 py-1 text-white"></label>
+        <button onclick="cleanupData()" class="btn btn-danger">🧹 执行清理</button>
+      </div>
+      <div id="cleanup-result" class="mt-4 text-sm hidden"></div>
+    </div>
+    
+    <!-- Webhook Config Card -->
+    <div class="card p-6 mb-6">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-10 h-10 bg-purple-500/20 rounded-xl flex items-center justify-center"><span class="text-xl">🔔</span></div>
+        <div><h2 class="text-lg font-bold">Webhook 通知</h2><p class="text-xs text-slate-400">Notification Webhook</p></div>
+      </div>
+      <div class="grid gap-4 max-w-md">
+        <label class="flex items-center gap-2"><input type="checkbox" id="webhook-enabled" class="w-4 h-4">启用 Webhook</label>
+        <select id="webhook-type" class="bg-slate-800 border border-slate-600 rounded px-3 py-2">
+          <option value="generic">通用 JSON</option>
+          <option value="telegram">Telegram</option>
+          <option value="discord">Discord</option>
+        </select>
+        <input type="text" id="webhook-url" placeholder="Webhook URL" class="bg-slate-800 border border-slate-600 rounded px-3 py-2">
+        <input type="text" id="webhook-chat-id" placeholder="Chat ID (Telegram)" class="bg-slate-800 border border-slate-600 rounded px-3 py-2">
+        <div class="flex gap-2">
+          <button onclick="saveWebhook()" class="btn btn-primary">💾 保存配置</button>
+          <button onclick="testWebhook()" class="btn btn-success">📤 发送测试</button>
+        </div>
+      </div>
+      <div id="webhook-result" class="mt-4 text-sm hidden"></div>
+    </div>
+    
+    <!-- Audit Logs Card -->
+    <div class="card p-6">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-10 h-10 bg-cyan-500/20 rounded-xl flex items-center justify-center"><span class="text-xl">📋</span></div>
+        <div><h2 class="text-lg font-bold">审计日志</h2><p class="text-xs text-slate-400">Audit Logs</p></div>
+        <button onclick="loadAuditLogs()" class="ml-auto btn btn-primary text-sm">🔄 刷新</button>
+      </div>
+      <div id="audit-logs" class="max-h-80 overflow-y-auto">
+        <div class="text-slate-400 text-sm">加载中...</div>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    const apiFetch = (url, opt = {}) => fetch(url, { credentials: 'include', ...opt });
+    
+    async function loadStats() {
+      try {
+        const res = await apiFetch('/api/stats');
+        const data = await res.json();
+        document.getElementById('stats-grid').innerHTML = `
+          <div class="stat-card"><div class="text-2xl font-bold text-blue-400">${data.nodes?.total || 0}</div><div class="text-xs text-slate-400">节点总数</div></div>
+          <div class="stat-card"><div class="text-2xl font-bold text-green-400">${data.nodes?.online || 0}</div><div class="text-xs text-slate-400">在线节点</div></div>
+          <div class="stat-card"><div class="text-2xl font-bold text-purple-400">${data.tests?.total || 0}</div><div class="text-xs text-slate-400">测试总数</div></div>
+          <div class="stat-card"><div class="text-2xl font-bold text-cyan-400">${data.tests?.today || 0}</div><div class="text-xs text-slate-400">今日测试</div></div>
+          <div class="stat-card"><div class="text-2xl font-bold text-amber-400">${data.schedules?.enabled || 0}/${data.schedules?.total || 0}</div><div class="text-xs text-slate-400">定时任务</div></div>
+          <div class="stat-card"><div class="text-2xl font-bold text-rose-400">${data.traces?.total || 0}</div><div class="text-xs text-slate-400">路由追踪</div></div>
+          <div class="stat-card"><div class="text-2xl font-bold text-teal-400">${data.scheduler?.jobs || 0}</div><div class="text-xs text-slate-400">调度任务</div></div>
+          <div class="stat-card"><div class="text-2xl font-bold ${data.scheduler?.running ? 'text-green-400' : 'text-red-400'}">${data.scheduler?.running ? '运行中' : '已停止'}</div><div class="text-xs text-slate-400">调度器</div></div>
+        `;
+      } catch (e) { console.error(e); }
+    }
+    
+    async function exportBackup() {
+      try {
+        const res = await apiFetch('/api/backup/export');
+        const data = await res.json();
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `backup_${new Date().toISOString().slice(0,10)}.json`;
+        a.click(); URL.revokeObjectURL(url);
+      } catch (e) { alert('导出失败: ' + e.message); }
+    }
+    
+    async function cleanupData() {
+      const days = document.getElementById('cleanup-days').value;
+      if (!confirm(`确定要删除 ${days} 天前的数据吗？此操作不可撤销！`)) return;
+      try {
+        const res = await apiFetch(`/api/cleanup?days=${days}`, { method: 'POST' });
+        const data = await res.json();
+        const el = document.getElementById('cleanup-result');
+        el.className = 'mt-4 text-sm p-3 rounded bg-green-900/50 text-green-300';
+        el.innerHTML = `✅ 已删除: 测试结果 ${data.deleted?.test_results || 0} 条, 路由追踪 ${data.deleted?.trace_results || 0} 条`;
+        loadStats();
+      } catch (e) { alert('清理失败: ' + e.message); }
+    }
+    
+    async function loadWebhookConfig() {
+      try {
+        const res = await apiFetch('/api/webhook/config');
+        const data = await res.json();
+        document.getElementById('webhook-enabled').checked = data.enabled;
+        document.getElementById('webhook-type').value = data.type || 'generic';
+        document.getElementById('webhook-url').value = data.url || '';
+        document.getElementById('webhook-chat-id').value = data.chat_id || '';
+      } catch (e) {}
+    }
+    
+    async function saveWebhook() {
+      const enabled = document.getElementById('webhook-enabled').checked;
+      const type = document.getElementById('webhook-type').value;
+      const url = document.getElementById('webhook-url').value;
+      const chatId = document.getElementById('webhook-chat-id').value;
+      try {
+        const res = await apiFetch(`/api/webhook/config?enabled=${enabled}&url=${encodeURIComponent(url)}&webhook_type=${type}&chat_id=${chatId}`, { method: 'POST' });
+        const data = await res.json();
+        const el = document.getElementById('webhook-result');
+        el.className = 'mt-4 text-sm p-3 rounded bg-green-900/50 text-green-300';
+        el.innerHTML = '✅ 配置已保存';
+      } catch (e) { alert('保存失败: ' + e.message); }
+    }
+    
+    async function testWebhook() {
+      try {
+        const res = await apiFetch('/api/webhook/test', { method: 'POST' });
+        const data = await res.json();
+        alert('测试通知已发送！');
+      } catch (e) { alert('发送失败: ' + e.message); }
+    }
+    
+    async function loadAuditLogs() {
+      try {
+        const res = await apiFetch('/api/audit-logs?limit=20');
+        const data = await res.json();
+        if (!data.logs?.length) {
+          document.getElementById('audit-logs').innerHTML = '<div class="text-slate-500 text-sm">暂无日志</div>';
+          return;
+        }
+        document.getElementById('audit-logs').innerHTML = data.logs.map(log => `
+          <div class="flex items-center gap-3 py-2 border-b border-slate-700/50">
+            <span class="text-xs ${log.success ? 'text-green-400' : 'text-red-400'}">${log.success ? '✓' : '✗'}</span>
+            <span class="text-xs text-slate-500 w-36">${new Date(log.timestamp).toLocaleString()}</span>
+            <span class="text-sm font-mono bg-slate-800 px-2 py-0.5 rounded">${log.action}</span>
+            <span class="text-xs text-slate-400">${log.actor_ip || '-'}</span>
+          </div>
+        `).join('');
+      } catch (e) { console.error(e); }
+    }
+    
+    // Load on page init
+    loadStats();
+    loadWebhookConfig();
+    loadAuditLogs();
+  </script>
+</body>
+</html>"""
+
+
+@app.get("/web/admin")
+async def admin_page(request: Request):
+    """System admin page."""
+    if not auth_manager().is_authenticated(request):
+        return HTMLResponse(content="<script>window.location.href='/web';</script>")
+    
+    return HTMLResponse(content=_admin_html())
+
