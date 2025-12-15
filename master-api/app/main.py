@@ -597,6 +597,79 @@ async def export_backup(request: Request, db: Session = Depends(get_db)):
     )
 
 
+@app.get("/api/stats")
+async def get_system_stats(db: Session = Depends(get_db)):
+    """Get system statistics for monitoring dashboards."""
+    from datetime import datetime, timezone, timedelta
+    from sqlalchemy import func
+    from .models import Node, TestResult, TestSchedule, TraceResult, AuditLog
+    
+    now = datetime.now(timezone.utc)
+    one_day_ago = now - timedelta(days=1)
+    one_hour_ago = now - timedelta(hours=1)
+    
+    # Node stats
+    total_nodes = db.scalar(select(func.count(Node.id))) or 0
+    online_nodes = db.scalar(
+        select(func.count(Node.id)).where(
+            Node.last_heartbeat > one_hour_ago
+        )
+    ) or 0
+    
+    # Test stats
+    total_tests = db.scalar(select(func.count(TestResult.id))) or 0
+    tests_today = db.scalar(
+        select(func.count(TestResult.id)).where(
+            TestResult.created_at > one_day_ago
+        )
+    ) or 0
+    
+    # Schedule stats
+    total_schedules = db.scalar(select(func.count(TestSchedule.id))) or 0
+    enabled_schedules = db.scalar(
+        select(func.count(TestSchedule.id)).where(TestSchedule.enabled == True)
+    ) or 0
+    
+    # Trace stats
+    total_traces = db.scalar(select(func.count(TraceResult.id))) or 0
+    
+    # Recent login activity
+    login_attempts_24h = db.scalar(
+        select(func.count(AuditLog.id)).where(
+            AuditLog.action.in_(["login_success", "login_failed"]),
+            AuditLog.timestamp > one_day_ago
+        )
+    ) or 0
+    
+    return {
+        "timestamp": now.isoformat(),
+        "version": EXPECTED_AGENT_VERSION,
+        "nodes": {
+            "total": total_nodes,
+            "online": online_nodes,
+            "offline": total_nodes - online_nodes
+        },
+        "tests": {
+            "total": total_tests,
+            "today": tests_today
+        },
+        "schedules": {
+            "total": total_schedules,
+            "enabled": enabled_schedules
+        },
+        "traces": {
+            "total": total_traces
+        },
+        "security": {
+            "login_attempts_24h": login_attempts_24h
+        },
+        "scheduler": {
+            "running": scheduler.running,
+            "jobs": len(scheduler.get_jobs())
+        }
+    }
+
+
 def _agent_config_from_node(node: Node) -> AgentConfigCreate:
     return AgentConfigCreate(
         name=node.name,
