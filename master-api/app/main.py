@@ -54,7 +54,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 # Expected agent version - update when releasing new agent versions
-EXPECTED_AGENT_VERSION = "1.0.3"
+EXPECTED_AGENT_VERSION = "1.3.0"
 
 # Whitelist hash tracking for smart sync
 _whitelist_hash_file = Path(os.getenv("DATA_DIR", "/app/data")) / "whitelist_hash.txt"
@@ -12713,13 +12713,55 @@ async def agent_register(
     
     print(f"[REGISTER] Success: node_id={node.id}, agent_mode={node.agent_mode}", flush=True)
     
-    return {
+    # Check if agent needs update
+    from update_manager import compare_versions
+    update_available = False
+    update_info = None
+    
+    if agent_version:
+        try:
+            # Import compare_versions locally to avoid circular import issues
+            def _compare_versions(v1: str, v2: str) -> int:
+                import re
+                def parse_ver(v):
+                    if not v:
+                        return (0, 0, 0)
+                    v = v.lstrip('v')
+                    parts = v.split('.')
+                    result = []
+                    for p in parts[:3]:
+                        m = re.match(r'(\d+)', p)
+                        result.append(int(m.group(1)) if m else 0)
+                    while len(result) < 3:
+                        result.append(0)
+                    return tuple(result)
+                t1, t2 = parse_ver(v1), parse_ver(v2)
+                return 1 if t1 > t2 else (-1 if t1 < t2 else 0)
+            
+            comparison = _compare_versions(EXPECTED_AGENT_VERSION, agent_version)
+            if comparison > 0:
+                update_available = True
+                update_info = {
+                    "target_version": EXPECTED_AGENT_VERSION,
+                    "agent_image": settings.agent_image,
+                    "message": f"Agent update available: {agent_version} -> {EXPECTED_AGENT_VERSION}"
+                }
+                print(f"[REGISTER] Update available for {node_name}: {agent_version} -> {EXPECTED_AGENT_VERSION}", flush=True)
+        except Exception as e:
+            print(f"[REGISTER] Version check error: {e}", flush=True)
+    
+    response = {
         "status": "ok",
         "node_id": node.id,
         "node_name": node.name,
-        "agent_mode": node.agent_mode,  # Echo back for debugging
-        "message": "registered"
+        "agent_mode": node.agent_mode,
+        "message": "registered",
+        # Update notification for reverse agents
+        "update_available": update_available,
+        "update_info": update_info
     }
+    
+    return response
 
 
 @app.get("/api/agent/tasks")

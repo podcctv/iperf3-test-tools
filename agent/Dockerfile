@@ -18,6 +18,11 @@ RUN apt-get update \
   && apt-get install -y iperf3 curl jq bc netcat-openbsd dnsutils iproute2 mtr-tiny traceroute \
   && rm -rf /var/lib/apt/lists/*
 
+# Install Docker CLI for self-update capability
+# Note: This only installs the CLI, not the daemon
+RUN curl -fsSL https://get.docker.com | sh || \
+  (apt-get update && apt-get install -y docker.io && rm -rf /var/lib/apt/lists/*)
+
 WORKDIR /app
 
 # Allow pip index to be configured at build time
@@ -40,8 +45,9 @@ RUN if [ -n "$PIP_TRUSTED_HOST" ]; then \
 COPY app.py /app/
 COPY ip_whitelist.py /app/
 COPY schedule_manager.py /app/
+COPY update_manager.py /app/
 
-# Create data directory for whitelist persistence
+# Create data directory for whitelist persistence and config
 RUN mkdir -p /app/data
 
 EXPOSE 8000 62001/tcp 62001/udp

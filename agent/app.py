@@ -24,11 +24,20 @@ except ImportError:
     SCHEDULE_MANAGER_AVAILABLE = False
     print("[AGENT] schedule_manager not available - cron scheduling disabled", flush=True)
 
+# Import update manager for self-update functionality (optional)
+try:
+    from update_manager import get_update_manager
+    UPDATE_MANAGER_AVAILABLE = True
+except ImportError:
+    get_update_manager = None
+    UPDATE_MANAGER_AVAILABLE = False
+    print("[AGENT] update_manager not available - auto-update disabled", flush=True)
+
 app = Flask(__name__)
 
 DEFAULT_IPERF_PORT = int(Path("/app").joinpath("IPERF_PORT").read_text().strip()) if Path("/app/IPERF_PORT").exists() else 62001
 AGENT_API_PORT = int(os.environ.get("AGENT_API_PORT", "8000"))
-AGENT_VERSION = "1.2.0"  # Update this when releasing new agent versions
+AGENT_VERSION = "1.3.0"  # Update this when releasing new agent versions
 
 # Reverse mode configuration for internal agents behind NAT
 AGENT_MODE = os.environ.get("AGENT_MODE", "normal").lower()
@@ -2129,7 +2138,31 @@ def _reverse_mode_register():
         print(f"[REVERSE] Registering with {register_url}...", flush=True)
         resp = requests.post(register_url, json=payload, timeout=10)
         if resp.ok:
+            data = resp.json()
             print(f"[REVERSE] Registered with master: {NODE_NAME} (HTTP {resp.status_code})", flush=True)
+            
+            # Check for update notification from master
+            if data.get("update_available") and UPDATE_MANAGER_AVAILABLE:
+                update_info = data.get("update_info", {})
+                target_version = update_info.get("target_version")
+                agent_image = update_info.get("agent_image")
+                
+                if target_version and agent_image:
+                    print(f"[REVERSE] Update available: {AGENT_VERSION} -> {target_version}", flush=True)
+                    
+                    # Get update manager and trigger update
+                    update_manager = get_update_manager(AGENT_VERSION)
+                    update_manager.register_master_version(MASTER_URL, target_version)
+                    
+                    # Check if we should actually update
+                    should_update, reason = update_manager.should_update(target_version)
+                    if should_update:
+                        print(f"[REVERSE] Initiating self-update to {target_version}...", flush=True)
+                        result = update_manager.execute_update(target_version, agent_image)
+                        print(f"[REVERSE] Update result: {result}", flush=True)
+                    else:
+                        print(f"[REVERSE] Update skipped: {reason}", flush=True)
+            
             return True
         else:
             print(f"[REVERSE] Registration failed: {resp.status_code} - {resp.text[:200]}", flush=True)
@@ -2387,6 +2420,95 @@ def scheduler_status() -> Any:
     if not SCHEDULE_MANAGER_AVAILABLE:
         return jsonify({"status": "unavailable", "error": "Schedule manager not available", "running": False, "schedule_count": 0, "job_count": 0, "jobs": []})
     return jsonify(schedule_manager.get_scheduler_status())
+
+
+# ============================================================================
+# Update Management API
+# ============================================================================
+
+@app.route("/api/update-check", methods=["POST"])
+def update_check() -> Any:
+    """
+    Check for updates and optionally trigger self-update.
+    
+    Request body:
+    {
+        "master_url": "http://master:9000",
+        "master_version": "1.3.0",
+        "target_agent_version": "1.3.0",
+        "agent_image": "ghcr.io/podcctv/iperf3-agent:1.3.0",
+        "force": false  // optional: force update even if version check fails
+    }
+    
+    Response:
+    {
+        "status": "ok|skipped|updating|failed",
+        "current_version": "1.2.0",
+        "target_version": "1.3.0",
+        "reason": "upgrading|already_latest|..."
+    }
+    """
+    if not UPDATE_MANAGER_AVAILABLE:
+        return jsonify({
+            "status": "unavailable",
+            "error": "Update manager not available",
+            "current_version": AGENT_VERSION
+        })
+    
+    data = request.get_json() or {}
+    
+    master_url = data.get("master_url", "")
+    target_version = data.get("target_agent_version", "")
+    agent_image = data.get("agent_image", "")
+    
+    if not target_version or not agent_image:
+        return jsonify({
+            "status": "error",
+            "error": "target_agent_version and agent_image are required",
+            "current_version": AGENT_VERSION
+        }), 400
+    
+    # Get update manager instance
+    update_manager = get_update_manager(AGENT_VERSION)
+    
+    # Register this master's version request
+    if master_url:
+        update_manager.register_master_version(master_url, target_version)
+    
+    # Check if we should update
+    should_update, reason = update_manager.should_update(target_version)
+    
+    if not should_update:
+        return jsonify({
+            "status": "skipped",
+            "reason": reason,
+            "current_version": AGENT_VERSION,
+            "target_version": target_version
+        })
+    
+    # Execute update
+    result = update_manager.execute_update(target_version, agent_image)
+    result["current_version"] = AGENT_VERSION
+    result["target_version"] = target_version
+    
+    return jsonify(result)
+
+
+@app.route("/api/version", methods=["GET"])
+def get_version() -> Any:
+    """Get current agent version and update status"""
+    response = {
+        "version": AGENT_VERSION,
+        "mode": AGENT_MODE,
+        "update_manager_available": UPDATE_MANAGER_AVAILABLE
+    }
+    
+    if UPDATE_MANAGER_AVAILABLE:
+        update_manager = get_update_manager(AGENT_VERSION)
+        response["is_updating"] = update_manager.is_updating
+        response["master_versions"] = update_manager.master_versions
+    
+    return jsonify(response)
 
 
 
