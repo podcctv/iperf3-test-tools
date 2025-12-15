@@ -7415,10 +7415,10 @@ def _trace_html() -> str:
       <h1 class="text-2xl font-bold mt-2">🌐 Traceroute 路由追踪</h1>
     </div>
 
-    <div class="flex border-b border-slate-700 mb-6 gap-6">
-      <button onclick="switchTab('single')" id="tab-single" class="pb-3 text-sm font-semibold tab-active">🚀 单次追踪</button>
-      <button onclick="switchTab('schedules')" id="tab-schedules" class="pb-3 text-sm font-semibold text-slate-400 hover:text-white">📅 定时监控</button>
-      <button onclick="switchTab('multisrc')" id="tab-multisrc" class="pb-3 text-sm font-semibold text-slate-400 hover:text-white">🌐 多源对比</button>
+    <div class="flex border-b border-slate-700 mb-6 gap-6" id="trace-tabs">
+      <button onclick="switchTab('single')" id="tab-single" class="pb-3 text-sm font-semibold tab-active guest-hide">🚀 单次追踪</button>
+      <button onclick="switchTab('schedules')" id="tab-schedules" class="pb-3 text-sm font-semibold text-slate-400 hover:text-white guest-hide">📅 定时监控</button>
+      <button onclick="switchTab('multisrc')" id="tab-multisrc" class="pb-3 text-sm font-semibold text-slate-400 hover:text-white guest-hide">🌐 多源对比</button>
       <button onclick="switchTab('history')" id="tab-history" class="pb-3 text-sm font-semibold text-slate-400 hover:text-white">📜 历史记录</button>
     </div>
 
@@ -7598,6 +7598,29 @@ def _trace_html() -> str:
   <script>
     const apiFetch = (url, opt = {}) => fetch(url, { credentials: 'include', ...opt });
     let nodes = [];
+    window.isGuest = false;
+    
+    // Guest mode initialization - hide operation tabs/panels for guests
+    (async function initGuestMode() {
+      try {
+        const res = await apiFetch('/auth/status');
+        const data = await res.json();
+        window.isGuest = data.isGuest === true;
+        
+        if (window.isGuest) {
+          // Hide operation tabs for guests
+          document.querySelectorAll('.guest-hide').forEach(el => el.classList.add('hidden'));
+          // Hide operation panels for guests
+          document.getElementById('panel-single')?.classList.add('hidden');
+          document.getElementById('panel-schedules')?.classList.add('hidden');
+          document.getElementById('panel-multisrc')?.classList.add('hidden');
+          // Auto-switch to history tab
+          switchTab('history');
+        }
+      } catch (e) {
+        console.error('Guest mode check failed:', e);
+      }
+    })();
 
     // ASN Tier cache - populated from API
     const _asnTierCache = {};
