@@ -9492,7 +9492,7 @@ def _admin_html() -> str:
         </div>
       </div>
       
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
         <a href="/web/whitelist" class="bg-slate-900/50 border border-slate-700 rounded-xl p-4 text-center hover:border-sky-500/50 transition-colors">
           <span class="text-2xl">🛡️</span>
           <div class="text-sm font-bold mt-2">IP 白名单</div>
@@ -9504,6 +9504,10 @@ def _admin_html() -> str:
         <a href="/web/tests" class="bg-slate-900/50 border border-slate-700 rounded-xl p-4 text-center hover:border-purple-500/50 transition-colors">
           <span class="text-2xl">🚀</span>
           <div class="text-sm font-bold mt-2">单次测试</div>
+        </a>
+        <a href="/web/admin" class="bg-slate-900/50 border border-slate-700 rounded-xl p-4 text-center hover:border-rose-500/50 transition-colors">
+          <span class="text-2xl">⚙️</span>
+          <div class="text-sm font-bold mt-2">系统管理</div>
         </a>
         <a href="/web" class="bg-slate-900/50 border border-slate-700 rounded-xl p-4 text-center hover:border-amber-500/50 transition-colors">
           <span class="text-2xl">🏠</span>
@@ -11054,14 +11058,15 @@ def _register_trace_schedule_job(schedule: TraceSchedule):
     if not schedule.enabled:
         return
     
-    # Add new job
+    # Add new job - use None for next_run_time to execute based on interval from now
+    # This ensures jobs run after startup even if stored next_run_at is stale
     scheduler.add_job(
         _execute_trace_schedule,
         trigger=IntervalTrigger(seconds=schedule.interval_seconds),
         id=job_id,
         args=[schedule.id],
         replace_existing=True,
-        next_run_time=schedule.next_run_at,
+        next_run_time=datetime.now(timezone.utc) + timedelta(seconds=30),  # First run 30s after registration
     )
     logger.info(f"Registered trace schedule job: {job_id}, interval={schedule.interval_seconds}s")
 
