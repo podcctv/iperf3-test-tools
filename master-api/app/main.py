@@ -6586,7 +6586,9 @@ def _schedules_html() -> str:
         
         const [minute, hour, day, month, weekday] = parts;
         
-        // Common patterns
+        // 周几名称映射
+        const weekdayNames = ['日', '一', '二', '三', '四', '五', '六'];
+        
         // */N * * * * -> 每N分钟
         if (minute.startsWith('*/') && hour === '*' && day === '*' && month === '*' && weekday === '*') {
             const interval = parseInt(minute.substring(2));
@@ -6605,9 +6607,39 @@ def _schedules_html() -> str:
         if (minute === '0' && /^\d+$/.test(hour) && day === '*' && month === '*' && weekday === '*') {
             return `每天${hour}点`;
         }
-        // N * * * * -> 每小时第N分钟 (if N is just a number)
+        // M H * * * -> 每天H:M
+        if (/^\d+$/.test(minute) && /^\d+$/.test(hour) && day === '*' && month === '*' && weekday === '*') {
+            return `每天${hour}:${minute.padStart(2, '0')}`;
+        }
+        // 0 H-H * * * -> 每天H-H点每小时
+        if (minute === '0' && /^\d+-\d+$/.test(hour) && day === '*' && month === '*' && weekday === '*') {
+            return `每天${hour}点每小时`;
+        }
+        // N * * * * -> 每小时第N分钟
         if (/^\d+$/.test(minute) && hour === '*' && day === '*' && month === '*' && weekday === '*') {
             return `每小时第${minute}分`;
+        }
+        // 0 0 * * N -> 每周N
+        if (minute === '0' && hour === '0' && day === '*' && month === '*' && /^\d$/.test(weekday)) {
+            const wd = parseInt(weekday);
+            return `每周${weekdayNames[wd]}`;
+        }
+        // 0 H * * N -> 每周N H点
+        if (minute === '0' && /^\d+$/.test(hour) && day === '*' && month === '*' && /^\d$/.test(weekday)) {
+            const wd = parseInt(weekday);
+            return `每周${weekdayNames[wd]}${hour}点`;
+        }
+        // 0 0 D * * -> 每月D日
+        if (minute === '0' && hour === '0' && /^\d+$/.test(day) && month === '*' && weekday === '*') {
+            return `每月${day}日`;
+        }
+        // 0 H D * * -> 每月D日H点
+        if (minute === '0' && /^\d+$/.test(hour) && /^\d+$/.test(day) && month === '*' && weekday === '*') {
+            return `每月${day}日${hour}点`;
+        }
+        // 0 0 1,15 * * -> 每月1和15日
+        if (minute === '0' && hour === '0' && /^[\d,]+$/.test(day) && month === '*' && weekday === '*') {
+            return `每月${day.replace(/,/g, '和')}日`;
         }
         
         return cron; // Fallback to raw expression
@@ -6703,6 +6735,58 @@ def _schedules_html() -> str:
       editingScheduleId = null;
     }
 
+    // 验证 cron 表达式格式
+    function validateCronExpression(cron) {
+      if (!cron || !cron.trim()) {
+        return { valid: false, error: 'Cron 表达式不能为空' };
+      }
+      const parts = cron.trim().split(/\s+/);
+      if (parts.length < 5 || parts.length > 6) {
+        return { valid: false, error: 'Cron 表达式需要 5 个字段 (分 时 日 月 周)' };
+      }
+      // 简单验证每个字段
+      const patterns = [
+        /^(\*|(\*\/\d+)|(\d+(-\d+)?(,\d+(-\d+)?)*))$/, // 分钟
+        /^(\*|(\*\/\d+)|(\d+(-\d+)?(,\d+(-\d+)?)*))$/, // 小时
+        /^(\*|(\*\/\d+)|(\d+(-\d+)?(,\d+(-\d+)?)*))$/, // 日
+        /^(\*|(\*\/\d+)|(\d+(-\d+)?(,\d+(-\d+)?)*))$/, // 月
+        /^(\*|(\*\/\d+)|(\d+(-\d+)?(,\d+(-\d+)?)*))$/  // 周
+      ];
+      for (let i = 0; i < 5; i++) {
+        if (!patterns[i].test(parts[i])) {
+          const fieldNames = ['分钟', '小时', '日', '月', '周'];
+          return { valid: false, error: `${fieldNames[i]}字段格式错误: ${parts[i]}` };
+        }
+      }
+      return { valid: true };
+    }
+
+    // 显示 Toast 通知
+    function showToast(message, type = 'error') {
+      // 移除旧的 toast
+      const oldToast = document.getElementById('toast-notification');
+      if (oldToast) oldToast.remove();
+      
+      const toast = document.createElement('div');
+      toast.id = 'toast-notification';
+      toast.className = `fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg transition-all transform ${
+        type === 'success' ? 'bg-green-600 text-white' : 
+        type === 'warning' ? 'bg-yellow-600 text-white' : 
+        'bg-red-600 text-white'
+      }`;
+      toast.innerHTML = `<div class="flex items-center gap-2">
+        <span>${type === 'success' ? '✓' : type === 'warning' ? '⚠' : '✕'}</span>
+        <span>${message}</span>
+      </div>`;
+      document.body.appendChild(toast);
+      
+      // 3秒后自动消失
+      setTimeout(() => {
+        toast.classList.add('opacity-0');
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
+
     // 保存定时任务
     async function saveSchedule() {
       // Determine direction based on tab
@@ -6713,6 +6797,16 @@ def _schedules_html() -> str:
           direction = document.getElementById('schedule-direction').value;
       }
 
+      const cronValue = document.getElementById('schedule-cron').value.trim();
+      
+      // 验证 cron 表达式
+      const cronValidation = validateCronExpression(cronValue);
+      if (!cronValidation.valid) {
+        showToast(cronValidation.error, 'error');
+        document.getElementById('schedule-cron').focus();
+        return;
+      }
+
       const data = {
         name: document.getElementById('schedule-name').value,
         src_node_id: parseInt(document.getElementById('schedule-src').value),
@@ -6721,7 +6815,7 @@ def _schedules_html() -> str:
         duration: parseInt(document.getElementById('schedule-duration').value),
         parallel: parseInt(document.getElementById('schedule-parallel').value),
         port: 62001,
-        cron_expression: document.getElementById('schedule-cron').value.trim(),
+        cron_expression: cronValue,
         enabled: true,
         direction: direction,
         udp_bandwidth: document.getElementById('schedule-udp-bandwidth').value || null,
@@ -6735,18 +6829,20 @@ def _schedules_html() -> str:
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data),
           });
+          showToast('任务更新成功', 'success');
         } else {
           await apiFetch('/schedules', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data),
           });
+          showToast('任务创建成功', 'success');
         }
         
         closeModal();
         await loadSchedules();
       } catch (err) {
-        alert('保存失败: ' + err.message);
+        showToast('保存失败: ' + err.message, 'error');
       }
     }
 
@@ -6855,49 +6951,53 @@ def _schedules_html() -> str:
           return;
         }
         
-        // 简化解析: 使用原生 Date 解析 ISO 字符串
-        // 如果没有时区后缀，添加 'Z' 确保解析为 UTC
+        // 解析 ISO 字符串，确保时区正确
         let target;
         try {
           let dateStr = nextRun.trim();
           
-          // DEBUG: 输出原始值
-          console.log('[Countdown Debug] Raw nextRun:', nextRun);
-          
-          // 如果字符串不以 Z 或 +/- 时区结尾，添加 Z 后缀
+          // 如果字符串不以 Z 或 +/- 时区结尾，添加 Z 后缀确保 UTC 解析
           if (!dateStr.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(dateStr)) {
             dateStr += 'Z';
-            console.log('[Countdown Debug] Added Z suffix:', dateStr);
           }
           
           target = new Date(dateStr);
-          
-          // DEBUG: 输出解析结果
-          console.log('[Countdown Debug] Parsed target:', target.toISOString(), '| Local:', target.toLocaleString());
-          console.log('[Countdown Debug] Current now:', now.toISOString(), '| Local:', now.toLocaleString());
           
           if (isNaN(target.getTime())) {
             el.textContent = '--';
             return;
           }
         } catch (e) {
-          console.error('Error parsing next_run_at:', e);
           el.textContent = '--';
           return;
         }
         
         const diff = target - now;
-        console.log('[Countdown Debug] Diff (ms):', diff, '| Hours:', (diff / 3600000).toFixed(2));
         
         if (diff <= 0) {
-          el.textContent = 'Running...';
+          el.textContent = '运行中...';
           return;
         }
         
-        const h = Math.floor(diff / 3600000);
-        const m = Math.floor((diff % 3600000) / 60000);
-        const s = Math.floor((diff % 60000) / 1000);
-        el.textContent = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+        // 格式化显示：根据时间长短使用不同格式
+        if (diff < 60000) {
+          // 小于1分钟
+          const s = Math.floor(diff / 1000);
+          el.textContent = `${s}秒后`;
+        } else if (diff < 3600000) {
+          // 小于1小时
+          const m = Math.floor(diff / 60000);
+          const s = Math.floor((diff % 60000) / 1000);
+          el.textContent = `${m}分${s}秒后`;
+        } else if (diff < 86400000) {
+          // 小于24小时
+          const h = Math.floor(diff / 3600000);
+          const m = Math.floor((diff % 3600000) / 60000);
+          el.textContent = `${h}小时${m}分后`;
+        } else {
+          // 超过24小时，显示日期
+          el.textContent = target.toLocaleDateString('zh-CN', {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'});
+        }
       });
       
       // 智能检测Running状态，主动轮询获取新数据
@@ -6905,19 +7005,17 @@ def _schedules_html() -> str:
         const scheduleId = el.dataset.scheduleId;
         if (!scheduleId) return;
         
-        const isRunning = el.textContent === 'Running...';
+        const isRunning = el.textContent === '运行中...';
         const lastPolled = parseInt(el.dataset.lastPolled || '0');
         const now = Date.now();
         
-        // 在Running状态时，每5秒轮询一次后端
+        // 在运行中状态时，每5秒轮询一次后端
         if (isRunning && (now - lastPolled > 5000)) {
           el.dataset.lastPolled = now.toString();
-          console.log(`Schedule ${scheduleId} is running, polling for update...`);
           
           // 异步获取新数据
           refreshSingleSchedule(parseInt(scheduleId)).then(updated => {
             if (updated) {
-              console.log(`Schedule ${scheduleId} updated, refreshing chart...`);
               loadChartData(parseInt(scheduleId));
             }
           });

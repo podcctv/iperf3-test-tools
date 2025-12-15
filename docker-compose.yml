@@ -10,6 +10,12 @@ services:
     volumes:
       - db_data:/var/lib/postgresql/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U iperf -d iperf_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   master-api:
     build: ./master-api
@@ -27,8 +33,15 @@ services:
       - "${MASTER_API_PORT:-9000}:8000"
       - "${MASTER_WEB_PORT:-9100}:8000"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     volumes:
       - ./agent_configs.json:/app/agent_configs.json
       - ./data:/app/data
