@@ -40,11 +40,16 @@ def redeploy_agent(config: AgentConfigRead) -> str:
         "command -v docker >/dev/null 2>&1 || curl -fsSL https://get.docker.com | sh; "
         f"docker rm -f {shlex.quote(config.container_name)} || true; "
         f"docker pull {shlex.quote(config.image)} || true; "
+        "mkdir -p /var/lib/iperf-agent/data; "
         f"docker run -d --name {shlex.quote(config.container_name)} "
         "--restart=always "
         f"-p {config.agent_port}:8000 "
         f"-p {config.iperf_port}:{config.iperf_port}/tcp "
         f"-p {config.iperf_port}:{config.iperf_port}/udp "
+        "-v /var/run/docker.sock:/var/run/docker.sock "
+        "-v /var/lib/iperf-agent/data:/app/data "
+        f"-e IPERF_PORT={config.iperf_port} "
+        f"-e CONTAINER_NAME={shlex.quote(config.container_name)} "
         f"{shlex.quote(config.image)}"
     )
 

@@ -452,12 +452,20 @@ start_agent() {
 
   log "Launching local agent container (host port ${AGENT_PORT} -> container port ${AGENT_LISTEN_PORT}; iperf port ${IPERF_PORT})..."
   docker rm -f iperf-agent >/dev/null 2>&1 || true
+  
+  # Create data directory for agent persistence
+  mkdir -p /var/lib/iperf-agent/data
+  
   docker run -d --name iperf-agent \
     --restart=always \
     -p "${AGENT_PORT}:${AGENT_LISTEN_PORT}" \
     -p "${IPERF_PORT}:${IPERF_PORT}/tcp" \
     -p "${IPERF_PORT}:${IPERF_PORT}/udp" \
+    -v /var/run/docker.sock:/var/run/docker.sock \
+    -v /var/lib/iperf-agent/data:/app/data \
     -e "AGENT_API_PORT=${AGENT_LISTEN_PORT}" \
+    -e "IPERF_PORT=${IPERF_PORT}" \
+    -e "CONTAINER_NAME=iperf-agent" \
     "${AGENT_IMAGE}"
 
   if [ "${START_IPERF_SERVER}" = true ]; then
