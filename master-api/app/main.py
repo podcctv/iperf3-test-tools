@@ -467,6 +467,58 @@ app = FastAPI(title="iperf3 master api", lifespan=lifespan)
 agent_store = AgentConfigStore(settings.agent_config_file)
 
 
+# ============================================================================
+# Health Check Endpoint
+# ============================================================================
+
+@app.get("/health")
+async def health_check():
+    """
+    Health check endpoint for container orchestration and monitoring.
+    Returns 200 OK if the service is healthy.
+    """
+    from datetime import datetime, timezone
+    
+    health_status = {
+        "status": "healthy",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "version": EXPECTED_AGENT_VERSION,
+        "checks": {}
+    }
+    
+    # Check database connectivity
+    try:
+        db = next(get_db())
+        db.execute(text("SELECT 1"))
+        health_status["checks"]["database"] = "ok"
+    except Exception as e:
+        health_status["status"] = "degraded"
+        health_status["checks"]["database"] = f"error: {str(e)[:100]}"
+    
+    # Check scheduler status
+    health_status["checks"]["scheduler"] = "running" if scheduler.running else "stopped"
+    
+    return health_status
+
+
+@app.get("/health/live")
+async def liveness_probe():
+    """Kubernetes liveness probe - returns 200 if app is running."""
+    return {"status": "alive"}
+
+
+@app.get("/health/ready")
+async def readiness_probe():
+    """Kubernetes readiness probe - returns 200 if app can handle traffic."""
+    try:
+        db = next(get_db())
+        db.execute(text("SELECT 1"))
+        return {"status": "ready"}
+    except Exception:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=503, content={"status": "not_ready"})
+
+
 def _agent_config_from_node(node: Node) -> AgentConfigCreate:
     return AgentConfigCreate(
         name=node.name,
