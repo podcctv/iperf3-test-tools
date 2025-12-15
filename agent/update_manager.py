@@ -1,17 +1,20 @@
 """
-Agent Auto-Update Manager
+Agent Auto-Update Manager (Watchdog Mode)
 
-Handles self-updating of agent containers with:
+Handles update signaling for agent containers:
 - Multi-master version coordination (only upgrade, never downgrade)
-- Config preservation (ports, reverse mode settings)
-- Docker-based container replacement
+- Config preservation via persistent data volume
+- Signals updates via file to host Watchdog script
+
+The actual Docker operations are performed by the Watchdog script
+running on the host, not by the container itself (for security).
 """
 
 import json
 import os
-import subprocess
 import threading
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Dict, Any
 import re
@@ -49,11 +52,14 @@ def compare_versions(v1: str, v2: str) -> int:
 
 
 class UpdateManager:
-    """Manages agent self-update process"""
+    """Manages agent update signaling via Watchdog"""
     
     def __init__(self, current_version: str):
         self.current_version = current_version
-        self.config_path = Path("/app/config.json")
+        self.data_dir = Path("/app/data")
+        self.config_path = self.data_dir / "config.json"
+        self.update_request_path = self.data_dir / "update_request.json"
+        self.update_result_path = self.data_dir / "update_result.json"
         self.update_lock = threading.Lock()
         self.is_updating = False
         self.last_update_check = 0
@@ -61,6 +67,9 @@ class UpdateManager:
         
         # Track requested versions from different masters
         self.master_versions: Dict[str, str] = {}
+        
+        # Ensure data directory exists
+        self.data_dir.mkdir(parents=True, exist_ok=True)
         
     def get_current_config(self) -> Dict[str, Any]:
         """Get current agent configuration for preservation"""
@@ -88,7 +97,7 @@ class UpdateManager:
     def save_config(self, config: Dict[str, Any]) -> bool:
         """Save configuration to file for persistence across updates"""
         try:
-            self.config_path.parent.mkdir(parents=True, exist_ok=True)
+            self.data_dir.mkdir(parents=True, exist_ok=True)
             self.config_path.write_text(json.dumps(config, indent=2))
             return True
         except Exception as e:
@@ -121,8 +130,8 @@ class UpdateManager:
         if now - self.last_update_check < self.update_cooldown:
             return False, "cooldown_active"
         
-        # Check if already updating
-        if self.is_updating:
+        # Check if already updating (request pending)
+        if self.is_updating or self.update_request_path.exists():
             return False, "update_in_progress"
         
         # Compare versions - only upgrade, never downgrade
@@ -137,45 +146,28 @@ class UpdateManager:
         
         return True, "upgrade_available"
     
-    def check_docker_available(self) -> bool:
-        """Check if Docker is accessible from within the container"""
-        try:
-            result = subprocess.run(
-                ["docker", "version"],
-                capture_output=True,
-                timeout=5
-            )
-            return result.returncode == 0
-        except Exception:
-            return False
+    def check_update_result(self) -> Optional[Dict[str, Any]]:
+        """Check if watchdog completed an update"""
+        if self.update_result_path.exists():
+            try:
+                result = json.loads(self.update_result_path.read_text())
+                # Clear the result file after reading
+                self.update_result_path.unlink()
+                return result
+            except Exception as e:
+                print(f"[UPDATE] Failed to read update result: {e}", flush=True)
+        return None
     
-    def pull_image(self, image: str) -> bool:
-        """Pull the new agent image"""
-        print(f"[UPDATE] Pulling image: {image}", flush=True)
-        try:
-            result = subprocess.run(
-                ["docker", "pull", image],
-                capture_output=True,
-                text=True,
-                timeout=300
-            )
-            if result.returncode != 0:
-                print(f"[UPDATE] Pull failed: {result.stderr}", flush=True)
-                return False
-            return True
-        except Exception as e:
-            print(f"[UPDATE] Pull exception: {e}", flush=True)
-            return False
-    
-    def execute_update(self, target_version: str, image: str) -> Dict[str, Any]:
+    def request_update(self, target_version: str, image: str) -> Dict[str, Any]:
         """
-        Execute the self-update process.
+        Request an update by writing a request file for the Watchdog.
         
-        This creates an update script that will:
-        1. Save current config
-        2. Pull new image
+        The Watchdog script running on the host will:
+        1. Read this request file
+        2. Pull/build the new image
         3. Stop current container
-        4. Start new container with same config
+        4. Start new container with preserved config
+        5. Write result to update_result.json
         """
         with self.update_lock:
             if self.is_updating:
@@ -189,68 +181,28 @@ class UpdateManager:
             self.last_update_check = time.time()
         
         try:
-            # Save current config
+            # Save current config for Watchdog to read
             config = self.get_current_config()
             if not self.save_config(config):
                 self.is_updating = False
                 return {"status": "failed", "reason": "config_save_failed"}
             
-            # Check Docker access
-            if not self.check_docker_available():
-                self.is_updating = False
-                return {"status": "failed", "reason": "docker_not_available"}
+            # Write update request file for Watchdog
+            request = {
+                "requested_at": datetime.now(timezone.utc).isoformat(),
+                "target_version": target_version,
+                "target_image": image,
+                "current_version": self.current_version,
+                "config": config
+            }
             
-            # Pull new image
-            if not self.pull_image(image):
-                self.is_updating = False
-                return {"status": "failed", "reason": "image_pull_failed"}
+            self.update_request_path.write_text(json.dumps(request, indent=2))
             
-            # Get current container name
-            container_name = os.environ.get("CONTAINER_NAME", "iperf-agent")
-            
-            # Create update script that will be executed after API response
-            update_script = f"""#!/bin/bash
-set -e
-sleep 2  # Give time for API response
-echo "[UPDATE] Stopping current container..."
-docker stop {container_name} || true
-docker rm {container_name} || true
-
-echo "[UPDATE] Starting new container..."
-docker run -d --name {container_name} \\
-  --restart=always \\
-  -v /var/run/docker.sock:/var/run/docker.sock \\
-  -v /app/config.json:/app/config.json \\
-  -v /app/data:/app/data \\
-  -p {config['agent_port']}:8000 \\
-  -p {config['iperf_port']}:{config['iperf_port']}/tcp \\
-  -p {config['iperf_port']}:{config['iperf_port']}/udp \\
-  -e AGENT_MODE={config['agent_mode']} \\
-  -e MASTER_URL={config['master_url']} \\
-  -e NODE_NAME={config['node_name']} \\
-  -e IPERF_PORT={config['iperf_port']} \\
-  -e POLL_INTERVAL={config['poll_interval']} \\
-  -e CONTAINER_NAME={container_name} \\
-  {image}
-
-echo "[UPDATE] Update complete"
-"""
-            
-            # Write update script
-            script_path = Path("/tmp/agent_update.sh")
-            script_path.write_text(update_script)
-            script_path.chmod(0o755)
-            
-            # Execute update script in background
-            subprocess.Popen(
-                ["/bin/bash", str(script_path)],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                start_new_session=True
-            )
+            print(f"[UPDATE] Update request written for Watchdog: {self.current_version} -> {target_version}", flush=True)
             
             return {
-                "status": "updating",
+                "status": "requested",
+                "message": "Update request sent to Watchdog",
                 "current_version": self.current_version,
                 "target_version": target_version,
                 "config_preserved": config
@@ -259,6 +211,11 @@ echo "[UPDATE] Update complete"
         except Exception as e:
             self.is_updating = False
             return {"status": "failed", "reason": str(e)}
+    
+    # Alias for backward compatibility
+    def execute_update(self, target_version: str, image: str) -> Dict[str, Any]:
+        """Alias for request_update (backward compatible)"""
+        return self.request_update(target_version, image)
 
 
 # Global update manager instance (initialized when imported)

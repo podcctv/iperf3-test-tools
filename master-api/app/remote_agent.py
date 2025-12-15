@@ -36,6 +36,8 @@ def _run_ssh(target: str, command: str, ssh_port: Optional[int] = None, timeout:
 
 
 def redeploy_agent(config: AgentConfigRead) -> str:
+    # Note: Docker socket is NOT mounted for security
+    # Updates are handled by the Watchdog script on the host
     remote_cmd = (
         "command -v docker >/dev/null 2>&1 || curl -fsSL https://get.docker.com | sh; "
         f"docker rm -f {shlex.quote(config.container_name)} || true; "
@@ -46,7 +48,6 @@ def redeploy_agent(config: AgentConfigRead) -> str:
         f"-p {config.agent_port}:8000 "
         f"-p {config.iperf_port}:{config.iperf_port}/tcp "
         f"-p {config.iperf_port}:{config.iperf_port}/udp "
-        "-v /var/run/docker.sock:/var/run/docker.sock "
         "-v /var/lib/iperf-agent/data:/app/data "
         f"-e IPERF_PORT={config.iperf_port} "
         f"-e CONTAINER_NAME={shlex.quote(config.container_name)} "

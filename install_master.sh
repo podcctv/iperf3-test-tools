@@ -547,15 +547,16 @@ start_agent() {
   log "Launching local agent container (ports ${AGENT_PORT} and ${IPERF_PORT})..."
   docker rm -f iperf-agent >/dev/null 2>&1 || true
   
-  # Create data directory for agent persistence
+  # Create data directory for agent persistence and Watchdog communication
   mkdir -p /var/lib/iperf-agent/data
   
+  # Note: Docker socket is NOT mounted for security
+  # Updates are handled by the Watchdog script on the host
   docker run -d --name iperf-agent \
     --restart=always \
     -p "${AGENT_PORT}:8000" \
     -p "${IPERF_PORT}:${IPERF_PORT}/tcp" \
     -p "${IPERF_PORT}:${IPERF_PORT}/udp" \
-    -v /var/run/docker.sock:/var/run/docker.sock \
     -v /var/lib/iperf-agent/data:/app/data \
     -e "IPERF_PORT=${IPERF_PORT}" \
     -e "CONTAINER_NAME=iperf-agent" \

@@ -18,10 +18,7 @@ RUN apt-get update \
   && apt-get install -y iperf3 curl jq bc netcat-openbsd dnsutils iproute2 mtr-tiny traceroute \
   && rm -rf /var/lib/apt/lists/*
 
-# Install Docker CLI for self-update capability
-# Note: This only installs the CLI, not the daemon
-RUN curl -fsSL https://get.docker.com | sh || \
-  (apt-get update && apt-get install -y docker.io && rm -rf /var/lib/apt/lists/*)
+# Note: Docker CLI is NOT installed - updates are handled by host Watchdog script
 
 WORKDIR /app
 

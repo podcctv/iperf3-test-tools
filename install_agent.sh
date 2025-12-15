@@ -431,6 +431,47 @@ wait_for_local_agent() {
   return 1
 }
 
+install_watchdog() {
+  log "Installing Watchdog for auto-updates..."
+  
+  local watchdog_src="${REPO_ROOT}/agent-watchdog.sh"
+  local watchdog_dest="/usr/local/bin/iperf-agent-watchdog.sh"
+  local watchdog_config="/etc/iperf-agent-watchdog.conf"
+  local cron_file="/etc/cron.d/iperf-agent-watchdog"
+  
+  # Install watchdog script
+  if [ -f "$watchdog_src" ]; then
+    cp "$watchdog_src" "$watchdog_dest"
+    chmod +x "$watchdog_dest"
+    log "Watchdog script installed to $watchdog_dest"
+  else
+    log "Warning: Watchdog script not found at $watchdog_src, skipping"
+    return 0
+  fi
+  
+  # Create config file
+  cat > "$watchdog_config" <<EOF
+# iperf-agent-watchdog configuration
+AGENT_DATA_DIR="/var/lib/iperf-agent/data"
+AGENT_CONTAINER_NAME="iperf-agent"
+AGENT_IMAGE="iperf-agent:latest"
+REPO_DIR="${REPO_ROOT}"
+EOF
+
+  # Install cron job to run every minute
+  cat > "$cron_file" <<EOF
+# iperf-agent watchdog - check for updates every minute
+* * * * * root /usr/local/bin/iperf-agent-watchdog.sh >> /var/log/iperf-agent-watchdog.log 2>&1
+EOF
+
+  chmod 644 "$cron_file"
+  
+  # Ensure log file exists
+  touch /var/log/iperf-agent-watchdog.log
+  
+  log "Watchdog cron job installed (runs every minute)"
+}
+
 start_agent() {
   if [ ! -d "${REPO_ROOT}/agent" ]; then
     log "Agent directory missing at ${REPO_ROOT}/agent; download may have failed."
@@ -453,20 +494,24 @@ start_agent() {
   log "Launching local agent container (host port ${AGENT_PORT} -> container port ${AGENT_LISTEN_PORT}; iperf port ${IPERF_PORT})..."
   docker rm -f iperf-agent >/dev/null 2>&1 || true
   
-  # Create data directory for agent persistence
+  # Create data directory for agent persistence and Watchdog communication
   mkdir -p /var/lib/iperf-agent/data
   
+  # Note: Docker socket is NOT mounted for security
+  # Updates are handled by the Watchdog script on the host
   docker run -d --name iperf-agent \
     --restart=always \
     -p "${AGENT_PORT}:${AGENT_LISTEN_PORT}" \
     -p "${IPERF_PORT}:${IPERF_PORT}/tcp" \
     -p "${IPERF_PORT}:${IPERF_PORT}/udp" \
-    -v /var/run/docker.sock:/var/run/docker.sock \
     -v /var/lib/iperf-agent/data:/app/data \
     -e "AGENT_API_PORT=${AGENT_LISTEN_PORT}" \
     -e "IPERF_PORT=${IPERF_PORT}" \
     -e "CONTAINER_NAME=iperf-agent" \
     "${AGENT_IMAGE}"
+  
+  # Install Watchdog for auto-updates
+  install_watchdog
 
   if [ "${START_IPERF_SERVER}" = true ]; then
     if wait_for_local_agent; then
