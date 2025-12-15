@@ -149,6 +149,19 @@ def _ensure_whitelist_sync_columns() -> None:
                 connection.exec_driver_sql(
                     "ALTER TABLE nodes ADD COLUMN is_internal BOOLEAN DEFAULT 0"
                 )
+            # Auto-update status columns
+            if "update_status" not in column_names:
+                connection.exec_driver_sql(
+                    "ALTER TABLE nodes ADD COLUMN update_status VARCHAR DEFAULT 'none'"
+                )
+            if "update_message" not in column_names:
+                connection.exec_driver_sql(
+                    "ALTER TABLE nodes ADD COLUMN update_message VARCHAR"
+                )
+            if "update_at" not in column_names:
+                connection.exec_driver_sql(
+                    "ALTER TABLE nodes ADD COLUMN update_at DATETIME"
+                )
         elif dialect == "postgresql":
             result = connection.execute(
                 text(
@@ -166,6 +179,13 @@ def _ensure_whitelist_sync_columns() -> None:
                 connection.execute(text("ALTER TABLE nodes ADD COLUMN whitelist_sync_at TIMESTAMPTZ"))
             if "is_internal" not in column_names:
                 connection.execute(text("ALTER TABLE nodes ADD COLUMN is_internal BOOLEAN DEFAULT FALSE"))
+            # Auto-update status columns
+            if "update_status" not in column_names:
+                connection.execute(text("ALTER TABLE nodes ADD COLUMN update_status VARCHAR DEFAULT 'none'"))
+            if "update_message" not in column_names:
+                connection.execute(text("ALTER TABLE nodes ADD COLUMN update_message VARCHAR"))
+            if "update_at" not in column_names:
+                connection.execute(text("ALTER TABLE nodes ADD COLUMN update_at TIMESTAMPTZ"))
         
         connection.commit()
 
@@ -12739,7 +12759,16 @@ async def agent_register(
                 return 1 if t1 > t2 else (-1 if t1 < t2 else 0)
             
             comparison = _compare_versions(EXPECTED_AGENT_VERSION, agent_version)
-            if comparison > 0:
+            
+            # Check if this agent was pending update and now has the correct version
+            if comparison == 0 and node.update_status == "pending":
+                # Agent successfully updated!
+                node.update_status = "updated"
+                node.update_message = f"Auto-updated to v{agent_version}"
+                node.update_at = datetime.now(timezone.utc)
+                db.commit()
+                print(f"[REGISTER] Agent {node_name} successfully auto-updated to v{agent_version}", flush=True)
+            elif comparison > 0:
                 update_available = True
                 update_info = {
                     "target_version": EXPECTED_AGENT_VERSION,
@@ -12747,6 +12776,12 @@ async def agent_register(
                     "message": f"Agent update available: {agent_version} -> {EXPECTED_AGENT_VERSION}"
                 }
                 print(f"[REGISTER] Update available for {node_name}: {agent_version} -> {EXPECTED_AGENT_VERSION}", flush=True)
+                
+                # Record update notification in database
+                node.update_status = "pending"
+                node.update_message = f"Update to v{EXPECTED_AGENT_VERSION} notified"
+                node.update_at = datetime.now(timezone.utc)
+                db.commit()
         except Exception as e:
             print(f"[REGISTER] Version check error: {e}", flush=True)
     

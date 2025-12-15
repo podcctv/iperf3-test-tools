@@ -24,6 +24,10 @@ class Node(Base):
     whitelist_sync_status = Column(String, default="unknown")  # unknown, synced, failed
     whitelist_sync_message = Column(String, nullable=True)     # Error details or status msg
     whitelist_sync_at = Column(DateTime(timezone=True), nullable=True)
+    # Auto-update status
+    update_status = Column(String, default="none")  # none, updating, updated, failed
+    update_message = Column(String, nullable=True)  # Update details or error message
+    update_at = Column(DateTime(timezone=True), nullable=True)  # Last update timestamp
 
     outgoing_tests = relationship("TestResult", foreign_keys="TestResult.src_node_id", back_populates="src_node")
     incoming_tests = relationship("TestResult", foreign_keys="TestResult.dst_node_id", back_populates="dst_node")

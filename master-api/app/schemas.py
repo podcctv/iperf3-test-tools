@@ -34,6 +34,10 @@ class NodeRead(NodeBase):
     whitelist_sync_status: str | None = "unknown"
     whitelist_sync_message: str | None = None
     whitelist_sync_at: datetime | None = None
+    # Auto-update status
+    update_status: str | None = "none"
+    update_message: str | None = None
+    update_at: datetime | None = None
 
     class Config:
         from_attributes = True
