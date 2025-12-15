@@ -670,6 +670,66 @@ async def get_system_stats(db: Session = Depends(get_db)):
     }
 
 
+@app.post("/api/cleanup")
+async def cleanup_old_data(
+    request: Request,
+    days: int = 30,
+    include_tests: bool = True,
+    include_traces: bool = True,
+    include_audit_logs: bool = False,
+    db: Session = Depends(get_db)
+):
+    """
+    Clean up old data to manage database size (admin only).
+    Deletes test results, trace results, and optionally audit logs older than specified days.
+    """
+    if not auth_manager().is_authenticated(request):
+        raise HTTPException(status_code=401, detail="unauthorized")
+    
+    if days < 7:
+        raise HTTPException(status_code=400, detail="Minimum retention is 7 days")
+    
+    from datetime import datetime, timezone, timedelta
+    from sqlalchemy import delete, func
+    from .models import TestResult, TraceResult, AuditLog
+    
+    cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
+    deleted_counts = {}
+    
+    # Delete old test results
+    if include_tests:
+        result = db.execute(
+            delete(TestResult).where(TestResult.created_at < cutoff_date)
+        )
+        deleted_counts["test_results"] = result.rowcount
+    
+    # Delete old trace results
+    if include_traces:
+        result = db.execute(
+            delete(TraceResult).where(TraceResult.executed_at < cutoff_date)
+        )
+        deleted_counts["trace_results"] = result.rowcount
+    
+    # Delete old audit logs (optional, disabled by default)
+    if include_audit_logs:
+        result = db.execute(
+            delete(AuditLog).where(AuditLog.timestamp < cutoff_date)
+        )
+        deleted_counts["audit_logs"] = result.rowcount
+    
+    db.commit()
+    
+    # Log the cleanup action
+    client_ip = _get_client_ip(request)
+    audit_log(db, "data_cleanup", actor_ip=client_ip, 
+              details={"days": days, "deleted": deleted_counts})
+    
+    return {
+        "status": "ok",
+        "cutoff_date": cutoff_date.isoformat(),
+        "deleted": deleted_counts
+    }
+
 def _agent_config_from_node(node: Node) -> AgentConfigCreate:
     return AgentConfigCreate(
         name=node.name,
