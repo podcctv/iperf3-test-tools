@@ -9302,15 +9302,95 @@ def auth_status(request: Request) -> dict:
     }
 
 
+# ============================================================================
+# Login Rate Limiting
+# ============================================================================
+
+class LoginRateLimiter:
+    """Simple IP-based rate limiter for login attempts."""
+    
+    def __init__(self, max_attempts: int = 5, window_seconds: int = 300):
+        self.max_attempts = max_attempts
+        self.window_seconds = window_seconds
+        self._attempts: Dict[str, list] = {}  # IP -> list of timestamps
+        self._lock = threading.Lock()
+    
+    def _cleanup(self, ip: str, now: float):
+        """Remove expired attempts."""
+        if ip in self._attempts:
+            self._attempts[ip] = [t for t in self._attempts[ip] if now - t < self.window_seconds]
+            if not self._attempts[ip]:
+                del self._attempts[ip]
+    
+    def is_rate_limited(self, ip: str) -> tuple[bool, int]:
+        """
+        Check if IP is rate limited.
+        Returns: (is_limited, seconds_until_reset)
+        """
+        now = time.time()
+        with self._lock:
+            self._cleanup(ip, now)
+            attempts = self._attempts.get(ip, [])
+            if len(attempts) >= self.max_attempts:
+                oldest = min(attempts)
+                seconds_left = int(self.window_seconds - (now - oldest)) + 1
+                return True, seconds_left
+            return False, 0
+    
+    def record_attempt(self, ip: str):
+        """Record a login attempt."""
+        now = time.time()
+        with self._lock:
+            self._cleanup(ip, now)
+            if ip not in self._attempts:
+                self._attempts[ip] = []
+            self._attempts[ip].append(now)
+    
+    def clear(self, ip: str):
+        """Clear attempts for an IP after successful login."""
+        with self._lock:
+            self._attempts.pop(ip, None)
+
+
+import threading
+_login_limiter = LoginRateLimiter(max_attempts=5, window_seconds=300)
+
+
+def _get_client_ip(request: Request) -> str:
+    """Get client IP from request, handling proxies."""
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    real_ip = request.headers.get("x-real-ip")
+    if real_ip:
+        return real_ip
+    return request.client.host if request.client else "unknown"
+
+
 @app.post("/auth/login")
-def login(response: Response, payload: dict = Body(...)) -> dict:
+def login(request: Request, response: Response, payload: dict = Body(...)) -> dict:
+    client_ip = _get_client_ip(request)
+    
+    # Check rate limiting
+    is_limited, wait_seconds = _login_limiter.is_rate_limited(client_ip)
+    if is_limited:
+        raise HTTPException(
+            status_code=429, 
+            detail=f"rate_limited:请等待 {wait_seconds} 秒后重试"
+        )
+    
     raw_password = payload.get("password")
     if raw_password is None or not str(raw_password).strip():
         raise HTTPException(status_code=400, detail="empty_password")
 
+    # Record attempt before checking password
+    _login_limiter.record_attempt(client_ip)
+    
     if not auth_manager().verify_password(raw_password):
         raise HTTPException(status_code=401, detail="invalid_password")
 
+    # Clear rate limit on successful login
+    _login_limiter.clear(client_ip)
     _set_auth_cookie(response, str(raw_password))
     return {"status": "ok"}
 
