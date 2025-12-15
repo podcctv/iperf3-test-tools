@@ -177,3 +177,19 @@ class AsnCache(Base):
     tier = Column(String, nullable=True)  # T1, T2, T3, IX, CDN, ISP
     updated_at = Column(DateTime(timezone=True), server_default=func.now())
 
+
+# ============== Audit Log ==============
+
+class AuditLog(Base):
+    """Audit log for tracking important operations."""
+    __tablename__ = "audit_logs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    timestamp = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    action = Column(String, nullable=False, index=True)  # login, logout, node_create, etc.
+    actor_ip = Column(String, nullable=True)  # Client IP address
+    actor_type = Column(String, default="user")  # user, system, agent
+    resource_type = Column(String, nullable=True)  # node, schedule, config, etc.
+    resource_id = Column(String, nullable=True)  # ID of affected resource
+    details = Column(JSON, nullable=True)  # Additional context
+    success = Column(Boolean, default=True)  # Whether action succeeded

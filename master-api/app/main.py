@@ -529,6 +529,39 @@ def _agent_config_from_node(node: Node) -> AgentConfigCreate:
     )
 
 
+# ============================================================================
+# Audit Logging Helper
+# ============================================================================
+
+from .models import AuditLog
+
+def audit_log(
+    db: Session,
+    action: str,
+    actor_ip: str = None,
+    actor_type: str = "user",
+    resource_type: str = None,
+    resource_id: str = None,
+    details: dict = None,
+    success: bool = True
+):
+    """Record an audit log entry."""
+    try:
+        log_entry = AuditLog(
+            action=action,
+            actor_ip=actor_ip,
+            actor_type=actor_type,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            details=details,
+            success=success
+        )
+        db.add(log_entry)
+        db.commit()
+    except Exception as e:
+        logger.error(f"Failed to write audit log: {e}")
+
+
 class BackboneLatencyMonitor:
     def __init__(self, targets: List[dict], interval_seconds: int = 60) -> None:
         self.targets = targets
@@ -9368,12 +9401,14 @@ def _get_client_ip(request: Request) -> str:
 
 
 @app.post("/auth/login")
-def login(request: Request, response: Response, payload: dict = Body(...)) -> dict:
+def login(request: Request, response: Response, payload: dict = Body(...), db: Session = Depends(get_db)) -> dict:
     client_ip = _get_client_ip(request)
     
     # Check rate limiting
     is_limited, wait_seconds = _login_limiter.is_rate_limited(client_ip)
     if is_limited:
+        audit_log(db, "login_rate_limited", actor_ip=client_ip, success=False,
+                  details={"wait_seconds": wait_seconds})
         raise HTTPException(
             status_code=429, 
             detail=f"rate_limited:请等待 {wait_seconds} 秒后重试"
@@ -9387,10 +9422,12 @@ def login(request: Request, response: Response, payload: dict = Body(...)) -> di
     _login_limiter.record_attempt(client_ip)
     
     if not auth_manager().verify_password(raw_password):
+        audit_log(db, "login_failed", actor_ip=client_ip, success=False)
         raise HTTPException(status_code=401, detail="invalid_password")
 
     # Clear rate limit on successful login
     _login_limiter.clear(client_ip)
+    audit_log(db, "login_success", actor_ip=client_ip, success=True)
     _set_auth_cookie(response, str(raw_password))
     return {"status": "ok"}
 
@@ -9414,6 +9451,53 @@ def logout(response: Response) -> dict:
     response.delete_cookie(settings.dashboard_cookie_name)
     response.delete_cookie("guest_session")  # Also clear guest session
     return {"status": "logged_out"}
+
+
+@app.get("/api/audit-logs")
+def get_audit_logs(
+    request: Request,
+    action: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+    db: Session = Depends(get_db)
+) -> dict:
+    """Get audit logs (admin only)."""
+    if not auth_manager().is_authenticated(request):
+        raise HTTPException(status_code=401, detail="unauthorized")
+    
+    query = select(AuditLog).order_by(AuditLog.timestamp.desc())
+    
+    if action:
+        query = query.where(AuditLog.action == action)
+    
+    query = query.offset(offset).limit(limit)
+    logs = db.scalars(query).all()
+    
+    # Get total count
+    count_query = select(func.count(AuditLog.id))
+    if action:
+        count_query = count_query.where(AuditLog.action == action)
+    total = db.scalar(count_query) or 0
+    
+    return {
+        "logs": [
+            {
+                "id": log.id,
+                "timestamp": log.timestamp.isoformat() if log.timestamp else None,
+                "action": log.action,
+                "actor_ip": log.actor_ip,
+                "actor_type": log.actor_type,
+                "resource_type": log.resource_type,
+                "resource_id": log.resource_id,
+                "details": log.details,
+                "success": log.success
+            }
+            for log in logs
+        ],
+        "total": total,
+        "limit": limit,
+        "offset": offset
+    }
 
 
 @app.post("/auth/change")
