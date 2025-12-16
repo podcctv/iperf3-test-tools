@@ -181,6 +181,88 @@ docker-compose restart master-api
 
 ---
 
+## 🔄 Agent 自动更新 / Auto-Update
+
+Agent 支持自动更新功能，当 Master 版本升级时，Agent 可以自动检测并更新。
+
+### 工作原理
+
+```
+┌────────────┐     注册/心跳      ┌────────────┐
+│   Master   │ ◄────────────────► │   Agent    │
+│  (v1.4.0)  │   update_available │  (v1.3.0)  │
+└────────────┘                    └────────────┘
+                                        │
+                                        ▼ 写入请求
+                              ┌──────────────────┐
+                              │ update_request.  │
+                              │      json        │
+                              └──────────────────┘
+                                        │
+                                        ▼ 每分钟检查
+                              ┌──────────────────┐
+                              │   Watchdog 脚本  │
+                              │  (宿主机 cron)   │
+                              └──────────────────┘
+                                        │
+                                        ▼ 拉取/构建新镜像
+                              ┌──────────────────┐
+                              │  更新后的 Agent  │
+                              │    (v1.4.0)      │
+                              └──────────────────┘
+```
+
+### 一键安装自动更新
+
+在**每台 Agent 服务器**上执行：
+
+```bash
+# 方式1: 远程执行
+curl -sSL https://raw.githubusercontent.com/podcctv/iperf3-test-tools/main/setup-agent-autoupdate.sh | sudo bash
+
+# 方式2: 手动执行
+cd /opt/iperf3-test-tools  # 或你的仓库目录
+sudo bash setup-agent-autoupdate.sh
+```
+
+### 手动安装步骤
+
+如果一键安装失败，可以手动执行：
+
+```bash
+# 1. 创建数据目录
+sudo mkdir -p /var/lib/iperf-agent/data
+
+# 2. 安装 watchdog 脚本
+sudo cp agent-watchdog.sh /usr/local/bin/iperf-agent-watchdog.sh
+sudo chmod +x /usr/local/bin/iperf-agent-watchdog.sh
+
+# 3. 配置 cron (每小时执行)
+echo "0 * * * * root /usr/local/bin/iperf-agent-watchdog.sh >> /var/log/iperf-agent-watchdog.log 2>&1" | sudo tee /etc/cron.d/iperf-agent-watchdog
+
+# 4. 确保容器挂载 data 目录
+docker run -d --name iperf-agent \
+  -v /var/lib/iperf-agent/data:/app/data \
+  ... (其他参数)
+```
+
+### 触发更新
+
+1. 在 Master 端更新 `EXPECTED_AGENT_VERSION` (master-api/app/main.py:57)
+2. 重新部署 Master: `docker compose up -d --build`
+3. Agent 在下次心跳时会收到更新通知
+4. Watchdog 脚本在下一分钟执行更新
+
+### 查看日志
+
+```bash
+# 查看 watchdog 日志
+tail -f /var/log/iperf-agent-watchdog.log
+
+# 查看更新结果
+cat /var/lib/iperf-agent/data/update_result.json
+```
+
 ## 📊 API 端点 / API Endpoints
 
 ### 核心 API
@@ -252,7 +334,13 @@ docker compose exec master-api python -m app.auth --set-password 'YourNewPass' -
 
 ## 📝 版本历史 / Changelog
 
-### v1.2.0 (Latest)
+### v1.4.0 (Latest)
+- ✅ Agent 自动更新 (Watchdog)
+- ✅ Ping 趋势箭头显示
+- ✅ VPS 卡片运营商延迟徽章
+- ✅ 版本同步检测和更新通知
+
+### v1.2.0
 - ✅ Telegram 通知集成
 - ✅ 路由追踪定时任务
 - ✅ ISP/IX 徽章显示

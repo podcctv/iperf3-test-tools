@@ -173,9 +173,10 @@ echo "================ 查询选项 ================"
 echo "9) 查看 iperf-agent 日志"
 echo "10) 查看 master-api 日志"
 echo "================ 其他选项 ================"
-echo "11) 退出"
+echo "11) 配置 Agent 自动更新 (安装 Watchdog)"
+echo "12) 退出"
 echo "=========================================="
-read -rp "请选择 [1-11]：" choice
+read -rp "请选择 [1-12]：" choice
 
 # GHCR.io 镜像地址
 GHCR_MASTER="ghcr.io/podcctv/iperf3-master-api:latest"
@@ -489,6 +490,22 @@ case "$choice" in
         fi
         ;;
     11)
+        # 配置 Agent 自动更新
+        echo ""
+        echo "============================================"
+        echo "      配置 Agent 自动更新 (Watchdog)"
+        echo "============================================"
+        echo ""
+        AUTOUPDATE_SCRIPT="${REPO_DIR}/setup-agent-autoupdate.sh"
+        if [ -f "$AUTOUPDATE_SCRIPT" ]; then
+            bash "$AUTOUPDATE_SCRIPT"
+        else
+            echo "[ERROR] 自动更新安装脚本未找到: $AUTOUPDATE_SCRIPT"
+            echo "[INFO] 请确保仓库已正确克隆"
+            exit 1
+        fi
+        ;;
+    12)
         echo "[INFO] 退出安装程序。"
         exit 0
         ;;
