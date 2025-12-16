@@ -2264,14 +2264,22 @@ def _reverse_mode_poll():
         if resp.ok:
             data = resp.json()
             
-            # Apply whitelist if provided
+            # Apply whitelist if provided - with change detection
             whitelist_ips = data.get("whitelist", [])
             if whitelist_ips:
                 from ip_whitelist import whitelist
-                old_count = len(whitelist.get_all())
-                whitelist.update(whitelist_ips)
-                new_count = len(whitelist.get_all())
-                print(f"[REVERSE] Whitelist: received {len(whitelist_ips)} IPs, applied {new_count} (was {old_count})", flush=True)
+                current_ips = set(whitelist.get_all())
+                new_ips = set(ip.strip() for ip in whitelist_ips if ip.strip())
+                new_ips.add("127.0.0.1")  # Always include localhost
+                new_ips.add("::1")
+                
+                # Only update if there's an actual change
+                if current_ips != new_ips:
+                    old_count = len(current_ips)
+                    whitelist.update(whitelist_ips)
+                    new_count = len(whitelist.get_all())
+                    print(f"[REVERSE] Whitelist updated: {len(whitelist_ips)} IPs received, {new_count} applied (was {old_count})", flush=True)
+                # Silent if no change - reduce log noise
             
             tasks = data.get("tasks", [])
             return tasks
