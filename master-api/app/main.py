@@ -12437,10 +12437,17 @@ async def daily_traffic_stats(db: Session = Depends(get_db)):
     # Helper function to calculate trend
     def calc_carrier_trend(node_id: int, carrier: str, current_ms: float = None):
         """Calculate ping trend: current value vs 24h average for stability."""
+        # Map carrier keys to standard names (database stores CU/CM/CT)
+        carrier_map = {
+            "ZJ_CU": "CU", "ZJ_CM": "CM", "ZJ_CT": "CT",
+            "CU": "CU", "CM": "CM", "CT": "CT",
+        }
+        db_carrier = carrier_map.get(carrier.upper(), carrier.upper())
+        
         cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
         records = db.query(PingHistory).filter(
             PingHistory.node_id == node_id,
-            PingHistory.carrier == carrier.upper(),
+            PingHistory.carrier == db_carrier,
             PingHistory.recorded_at >= cutoff
         ).order_by(PingHistory.recorded_at.desc()).all()
         
