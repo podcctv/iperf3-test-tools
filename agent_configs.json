@@ -1,12 +1,5 @@
 [
   {
-    "name": "日本VPS-S型",
-    "host": "212.135.210.155",
-    "agent_port": 8000,
-    "iperf_port": 43267,
-    "description": ""
-  },
-  {
     "name": "RFC JINX",
     "host": "172.81.111.251",
     "agent_port": 8000,

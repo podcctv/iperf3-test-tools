@@ -10759,20 +10759,92 @@ def update_node(node_id: int, payload: NodeUpdate, db: Session = Depends(get_db)
 
 @app.delete("/nodes/{node_id}")
 def delete_node(node_id: int, db: Session = Depends(get_db)):
+    from .models import TestSchedule, TraceSchedule, TraceResult, PingHistory, ScheduleResult
+    from sqlalchemy import update
+    
     node = db.get(Node, node_id)
     if not node:
         raise HTTPException(status_code=404, detail="node not found")
 
-    related_tests = db.scalars(
-        select(TestResult).where(
+    # First, get test result IDs to delete related ScheduleResult records
+    related_test_ids = db.scalars(
+        select(TestResult.id).where(
             or_(
                 TestResult.src_node_id == node_id,
                 TestResult.dst_node_id == node_id,
             )
         )
     ).all()
-    for test in related_tests:
-        db.delete(test)
+    
+    # Delete ScheduleResult records that reference these test results
+    if related_test_ids:
+        db.execute(
+            ScheduleResult.__table__.delete().where(
+                ScheduleResult.test_result_id.in_(related_test_ids)
+            )
+        )
+    
+    # Delete related TestResult records
+    db.execute(
+        TestResult.__table__.delete().where(
+            or_(
+                TestResult.src_node_id == node_id,
+                TestResult.dst_node_id == node_id,
+            )
+        )
+    )
+    
+    # Delete related TestSchedule records
+    related_schedules = db.scalars(
+        select(TestSchedule).where(
+            or_(
+                TestSchedule.src_node_id == node_id,
+                TestSchedule.dst_node_id == node_id,
+            )
+        )
+    ).all()
+    for sched in related_schedules:
+        # Remove from scheduler
+        try:
+            scheduler.remove_job(f"schedule_{sched.id}")
+        except:
+            pass
+        # Delete related ScheduleResult records for this schedule
+        db.execute(
+            ScheduleResult.__table__.delete().where(ScheduleResult.schedule_id == sched.id)
+        )
+        db.delete(sched)
+    
+    # Delete related TraceSchedule records
+    related_trace_scheds = db.scalars(
+        select(TraceSchedule).where(
+            or_(
+                TraceSchedule.src_node_id == node_id,
+                TraceSchedule.target_node_id == node_id,
+            )
+        )
+    ).all()
+    for ts in related_trace_scheds:
+        # Remove from scheduler
+        try:
+            scheduler.remove_job(f"trace_{ts.id}")
+        except:
+            pass
+        # Unlink trace results before deleting schedule
+        db.execute(
+            update(TraceResult).where(TraceResult.schedule_id == ts.id).values(schedule_id=None)
+        )
+        db.delete(ts)
+    
+    # Delete TraceResult records from this node (src_node_id is NOT NULL, so can't nullify)
+    db.execute(
+        TraceResult.__table__.delete().where(TraceResult.src_node_id == node_id)
+    )
+    
+    # Delete related PingHistory records
+    db.execute(
+        PingHistory.__table__.delete().where(PingHistory.node_id == node_id)
+    )
 
     db.delete(node)
     db.commit()
