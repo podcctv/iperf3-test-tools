@@ -4112,6 +4112,22 @@ def _login_html() -> str:
                          el.title = d.country_code || '';
                          // Save to cache
                          ispCache[node.ip] = { isp: d.isp, country_code: d.country_code };
+                          saveIspCache(ispCache);
+                      }
+                  })
+                  .catch(() => {});
+             }
+          }
+      });
+      
+      // Async fetch ping trends for each node
+      nodes.forEach(node => {
+        updateNodePingTrends(node.id);
+      });
+
+      syncTestPort();
+      syncSuitePort();
+      } finally {
         isRefreshingNodes = false;
       }
     }
