@@ -7780,9 +7780,24 @@ def _schedules_html() -> str:
                           </div>
                         </div>
                         
-                        <!-- ISP Ping Badges with Trend Arrows -->
-                        <div id="vps-ping-${n.node_id}" class="flex flex-wrap gap-1.5 mt-2 pt-2 border-t border-slate-700/30">
-                          <span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-700/40 text-slate-400">检测中...</span>
+                        <!-- ISP Ping Badges -->
+                        <div class="flex flex-wrap gap-1.5 mt-2 pt-2 border-t border-slate-700/30">
+                          ${(n.backbone_latency && n.backbone_latency.length > 0) ? 
+                            n.backbone_latency.map(lat => {
+                              const key = lat.key?.toUpperCase() || 'N/A';
+                              const colorMap = {
+                                'CU': 'bg-red-500/20 border-red-500/40 text-red-300',
+                                'CM': 'bg-blue-500/20 border-blue-500/40 text-blue-300',
+                                'CT': 'bg-green-500/20 border-green-500/40 text-green-300'
+                              };
+                              const color = colorMap[key] || 'bg-slate-700/40 border-slate-600/40 text-slate-300';
+                              return `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono border ${color}">
+                                <span class="font-bold">${key}</span>
+                                <span>${lat.ms}ms</span>
+                              </span>`;
+                            }).join('') 
+                            : '<span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-700/40 text-slate-500">暂无延迟数据</span>'
+                          }
                         </div>
                       </div>
                     `;
@@ -7809,12 +7824,7 @@ def _schedules_html() -> str:
                       })
                       .catch(() => void 0);
                 });
-                
-                // Fetch ping history with trends for each node
-                data.nodes.forEach(n => {
-                    updateNodePingBadges(n.node_id);
-                });
-                
+
                 // Update task counts for each node
                 if (window.schedulesData) {
                     const taskCounts = {};
@@ -11922,10 +11932,22 @@ async def daily_traffic_stats(db: Session = Depends(get_db)):
     
     # Get health status for all nodes
     health_statuses = await health_monitor.get_statuses()
-    status_by_id = {s.id: s.status for s in health_statuses}
+    status_by_id = {s.id: s for s in health_statuses}
     
-    # Initialize traffic counters
-    traffic_by_node = {n.id: {"bytes": 0, "name": n.name, "ip": n.ip, "status": status_by_id.get(n.id, "offline")} for n in nodes}
+    # Initialize traffic counters with backbone latency
+    traffic_by_node = {}
+    for n in nodes:
+        hs = status_by_id.get(n.id)
+        latency_data = []
+        if hs and hs.backbone_latency:
+            latency_data = [{"key": lat.key, "name": lat.name, "ms": lat.latency_ms} for lat in hs.backbone_latency if lat.latency_ms is not None]
+        traffic_by_node[n.id] = {
+            "bytes": 0, 
+            "name": n.name, 
+            "ip": n.ip, 
+            "status": hs.status if hs else "offline",
+            "backbone_latency": latency_data
+        }
     
     # Query schedule results from today only
     # Eager load test_result and schedule to ensure data is available
@@ -12010,7 +12032,8 @@ async def daily_traffic_stats(db: Session = Depends(get_db)):
             "ip": data["ip"],
             "total_bytes": data["bytes"],
             "total_gb": total_gb,
-            "status": data["status"]
+            "status": data["status"],
+            "backbone_latency": data.get("backbone_latency", [])
         })
     
     # Sort by traffic (descending)
