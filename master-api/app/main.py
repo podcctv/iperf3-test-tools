@@ -1098,25 +1098,48 @@ def _summarize_metrics(raw: dict | None, direction_label: str | None = None) -> 
         latency_ms = latency_ms / 1000
 
     # Determine upload/download bits_per_second
-    upload_bps = (sum_sent or {}).get("bits_per_second")
-    download_bps = (sum_received or {}).get("bits_per_second")
+    # Use TARGET NODE perspective (not source/client perspective):
+    # - sum_sent = data sent BY source TO target = target's DOWNLOAD
+    # - sum_received = data sent BY target TO source = target's UPLOAD
+    # This makes the stats meaningful from the destination/server viewpoint
+    download_bps = (sum_sent or {}).get("bits_per_second")  # Source sends → Target downloads
+    upload_bps = (sum_received or {}).get("bits_per_second")  # Source receives → Target uploads
     
     # For UDP tests: iperf3 only provides 'sum' field, not sum_sent/sum_received
-    # Use direction_label to assign correctly
+    # Use direction_label to assign correctly (also swapped for target perspective)
     if not upload_bps and not download_bps and sum_general.get("bits_per_second"):
         general_bps = sum_general.get("bits_per_second")
+        # Direction is from source's perspective, so swap for target
         if direction_label == "upload":
-            upload_bps = general_bps
-        elif direction_label == "download":
+            # Source uploading = Target downloading
             download_bps = general_bps
+        elif direction_label == "download":
+            # Source downloading = Target uploading
+            upload_bps = general_bps
         else:
             # Default to download if no direction specified (backward compat)
             download_bps = general_bps
+
+    # Calculate bytes for traffic badge
+    upload_bytes = (sum_received or {}).get("bytes")  # Target's upload bytes
+    download_bytes = (sum_sent or {}).get("bytes")  # Target's download bytes
+    
+    # Fallback to general sum for UDP
+    if not upload_bytes and not download_bytes and sum_general.get("bytes"):
+        general_bytes = sum_general.get("bytes")
+        if direction_label == "upload":
+            download_bytes = general_bytes
+        elif direction_label == "download":
+            upload_bytes = general_bytes
+        else:
+            download_bytes = general_bytes
 
     return {
         "bits_per_second": bits_per_second,
         "upload_bits_per_second": upload_bps,
         "download_bits_per_second": download_bps,
+        "upload_bytes": upload_bytes,
+        "download_bytes": download_bytes,
         "jitter_ms": jitter_ms,
         "lost_percent": lost_percent,
         "latency_ms": latency_ms,
