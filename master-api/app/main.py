@@ -11169,6 +11169,15 @@ def delete_trace_schedule(schedule_id: int, db: Session = Depends(get_db)):
     except Exception:
         pass
     
+    # Unlink related trace results (set schedule_id to NULL instead of deleting)
+    # This preserves the historical trace data
+    from sqlalchemy import update
+    db.execute(
+        update(TraceResult)
+        .where(TraceResult.schedule_id == schedule_id)
+        .values(schedule_id=None)
+    )
+    
     db.delete(schedule)
     db.commit()
     return {"status": "ok", "message": "Schedule deleted"}
