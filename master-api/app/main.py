@@ -6486,7 +6486,8 @@ def _schedules_html() -> str:
                     </button>
                     <button onclick="runSchedule(${schedule.id})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:emerald-500 transition whitespace-nowrap">立即运行</button>
                     <button onclick="editSchedule(${schedule.id})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:border-sky-500 transition whitespace-nowrap">编辑</button>
-                    <button onclick="shareSchedule(${schedule.id})" class="px-3 py-1 rounded-lg border border-cyan-700 bg-cyan-900/20 text-xs font-semibold text-cyan-300 hover:bg-cyan-900/40 transition whitespace-nowrap" title="分享图表截图">📤 分享</button>
+                    <button onclick="shareSchedule(${schedule.id})" class="px-3 py-1 rounded-lg border border-cyan-700 bg-cyan-900/20 text-xs font-semibold text-cyan-300 hover:bg-cyan-900/40 transition whitespace-nowrap" title="分享图表截图">📷</button>
+                    <button onclick="shareScheduleMarkdown(${schedule.id})" class="px-3 py-1 rounded-lg border border-violet-700 bg-violet-900/20 text-xs font-semibold text-violet-300 hover:bg-violet-900/40 transition whitespace-nowrap" title="复制Markdown信息">📋</button>
                     <button onclick="deleteSchedule(${schedule.id})" class="px-3 py-1 rounded-lg border border-rose-700 bg-rose-900/20 text-xs font-semibold text-rose-300 hover:bg-rose-900/40 transition whitespace-nowrap">删除</button>
                 </div>` : ''}
               </div>
@@ -7766,6 +7767,62 @@ def _schedules_html() -> str:
       }
     }
 
+
+    // Share schedule info as Markdown
+    async function shareScheduleMarkdown(scheduleId) {
+      const schedule = schedules.find(s => s.id === scheduleId);
+      if (!schedule) {
+        alert('找不到任务信息');
+        return;
+      }
+      
+      const srcNode = nodes.find(n => n.id === schedule.src_node_id);
+      const dstNode = nodes.find(n => n.id === schedule.dst_node_id);
+      
+      // Get latest result data
+      let latestStats = '';
+      try {
+        const res = await apiFetch(`/test_results?schedule_id=${scheduleId}&limit=1`);
+        const results = await res.json();
+        if (results && results.length > 0) {
+          const r = results[0];
+          latestStats = `
+| 指标 | 数值 |
+|------|------|
+| 上传速率 | ${r.upload_mbps ? r.upload_mbps.toFixed(2) + ' Mbps' : '--'} |
+| 下载速率 | ${r.download_mbps ? r.download_mbps.toFixed(2) + ' Mbps' : '--'} |
+| 执行时间 | ${new Date(r.created_at).toLocaleString()} |`;
+        }
+      } catch (e) { console.error(e); }
+      
+      const markdown = `## 📊 ${schedule.name}
+
+**测试配置**
+- 源节点: ${srcNode?.name || 'Unknown'} (${srcNode?.ip || '--'})
+- 目标节点: ${dstNode?.name || 'Unknown'} (${dstNode?.ip || '--'})
+- 协议: ${schedule.protocol?.toUpperCase() || 'TCP'}
+- 时长: ${schedule.duration || 10} 秒
+- 周期: ${schedule.cron_expression || '每' + Math.floor((schedule.interval_seconds || 600) / 60) + '分钟'}
+- 状态: ${schedule.enabled ? '✅ 运行中' : '⏸️ 已暂停'}
+${latestStats}
+
+---
+*Generated at ${new Date().toLocaleString()}*`;
+
+      try {
+        await navigator.clipboard.writeText(markdown);
+        alert('✅ Markdown 信息已复制到剪贴板');
+      } catch (e) {
+        // Fallback for older browsers
+        const textarea = document.createElement('textarea');
+        textarea.value = markdown;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        alert('✅ Markdown 信息已复制到剪贴板');
+      }
+    }
 
     // 初始化
     (async () => {
