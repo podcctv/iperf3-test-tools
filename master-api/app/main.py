@@ -5208,7 +5208,7 @@ def _login_html() -> str:
         .join('');
     }
     
-    // Async fetch and update ping trends for a node
+    // Async fetch and update ping trends for a node with smooth animation
     async function updateNodePingTrends(nodeId) {
       try {
         const res = await fetch(`/api/ping/history/${nodeId}`);
@@ -5216,14 +5216,39 @@ def _login_html() -> str:
         
         if (data.status !== 'ok' || !data.trends) return;
         
-        // Update each carrier trend arrow
+        // Update each carrier trend arrow with smooth transition
         Object.entries(data.trends).forEach(([carrier, trend]) => {
           const trendEl = document.getElementById(`trend-${nodeId}-${carrier}`);
           if (trendEl && trend) {
-            trendEl.textContent = trend.symbol || '→';
-            trendEl.style.color = trend.color || '#94a3b8';
+            const newSymbol = trend.symbol || '→';
+            const newColor = trend.color || '#94a3b8';
+            const oldSymbol = trendEl.textContent;
+            
+            // Only animate if value changed
+            if (oldSymbol !== newSymbol || trendEl.style.color !== newColor) {
+              // Add transition style for smooth color change
+              trendEl.style.transition = 'all 0.3s ease-out';
+              
+              // Subtle pulse animation for updates
+              trendEl.animate([
+                { opacity: 1, transform: 'scale(1)' },
+                { opacity: 0.5, transform: 'scale(0.8)' },
+                { opacity: 1, transform: 'scale(1.1)' },
+                { opacity: 1, transform: 'scale(1)' }
+              ], { duration: 400, easing: 'ease-out' });
+              
+              // Update content with slight delay for smoother effect
+              setTimeout(() => {
+                trendEl.textContent = newSymbol;
+                trendEl.style.color = newColor;
+              }, 150);
+            }
+            
+            // Build rich tooltip
             const diffText = (trend.diff > 0 ? '+' : '') + (trend.diff || 0) + 'ms';
-            trendEl.title = `趋势: ${diffText}`;
+            const avgText = trend.avg_24h ? ` (24h平均: ${trend.avg_24h}ms)` : '';
+            const pctText = trend.pct ? ` ${trend.pct > 0 ? '+' : ''}${trend.pct}%` : '';
+            trendEl.title = `趋势: ${diffText}${pctText}${avgText}`;
           }
         });
       } catch (e) {
