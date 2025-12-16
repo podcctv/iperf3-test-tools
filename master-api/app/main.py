@@ -7671,7 +7671,12 @@ def _schedules_html() -> str:
         }
 
         // 2. Fetch Schedule-specific traffic stats and update badges
-        const scheduleStatsRes = await fetch('/api/daily_schedule_traffic_stats');
+        // Use chart date if available, otherwise today
+        const chartDate = window.chartCurrentDate || new Date().toISOString().slice(0, 10);
+        const isToday = chartDate === new Date().toISOString().slice(0, 10);
+        const dateLabel = isToday ? '今日' : chartDate.slice(5); // MM-DD format
+        
+        const scheduleStatsRes = await fetch(`/api/daily_schedule_traffic_stats?date=${chartDate}`);
         const scheduleStats = await scheduleStatsRes.json();
         
         if (scheduleStats.status === 'ok') {
@@ -7693,10 +7698,10 @@ def _schedules_html() -> str:
                         } else {
                             displayValue = bytes + 'B';
                         }
-                        badgeEl.textContent = `今日: ${displayValue}`;
+                        badgeEl.textContent = `${dateLabel}: ${displayValue}`;
                         badgeEl.style.display = 'inline-block';
                     } else {
-                        badgeEl.textContent = '今日: 0';
+                        badgeEl.textContent = `${dateLabel}: 0`;
                         badgeEl.style.display = 'inline-block';
                     }
                 }
@@ -11595,6 +11600,66 @@ async def _sync_to_single_agent(
             
         return False
 
+
+
+@app.get("/api/daily_schedule_traffic_stats")
+async def daily_schedule_traffic_stats(
+    date: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Get daily traffic statistics per schedule.
+    Traffic is calculated for the specified date or today.
+    
+    Args:
+        date: Optional date string in YYYY-MM-DD format. Defaults to today.
+    
+    Returns:
+        stats: dict mapping schedule_id to total_bytes for that day
+    """
+    from sqlalchemy import func as sqla_func
+    
+    # Use UTC+8 (China/Hong Kong time) for daily reset
+    utc_plus_8 = timezone(timedelta(hours=8))
+    now = datetime.now(utc_plus_8)
+    
+    # Parse date parameter or use today
+    if date:
+        try:
+            target_date = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=utc_plus_8)
+        except ValueError:
+            return {"status": "error", "message": "Invalid date format. Use YYYY-MM-DD"}
+    else:
+        target_date = now
+    
+    day_start = target_date.replace(hour=0, minute=0, second=0, microsecond=0)
+    day_end = day_start + timedelta(days=1)
+    
+    # Optimized query: use SQL aggregation instead of Python loops
+    # Sum bytes_transferred from ScheduleResult directly
+    results = db.execute(
+        select(
+            ScheduleResult.schedule_id,
+            sqla_func.sum(ScheduleResult.bytes_transferred).label("total_bytes")
+        )
+        .where(ScheduleResult.executed_at >= day_start)
+        .where(ScheduleResult.executed_at < day_end)
+        .where(ScheduleResult.status == "success")
+        .group_by(ScheduleResult.schedule_id)
+    ).all()
+    
+    # Build stats dict
+    stats = {}
+    for row in results:
+        schedule_id = row[0]
+        total_bytes = row[1] or 0
+        stats[schedule_id] = total_bytes
+    
+    return {
+        "status": "ok",
+        "date": day_start.strftime("%Y-%m-%d"),
+        "stats": stats
+    }
 
 
 @app.get("/api/daily_traffic_stats")
