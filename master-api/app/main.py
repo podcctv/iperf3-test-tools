@@ -2673,7 +2673,7 @@ def _login_html() -> str:
       const metaSpan = document.getElementById('traceroute-meta');
       
       const nodeId = nodeSelect?.value;
-      const target = targetInput?.value?.trim();
+      let target = targetInput?.value?.trim();
       
       if (!nodeId) {
         alert('请选择源节点');
@@ -2683,6 +2683,16 @@ def _login_html() -> str:
         alert('请输入目标地址');
         return;
       }
+      
+      // Strip protocol and path from URLs - traceroute only needs hostname/IP
+      try {
+        if (target.includes('://')) {
+          const url = new URL(target);
+          target = url.hostname;
+        } else if (target.includes('/')) {
+          target = target.split('/')[0];
+        }
+      } catch(e) { /* Not a valid URL, use as-is */ }
       
       // Update UI for loading state
       startBtn.disabled = true;
@@ -9900,6 +9910,15 @@ def _trace_html() -> str:
         targetAddress = targetOpt.dataset.ip;  // Also store IP for display
       } else {
         targetAddress = document.getElementById('sched-target').value.trim();
+        // Strip protocol and path from URLs - traceroute only needs hostname/IP
+        try {
+          if (targetAddress.includes('://')) {
+            const url = new URL(targetAddress);
+            targetAddress = url.hostname;
+          } else if (targetAddress.includes('/')) {
+            targetAddress = targetAddress.split('/')[0];
+          }
+        } catch(e) { /* Not a valid URL, use as-is */ }
         if (!targetAddress) { alert('请输入目标地址'); return; }
       }
       
