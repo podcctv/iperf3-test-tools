@@ -415,6 +415,15 @@ async def lifespan(app):
         print(f">>> FAILED TO LOAD SCHEDULES: {e} <<<", flush=True)
         logger.error(f"Failed to load schedules: {e}")
     
+    # Load trace schedules
+    try:
+        _load_trace_schedules_on_startup()
+        print(">>> TRACE SCHEDULES LOADED <<<", flush=True)
+        logger.info("Trace schedules loaded")
+    except Exception as e:
+        print(f">>> FAILED TO LOAD TRACE SCHEDULES: {e} <<<", flush=True)
+        logger.error(f"Failed to load trace schedules: {e}")
+    
     # Add daily ASN sync job (PeeringDB Tier classification)
     def _run_asn_sync():
         """Sync ASN data from PeeringDB."""
@@ -11414,6 +11423,28 @@ def _register_trace_schedule_job(schedule: TraceSchedule):
         next_run_time=datetime.now(timezone.utc) + timedelta(seconds=30),  # First run 30s after registration
     )
     logger.info(f"Registered trace schedule job: {job_id}, interval={schedule.interval_seconds}s")
+
+
+def _load_trace_schedules_on_startup():
+    """Load all enabled trace schedules into APScheduler on startup."""
+    db = SessionLocal()
+    try:
+        schedules = db.scalars(
+            select(TraceSchedule).where(TraceSchedule.enabled == True)
+        ).all()
+        
+        loaded_count = 0
+        for schedule in schedules:
+            try:
+                _register_trace_schedule_job(schedule)
+                loaded_count += 1
+                logger.info(f"Loaded trace schedule {schedule.id}: {schedule.name}, interval={schedule.interval_seconds}s")
+            except Exception as e:
+                logger.error(f"Failed to load trace schedule {schedule.id}: {e}")
+        
+        logger.info(f"Loaded {loaded_count} trace schedules on startup")
+    finally:
+        db.close()
 
 
 async def _send_telegram_alert(title: str, message: str) -> bool:
