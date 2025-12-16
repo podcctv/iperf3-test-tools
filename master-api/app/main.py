@@ -2001,6 +2001,57 @@ def _login_html() -> str:
       background: linear-gradient(135deg, #dc2626, #b91c1c);
       box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
     }
+    
+    /* Sparkline Popover */
+    .sparkline-popover {
+      position: fixed;
+      z-index: 9999;
+      background: linear-gradient(135deg, rgba(15, 23, 42, 0.98), rgba(30, 41, 59, 0.98));
+      border: 1px solid rgba(100, 116, 139, 0.3);
+      border-radius: 12px;
+      padding: 12px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.05) inset;
+      backdrop-filter: blur(12px);
+      pointer-events: none;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+    .sparkline-popover.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .sparkline-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+      font-size: 11px;
+      color: #94a3b8;
+    }
+    .sparkline-carrier {
+      font-weight: 700;
+      font-size: 12px;
+    }
+    .sparkline-carrier.cu { color: #f87171; }
+    .sparkline-carrier.cm { color: #60a5fa; }
+    .sparkline-carrier.ct { color: #4ade80; }
+    .sparkline-stats {
+      display: flex;
+      gap: 12px;
+      margin-top: 8px;
+      font-size: 10px;
+      color: #64748b;
+    }
+    .sparkline-stats span {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .sparkline-stats .current { color: #22d3ee; font-weight: 600; }
+    .sparkline-stats .avg { color: #a78bfa; }
+    .sparkline-stats .min { color: #4ade80; }
+    .sparkline-stats .max { color: #f87171; }
   </style>
 </head>
 <body>
@@ -2023,6 +2074,21 @@ def _login_html() -> str:
         <button id="modal-cancel" class="modal-btn modal-btn-cancel">取消</button>
         <button id="modal-confirm" class="modal-btn modal-btn-confirm">确定</button>
       </div>
+    </div>
+  </div>
+  
+  <!-- Sparkline Popover for Ping Trends -->
+  <div id="sparkline-popover" class="sparkline-popover">
+    <div class="sparkline-header">
+      <span id="sparkline-carrier" class="sparkline-carrier">CU</span>
+      <span id="sparkline-title">24小时延迟趋势</span>
+    </div>
+    <canvas id="sparkline-canvas" width="200" height="60"></canvas>
+    <div class="sparkline-stats">
+      <span class="current">当前: <b id="sparkline-current">--</b>ms</span>
+      <span class="avg">平均: <b id="sparkline-avg">--</b>ms</span>
+      <span class="min">最低: <b id="sparkline-min">--</b>ms</span>
+      <span class="max">最高: <b id="sparkline-max">--</b>ms</span>
     </div>
   </div>
   <script>
@@ -5291,6 +5357,161 @@ def _login_html() -> str:
         console.warn('Failed to fetch ping trends:', e);
       }
     }
+
+    // ============ Sparkline Popover System ============
+    const sparklineCache = {};
+    let sparklineTimeout = null;
+    
+    function drawSparkline(canvas, data, carrier) {
+      const ctx = canvas.getContext('2d');
+      const width = canvas.width;
+      const height = canvas.height;
+      const padding = 4;
+      
+      // Clear canvas
+      ctx.clearRect(0, 0, width, height);
+      
+      if (!data || data.length < 2) {
+        ctx.fillStyle = '#64748b';
+        ctx.font = '11px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('数据不足', width/2, height/2 + 4);
+        return;
+      }
+      
+      const values = data.map(d => d.ms);
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+      const range = max - min || 1;
+      
+      // Carrier colors
+      const colors = { 
+        CU: { line: '#f87171', fill: 'rgba(248, 113, 113, 0.15)' },
+        CM: { line: '#60a5fa', fill: 'rgba(96, 165, 250, 0.15)' },
+        CT: { line: '#4ade80', fill: 'rgba(74, 222, 128, 0.15)' }
+      };
+      const color = colors[carrier] || { line: '#94a3b8', fill: 'rgba(148, 163, 184, 0.1)' };
+      
+      // Draw filled area
+      ctx.beginPath();
+      ctx.moveTo(padding, height - padding);
+      data.forEach((d, i) => {
+        const x = padding + (i / (data.length - 1)) * (width - padding * 2);
+        const y = height - padding - ((d.ms - min) / range) * (height - padding * 2);
+        ctx.lineTo(x, y);
+      });
+      ctx.lineTo(width - padding, height - padding);
+      ctx.closePath();
+      ctx.fillStyle = color.fill;
+      ctx.fill();
+      
+      // Draw line
+      ctx.beginPath();
+      data.forEach((d, i) => {
+        const x = padding + (i / (data.length - 1)) * (width - padding * 2);
+        const y = height - padding - ((d.ms - min) / range) * (height - padding * 2);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = color.line;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      
+      // Draw latest point
+      const lastX = width - padding;
+      const lastY = height - padding - ((values[values.length - 1] - min) / range) * (height - padding * 2);
+      ctx.beginPath();
+      ctx.arc(lastX, lastY, 3, 0, Math.PI * 2);
+      ctx.fillStyle = color.line;
+      ctx.fill();
+    }
+    
+    async function showSparklinePopover(nodeId, carrier, targetEl) {
+      const popover = document.getElementById('sparkline-popover');
+      const canvas = document.getElementById('sparkline-canvas');
+      const carrierEl = document.getElementById('sparkline-carrier');
+      
+      // Position popover near the target
+      const rect = targetEl.getBoundingClientRect();
+      popover.style.left = `${rect.left - 50}px`;
+      popover.style.top = `${rect.bottom + 8}px`;
+      
+      // Update carrier label
+      carrierEl.textContent = carrier;
+      carrierEl.className = `sparkline-carrier ${carrier.toLowerCase()}`;
+      
+      // Show loading state
+      document.getElementById('sparkline-current').textContent = '...';
+      document.getElementById('sparkline-avg').textContent = '...';
+      document.getElementById('sparkline-min').textContent = '...';
+      document.getElementById('sparkline-max').textContent = '...';
+      
+      popover.classList.add('show');
+      
+      // Check cache first
+      const cacheKey = `${nodeId}-${carrier}`;
+      if (sparklineCache[cacheKey] && Date.now() - sparklineCache[cacheKey].ts < 60000) {
+        renderSparklineData(sparklineCache[cacheKey].data, carrier, canvas);
+        return;
+      }
+      
+      // Fetch data
+      try {
+        const res = await fetch(`/api/ping/history/${nodeId}`);
+        const data = await res.json();
+        if (data.status === 'ok' && data.carriers && data.carriers[carrier]) {
+          sparklineCache[cacheKey] = { data: data.carriers[carrier], ts: Date.now() };
+          renderSparklineData(data.carriers[carrier], carrier, canvas);
+        }
+      } catch (e) {
+        console.warn('Failed to fetch sparkline data:', e);
+      }
+    }
+    
+    function renderSparklineData(data, carrier, canvas) {
+      if (!data || !data.length) return;
+      
+      drawSparkline(canvas, data, carrier);
+      
+      const values = data.map(d => d.ms);
+      const current = values[values.length - 1];
+      const avg = Math.round(values.reduce((a, b) => a + b, 0) / values.length);
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+      
+      document.getElementById('sparkline-current').textContent = current;
+      document.getElementById('sparkline-avg').textContent = avg;
+      document.getElementById('sparkline-min').textContent = min;
+      document.getElementById('sparkline-max').textContent = max;
+    }
+    
+    function hideSparklinePopover() {
+      document.getElementById('sparkline-popover').classList.remove('show');
+    }
+    
+    // Event delegation for trend badge hover
+    document.addEventListener('mouseover', (e) => {
+      const trendEl = e.target.closest('[id^="trend-"]');
+      if (trendEl && trendEl.id.startsWith('trend-')) {
+        const parts = trendEl.id.split('-');
+        if (parts.length >= 3) {
+          const nodeId = parts[1];
+          const carrier = parts[2];
+          clearTimeout(sparklineTimeout);
+          sparklineTimeout = setTimeout(() => {
+            showSparklinePopover(nodeId, carrier, trendEl);
+          }, 300);
+        }
+      }
+    });
+    
+    document.addEventListener('mouseout', (e) => {
+      const trendEl = e.target.closest('[id^="trend-"]');
+      if (trendEl) {
+        clearTimeout(sparklineTimeout);
+        hideSparklinePopover();
+      }
+    });
 
     function formatNodeLabel(nodeId) {
       const node = nodeCache.find((n) => n.id === Number(nodeId));
