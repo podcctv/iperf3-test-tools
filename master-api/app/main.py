@@ -1351,13 +1351,75 @@ class NodeHealthMonitor:
             self._task = None
 
     async def _run(self) -> None:
+        ping_cycle_counter = 0  # Track cycles for ping storage (every 2 = 60s at 30s interval)
         while True:
             try:
                 statuses = await self.refresh()
                 await self._sync_ports(statuses)
+                
+                # Store ping history every 60 seconds (every 2 cycles at 30s interval)
+                ping_cycle_counter += 1
+                if ping_cycle_counter >= 2:
+                    ping_cycle_counter = 0
+                    await self._store_ping_history(statuses)
+                    await self._cleanup_old_pings()
             except Exception:
                 logger.exception("Failed to refresh node health")
             await asyncio.sleep(self.interval_seconds)
+
+    async def _store_ping_history(self, statuses: List[NodeWithStatus]) -> None:
+        """Store backbone latency data to PingHistory table for trend analysis."""
+        from .models import PingHistory
+        
+        db = SessionLocal()
+        try:
+            for status in statuses:
+                if not status.backbone_latency:
+                    continue
+                    
+                for lat in status.backbone_latency:
+                    if lat.latency_ms is None:
+                        continue
+                    
+                    # Map carrier key to standard name
+                    carrier_map = {
+                        "cu": "CU", "unicom": "CU",
+                        "cm": "CM", "mobile": "CM", "cmcc": "CM",
+                        "ct": "CT", "telecom": "CT", "chinanet": "CT",
+                    }
+                    carrier = carrier_map.get(lat.key.lower(), lat.key.upper())
+                    
+                    ping_record = PingHistory(
+                        node_id=status.id,
+                        carrier=carrier,
+                        latency_ms=int(lat.latency_ms),
+                        sample_count=1,
+                    )
+                    db.add(ping_record)
+            
+            db.commit()
+        except Exception as e:
+            logger.error(f"Failed to store ping history: {e}")
+            db.rollback()
+        finally:
+            db.close()
+
+    async def _cleanup_old_pings(self) -> None:
+        """Delete ping history older than 24 hours."""
+        from .models import PingHistory
+        
+        db = SessionLocal()
+        try:
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+            deleted = db.query(PingHistory).filter(PingHistory.recorded_at < cutoff).delete()
+            if deleted > 0:
+                logger.info(f"Cleaned up {deleted} old ping records (>24h)")
+            db.commit()
+        except Exception as e:
+            logger.error(f"Failed to cleanup old pings: {e}")
+            db.rollback()
+        finally:
+            db.close()
 
     async def _sync_ports(self, statuses: List[NodeWithStatus]) -> None:
         """Sync detected iperf ports to database if different."""
@@ -11682,6 +11744,78 @@ async def daily_schedule_traffic_stats(
         "status": "ok",
         "date": day_start.strftime("%Y-%m-%d"),
         "stats": stats
+    }
+
+
+@app.get("/api/ping/history/{node_id}")
+async def get_ping_history(node_id: int, db: Session = Depends(get_db)):
+    """
+    Get 24-hour ping history for a node with trend indicators.
+    
+    Returns ping data for CU/CM/CT carriers with trend arrows.
+    """
+    from .models import PingHistory
+    
+    # Get last 24 hours of data
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    
+    records = db.query(PingHistory).filter(
+        PingHistory.node_id == node_id,
+        PingHistory.recorded_at >= cutoff
+    ).order_by(PingHistory.recorded_at.asc()).all()
+    
+    # Group by carrier
+    carriers = {}
+    for rec in records:
+        if rec.carrier not in carriers:
+            carriers[rec.carrier] = []
+        carriers[rec.carrier].append({
+            "ts": rec.recorded_at.isoformat() if rec.recorded_at else None,
+            "ms": rec.latency_ms
+        })
+    
+    # Calculate trend for each carrier
+    def calc_trend(data_points):
+        """Calculate trend based on recent data points."""
+        if len(data_points) < 3:
+            return {"symbol": "→", "color": "gray", "diff": 0, "direction": "stable"}
+        
+        # Compare average of last 5 points vs previous 5 points
+        recent = data_points[-5:] if len(data_points) >= 5 else data_points[-len(data_points)//2:]
+        previous = data_points[:-5] if len(data_points) > 5 else data_points[:len(data_points)//2]
+        
+        if not recent or not previous:
+            return {"symbol": "→", "color": "gray", "diff": 0, "direction": "stable"}
+        
+        recent_avg = sum(p["ms"] for p in recent) / len(recent)
+        prev_avg = sum(p["ms"] for p in previous) / len(previous)
+        diff = recent_avg - prev_avg
+        
+        # Determine trend symbol and color
+        if diff < -10:
+            return {"symbol": "↓↓↓", "color": "#22c55e", "diff": round(diff, 1), "direction": "sharp_down"}
+        elif diff < -5:
+            return {"symbol": "↓↓", "color": "#22c55e", "diff": round(diff, 1), "direction": "down"}
+        elif diff < -2:
+            return {"symbol": "↓", "color": "#22c55e", "diff": round(diff, 1), "direction": "slight_down"}
+        elif diff <= 2:
+            return {"symbol": "→", "color": "#94a3b8", "diff": round(diff, 1), "direction": "stable"}
+        elif diff <= 5:
+            return {"symbol": "↗", "color": "#eab308", "diff": round(diff, 1), "direction": "slight_up"}
+        elif diff <= 10:
+            return {"symbol": "↑↑", "color": "#f97316", "diff": round(diff, 1), "direction": "up"}
+        else:
+            return {"symbol": "↑↑↑", "color": "#ef4444", "diff": round(diff, 1), "direction": "sharp_up"}
+    
+    trends = {}
+    for carrier, points in carriers.items():
+        trends[carrier] = calc_trend(points)
+    
+    return {
+        "status": "ok",
+        "node_id": node_id,
+        "carriers": carriers,
+        "trends": trends
     }
 
 

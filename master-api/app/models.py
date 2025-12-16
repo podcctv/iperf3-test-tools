@@ -193,3 +193,19 @@ class AuditLog(Base):
     resource_id = Column(String, nullable=True)  # ID of affected resource
     details = Column(JSON, nullable=True)  # Additional context
     success = Column(Boolean, default=True)  # Whether action succeeded
+
+
+# ============== Ping History for Trend Visualization ==============
+
+class PingHistory(Base):
+    """Store ISP ping latency history for 24h trend analysis."""
+    __tablename__ = "ping_history"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    node_id = Column(Integer, ForeignKey("nodes.id"), nullable=False, index=True)
+    carrier = Column(String, nullable=False)  # "CU", "CM", "CT" (China Unicom/Mobile/Telecom)
+    latency_ms = Column(Integer, nullable=False)  # Average latency in milliseconds
+    sample_count = Column(Integer, default=1)  # Number of samples averaged
+    recorded_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    
+    node = relationship("Node", foreign_keys=[node_id])
