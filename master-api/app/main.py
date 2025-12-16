@@ -6192,6 +6192,7 @@ def _schedules_html() -> str:
   <title>定时任务 - iperf3 Master</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <style>
     body { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); min-height: 100vh; }
     .glass-card { background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(148, 163, 184, 0.1); }
@@ -6485,6 +6486,7 @@ def _schedules_html() -> str:
                     </button>
                     <button onclick="runSchedule(${schedule.id})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:emerald-500 transition whitespace-nowrap">立即运行</button>
                     <button onclick="editSchedule(${schedule.id})" class="px-3 py-1 rounded-lg border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-100 hover:border-sky-500 transition whitespace-nowrap">编辑</button>
+                    <button onclick="shareSchedule(${schedule.id})" class="px-3 py-1 rounded-lg border border-cyan-700 bg-cyan-900/20 text-xs font-semibold text-cyan-300 hover:bg-cyan-900/40 transition whitespace-nowrap" title="分享图表截图">📤 分享</button>
                     <button onclick="deleteSchedule(${schedule.id})" class="px-3 py-1 rounded-lg border border-rose-700 bg-rose-900/20 text-xs font-semibold text-rose-300 hover:bg-rose-900/40 transition whitespace-nowrap">删除</button>
                 </div>` : ''}
               </div>
@@ -7702,6 +7704,65 @@ def _schedules_html() -> str:
         
       } catch (err) {
         console.error('Failed to update traffic stats:', err);
+      }
+    }
+
+
+    // Share schedule chart as screenshot
+    async function shareSchedule(scheduleId) {
+      const cardEl = document.getElementById(`schedule-card-${scheduleId}`);
+      if (!cardEl) {
+        alert('找不到卡片元素');
+        return;
+      }
+      
+      try {
+        // Show loading indicator
+        const btn = event?.target;
+        const originalText = btn?.innerHTML;
+        if (btn) btn.innerHTML = '⏳ 生成中...';
+        
+        // Use html2canvas to capture the card
+        const canvas = await html2canvas(cardEl, {
+          backgroundColor: '#0f172a',
+          scale: 2,  // Higher quality
+          logging: false,
+          useCORS: true,
+          allowTaint: true
+        });
+        
+        // Convert to blob and download
+        canvas.toBlob(function(blob) {
+          const schedule = schedules.find(s => s.id === scheduleId);
+          const fileName = `${schedule?.name || 'schedule'}_${new Date().toISOString().slice(0,10)}.png`;
+          
+          // Create download link
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = fileName;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          
+          if (btn) btn.innerHTML = originalText;
+          
+          // Also try to copy to clipboard if supported
+          if (navigator.clipboard && navigator.clipboard.write) {
+            navigator.clipboard.write([new ClipboardItem({'image/png': blob})]).then(() => {
+              alert(`✅ 图片已保存并复制到剪贴板\\n文件名: ${fileName}`);
+            }).catch(() => {
+              alert(`✅ 图片已保存\\n文件名: ${fileName}`);
+            });
+          } else {
+            alert(`✅ 图片已保存\\n文件名: ${fileName}`);
+          }
+        }, 'image/png', 1.0);
+        
+      } catch (err) {
+        console.error('Screenshot failed:', err);
+        alert('截图失败: ' + err.message);
       }
     }
 
