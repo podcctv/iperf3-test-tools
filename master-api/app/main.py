@@ -9831,6 +9831,15 @@ def _trace_html() -> str:
         targetIp = tgtOpt.dataset.ip; targetName = tgtOpt.dataset.name; isBi = true;
       } else {
         targetIp = document.getElementById('trace-target-input').value.trim();
+        // Strip protocol and path from URLs - traceroute only needs hostname/IP
+        try {
+          if (targetIp.includes('://')) {
+            const url = new URL(targetIp);
+            targetIp = url.hostname;
+          } else if (targetIp.includes('/')) {
+            targetIp = targetIp.split('/')[0];
+          }
+        } catch(e) { /* Not a valid URL, use as-is */ }
         if (!targetIp) { alert('请输入目标'); return; }
         targetName = targetIp;
       }
