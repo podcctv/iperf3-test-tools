@@ -1856,12 +1856,164 @@ def _login_html() -> str:
       animation: success-pulse 0.6s ease-out;
       border-color: rgba(34, 197, 94, 0.6);
     }
+    
+    /* Custom Modal Styles */
+    .custom-modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.2s ease;
+    }
+    .custom-modal-overlay.show {
+      opacity: 1;
+      visibility: visible;
+    }
+    .custom-modal {
+      background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98));
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 1rem;
+      box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5), 0 0 1px rgba(255, 255, 255, 0.1) inset;
+      padding: 1.5rem;
+      max-width: 420px;
+      width: 90%;
+      transform: scale(0.9) translateY(-20px);
+      transition: transform 0.2s ease;
+    }
+    .custom-modal-overlay.show .custom-modal {
+      transform: scale(1) translateY(0);
+    }
+    .custom-modal-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+    .custom-modal-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      flex-shrink: 0;
+    }
+    .custom-modal-icon.warning {
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(217, 119, 6, 0.3));
+      border: 1px solid rgba(245, 158, 11, 0.4);
+    }
+    .custom-modal-icon.danger {
+      background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(185, 28, 28, 0.3));
+      border: 1px solid rgba(239, 68, 68, 0.4);
+    }
+    .custom-modal-icon.info {
+      background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(37, 99, 235, 0.3));
+      border: 1px solid rgba(59, 130, 246, 0.4);
+    }
+    .custom-modal-icon.success {
+      background: linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(22, 163, 74, 0.3));
+      border: 1px solid rgba(34, 197, 94, 0.4);
+    }
+    .custom-modal-title {
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: #f8fafc;
+      margin: 0;
+    }
+    .custom-modal-body {
+      color: #94a3b8;
+      font-size: 0.9375rem;
+      line-height: 1.6;
+      margin-bottom: 1.5rem;
+      padding-left: 0.5rem;
+    }
+    .custom-modal-body ul {
+      margin: 0.75rem 0;
+      padding-left: 1.25rem;
+    }
+    .custom-modal-body li {
+      margin: 0.375rem 0;
+    }
+    .custom-modal-body .warning-text {
+      color: #fbbf24;
+      font-weight: 500;
+    }
+    .custom-modal-body .danger-text {
+      color: #f87171;
+      font-weight: 500;
+    }
+    .custom-modal-actions {
+      display: flex;
+      gap: 0.75rem;
+      justify-content: flex-end;
+    }
+    .modal-btn {
+      padding: 0.625rem 1.25rem;
+      border-radius: 0.5rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      border: 1px solid transparent;
+    }
+    .modal-btn-cancel {
+      background: rgba(71, 85, 105, 0.5);
+      border-color: rgba(100, 116, 139, 0.5);
+      color: #cbd5e1;
+    }
+    .modal-btn-cancel:hover {
+      background: rgba(71, 85, 105, 0.7);
+      border-color: rgba(100, 116, 139, 0.7);
+    }
+    .modal-btn-confirm {
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      color: white;
+    }
+    .modal-btn-confirm:hover {
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+    }
+    .modal-btn-danger {
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      color: white;
+    }
+    .modal-btn-danger:hover {
+      background: linear-gradient(135deg, #dc2626, #b91c1c);
+      box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
+    }
   </style>
 </head>
 <body>
   <!-- Guest Mode Banner -->
   <div id="guest-banner" class="hidden" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(90deg,#f59e0b,#d97706);text-align:center;padding:8px 16px;font-size:14px;font-weight:600;color:#1e293b;box-shadow:0 2px 8px rgba(0,0,0,0.3);">
     👁️ 访客模式 · 仅可查看，无法操作
+  </div>
+  
+  <!-- Custom Modal Container -->
+  <div id="custom-modal-container" class="custom-modal-overlay">
+    <div class="custom-modal">
+      <div class="custom-modal-header">
+        <div id="modal-icon" class="custom-modal-icon warning">⚠️</div>
+        <h3 id="modal-title" class="custom-modal-title">确认操作</h3>
+      </div>
+      <div id="modal-body" class="custom-modal-body">
+        确定要执行此操作吗？
+      </div>
+      <div class="custom-modal-actions">
+        <button id="modal-cancel" class="modal-btn modal-btn-cancel">取消</button>
+        <button id="modal-confirm" class="modal-btn modal-btn-confirm">确定</button>
+      </div>
+    </div>
   </div>
   <script>
     if (document.cookie.includes('guest_session=readonly')) {
@@ -2710,7 +2862,18 @@ def _login_html() -> str:
     }
 
     async function clearAllTestData() {
-      if (!confirm('⚠️ 确定要清空所有测试数据吗？\\n\\n这将删除：\\n- 所有单次测试记录\\n- 所有定时任务执行历史\\n\\n此操作不可撤销！')) return;
+      const confirmed = await showConfirm(
+        '清空所有测试数据',
+        `<p>确定要清空所有测试数据吗？</p>
+         <p>这将删除：</p>
+         <ul>
+           <li>所有单次测试记录</li>
+           <li>所有定时任务执行历史</li>
+         </ul>
+         <p class="danger-text">⚠️ 此操作不可撤销！</p>`,
+        { type: 'danger', confirmText: '确认清空', cancelText: '取消' }
+      );
+      if (!confirmed) return;
       
       try {
         const res = await apiFetch('/admin/clear_all_test_data', { method: 'POST' });
@@ -2726,7 +2889,14 @@ def _login_html() -> str:
     }
 
     async function clearScheduleResults() {
-      if (!confirm('⚠️ 确定要清空定时任务历史吗？\\n\\n这将删除所有定时任务的执行记录。\\n\\n此操作不可撤销！')) return;
+      const confirmed = await showConfirm(
+        '清空定时任务历史',
+        `<p>确定要清空定时任务历史吗？</p>
+         <p>这将删除所有定时任务的执行记录。</p>
+         <p class="danger-text">⚠️ 此操作不可撤销！</p>`,
+        { type: 'danger', confirmText: '确认清空', cancelText: '取消' }
+      );
+      if (!confirmed) return;
       
       try {
         const res = await apiFetch('/admin/clear_schedule_results', { method: 'POST' });
@@ -5480,6 +5650,77 @@ def _tests_page_html() -> str:
     let nodeCache = [];
     let testsCurrentPage = 1;
     let testsAllData = [];
+    
+    // Custom Modal Dialog Functions
+    function showModal(options) {
+      return new Promise((resolve) => {
+        const container = document.getElementById('custom-modal-container');
+        const icon = document.getElementById('modal-icon');
+        const title = document.getElementById('modal-title');
+        const body = document.getElementById('modal-body');
+        const cancelBtn = document.getElementById('modal-cancel');
+        const confirmBtn = document.getElementById('modal-confirm');
+        
+        // Set content
+        title.textContent = options.title || '确认操作';
+        body.innerHTML = options.body || '确定要执行此操作吗？';
+        
+        // Set icon type
+        icon.className = 'custom-modal-icon ' + (options.type || 'warning');
+        const icons = { warning: '⚠️', danger: '🗑️', info: 'ℹ️', success: '✅' };
+        icon.textContent = icons[options.type] || '⚠️';
+        
+        // Set button styles
+        confirmBtn.textContent = options.confirmText || '确定';
+        cancelBtn.textContent = options.cancelText || '取消';
+        confirmBtn.className = 'modal-btn ' + (options.type === 'danger' ? 'modal-btn-danger' : 'modal-btn-confirm');
+        
+        // Hide cancel button for alert mode
+        cancelBtn.style.display = options.hideCancel ? 'none' : 'block';
+        
+        // Cleanup function
+        const cleanup = (result) => {
+          container.classList.remove('show');
+          confirmBtn.onclick = null;
+          cancelBtn.onclick = null;
+          container.onclick = null;
+          resolve(result);
+        };
+        
+        // Event handlers
+        confirmBtn.onclick = () => cleanup(true);
+        cancelBtn.onclick = () => cleanup(false);
+        container.onclick = (e) => {
+          if (e.target === container) cleanup(false);
+        };
+        
+        // Show modal
+        container.classList.add('show');
+      });
+    }
+    
+    // Confirm dialog (replacement for confirm())
+    async function showConfirm(title, body, options = {}) {
+      return showModal({
+        title,
+        body,
+        type: options.type || 'warning',
+        confirmText: options.confirmText || '确定',
+        cancelText: options.cancelText || '取消',
+        hideCancel: false
+      });
+    }
+    
+    // Alert dialog (replacement for alert())
+    async function showAlert(title, body, options = {}) {
+      return showModal({
+        title,
+        body,
+        type: options.type || 'info',
+        confirmText: options.confirmText || '知道了',
+        hideCancel: true
+      });
+    }
     
     async function apiFetch(path, options = {}) {
       return fetch(API_BASE + path, { credentials: 'include', ...options });
