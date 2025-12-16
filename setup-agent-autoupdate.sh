@@ -173,7 +173,7 @@ create_config_file() {
     local iperf_port="62001"
     
     # Look for common agent container names
-    for name in iperf-agent iperf3-agent agent; do
+    for name in iperf-agent iperf-agent-reverse iperf3-agent agent; do
         if docker ps -a --format '{{.Names}}' | grep -q "^${name}$"; then
             container_name="$name"
             break

@@ -246,6 +246,69 @@ show_master_password() {
     fi
 }
 
+# 静默安装 watchdog 自动更新（如果已安装则跳过）
+install_watchdog_silent() {
+    local WATCHDOG_SCRIPT="/usr/local/bin/iperf-agent-watchdog.sh"
+    local CRON_FILE="/etc/cron.d/iperf-agent-watchdog"
+    local CONFIG_FILE="/etc/iperf-agent-watchdog.conf"
+    local DATA_DIR="/var/lib/iperf-agent/data"
+    
+    # Check if already installed
+    if [ -f "$WATCHDOG_SCRIPT" ] && [ -f "$CRON_FILE" ]; then
+        echo ""
+        echo "[INFO] Watchdog 自动更新已安装，跳过"
+        return 0
+    fi
+    
+    echo ""
+    echo "[INFO] 正在安装 Watchdog 自动更新..."
+    
+    # Create directories
+    mkdir -p "$DATA_DIR"
+    mkdir -p "$(dirname "$CONFIG_FILE")"
+    
+    # Install watchdog script
+    local src_script="${REPO_DIR}/agent-watchdog.sh"
+    if [ -f "$src_script" ]; then
+        cp "$src_script" "$WATCHDOG_SCRIPT"
+        chmod +x "$WATCHDOG_SCRIPT"
+        echo "[OK] Watchdog 脚本已安装: $WATCHDOG_SCRIPT"
+    else
+        echo "[WARN] Watchdog 脚本未找到: $src_script"
+        return 1
+    fi
+    
+    # Create config file with detected container
+    local container_name=""
+    for name in iperf-agent iperf-agent-reverse iperf3-agent; do
+        if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q "^${name}$"; then
+            container_name="$name"
+            break
+        fi
+    done
+    container_name="${container_name:-iperf-agent}"
+    
+    cat > "$CONFIG_FILE" << EOF
+# iperf-agent-watchdog configuration
+AGENT_DATA_DIR="$DATA_DIR"
+AGENT_CONTAINER_NAME="$container_name"
+AGENT_IMAGE="iperf-agent:latest"
+REPO_DIR="$REPO_DIR"
+EOF
+    echo "[OK] 配置文件已创建: $CONFIG_FILE (容器: $container_name)"
+    
+    # Setup cron (hourly)
+    cat > "$CRON_FILE" << 'EOF'
+# iperf-agent-watchdog - Auto-update check (hourly)
+0 * * * * root /usr/local/bin/iperf-agent-watchdog.sh >> /var/log/iperf-agent-watchdog.log 2>&1
+EOF
+    chmod 644 "$CRON_FILE"
+    echo "[OK] Cron 定时任务已安装: $CRON_FILE (每小时检查)"
+    
+    echo "[INFO] Watchdog 自动更新安装完成！"
+    echo "[提示] 确保容器挂载 data 目录: -v $DATA_DIR:/app/data"
+}
+
 case "$choice" in
     1)
         # 本地编译 - 自动安装 master（含本机 agent）
@@ -261,6 +324,7 @@ case "$choice" in
         echo "[INFO] 本地编译安装 agent..."
         bash "$AGENT_INSTALL_SCRIPT"
         echo "[INFO] Agent 安装完成！"
+        install_watchdog_silent
         ;;
     3)
         # 本地编译 - 手动安装 agent（NAT VPS）
@@ -275,6 +339,7 @@ case "$choice" in
             echo "[ERROR] 手动安装脚本未找到：$MANUAL_AGENT_SCRIPT"
             exit 1
         fi
+        install_watchdog_silent
         ;;
     4)
         # 本地编译 - 手动安装 agent（内网设备，反向穿透）
@@ -317,6 +382,7 @@ case "$choice" in
         
         echo "[INFO] 内网 agent 安装完成！"
         echo "[INFO] Agent 将定期向 $MASTER_URL 注册"
+        install_watchdog_silent
         ;;
     5)
         # GHCR - 自动安装 master（含本机 agent）- 纯拉取镜像
@@ -399,6 +465,7 @@ case "$choice" in
             "$AGENT_IMAGE"
         
         echo "[INFO] Agent 安装完成！(使用 ghcr.io 镜像)"
+        install_watchdog_silent
         ;;
     7)
         # GHCR - 手动安装 agent（NAT VPS）
@@ -424,6 +491,7 @@ case "$choice" in
             "$AGENT_IMAGE"
         
         echo "[INFO] Agent 安装完成！(NAT 模式, ghcr.io 镜像)"
+        install_watchdog_silent
         ;;
     8)
         # GHCR - 手动安装 agent（内网设备，反向穿透）
@@ -460,6 +528,7 @@ case "$choice" in
         
         echo "[INFO] 内网 agent 安装完成！(ghcr.io 镜像)"
         echo "[INFO] Agent 将定期向 $MASTER_URL 注册"
+        install_watchdog_silent
         ;;
     9)
         # 查看 iperf-agent 日志
