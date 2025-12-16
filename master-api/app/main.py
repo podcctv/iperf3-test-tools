@@ -7382,7 +7382,7 @@ def _schedules_html() -> str:
         updateScheduleCardStatus(scheduleId, data.enabled, data.next_run_at);
         
       } catch (err) {
-        alert('操作失败: ' + err.message);
+        showToast('操作失败: ' + err.message, 'error');
         if (btn) btn.textContent = originalText;
       } finally {
         if (btn) btn.disabled = false;
@@ -7439,9 +7439,9 @@ def _schedules_html() -> str:
       if (!confirm('确定要立即执行此任务吗?')) return;
       try {
         await apiFetch(`/schedules/${scheduleId}/execute`, { method: 'POST' });
-        alert('任务已触发, 请稍后刷新查看结果');
+        showToast('✅ 任务已触发，请稍后刷新查看结果', 'success');
       } catch (err) {
-        alert('执行失败: ' + err.message);
+        showToast('执行失败: ' + err.message, 'error');
       }
     }
 
@@ -7780,18 +7780,18 @@ def _schedules_html() -> str:
           // Also try to copy to clipboard if supported
           if (navigator.clipboard && navigator.clipboard.write) {
             navigator.clipboard.write([new ClipboardItem({'image/png': blob})]).then(() => {
-              alert(`✅ 图片已保存并复制到剪贴板\\n文件名: ${fileName}`);
+              showToast(`✅ 图片已保存并复制到剪贴板: ${fileName}`, 'success');
             }).catch(() => {
-              alert(`✅ 图片已保存\\n文件名: ${fileName}`);
+              showToast(`✅ 图片已保存: ${fileName}`, 'success');
             });
           } else {
-            alert(`✅ 图片已保存\\n文件名: ${fileName}`);
+            showToast(`✅ 图片已保存: ${fileName}`, 'success');
           }
         }, 'image/png', 1.0);
         
       } catch (err) {
         console.error('Screenshot failed:', err);
-        alert('截图失败: ' + err.message);
+        showToast('截图失败: ' + err.message, 'error');
       }
     }
 
@@ -7800,7 +7800,7 @@ def _schedules_html() -> str:
     async function shareScheduleMarkdown(scheduleId) {
       const schedule = schedules.find(s => s.id === scheduleId);
       if (!schedule) {
-        alert('找不到任务信息');
+        showToast('找不到任务信息', 'error');
         return;
       }
       
@@ -7839,7 +7839,7 @@ ${latestStats}
 
       try {
         await navigator.clipboard.writeText(markdown);
-        alert('✅ Markdown 信息已复制到剪贴板');
+        showToast('✅ Markdown 信息已复制到剪贴板', 'success');
       } catch (e) {
         // Fallback for older browsers
         const textarea = document.createElement('textarea');
@@ -7848,7 +7848,7 @@ ${latestStats}
         textarea.select();
         document.execCommand('copy');
         document.body.removeChild(textarea);
-        alert('✅ Markdown 信息已复制到剪贴板');
+        showToast('✅ Markdown 信息已复制到剪贴板', 'success');
       }
     }
 
