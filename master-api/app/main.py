@@ -406,6 +406,11 @@ async def lifespan(app):
     print(">>> SCHEDULER STARTED <<<", flush=True)
     logger.info("APScheduler started successfully")
     
+    # Start health monitor (needed for ping history storage)
+    await health_monitor.start()
+    print(">>> HEALTH MONITOR STARTED <<<", flush=True)
+    logger.info("Health monitor started")
+    
     # Load existing schedules
     try:
         _load_schedules_on_startup()
@@ -1380,10 +1385,13 @@ class NodeHealthMonitor:
         """Store backbone latency data to PingHistory table for trend analysis."""
         from .models import PingHistory
         
+        print(f"[PING] Storing ping history for {len(statuses)} nodes", flush=True)
         db = SessionLocal()
+        records_added = 0
         try:
             for status in statuses:
                 if not status.backbone_latency:
+                    print(f"[PING] Node {status.id} ({status.name}): no backbone_latency", flush=True)
                     continue
                     
                 for lat in status.backbone_latency:
@@ -1405,8 +1413,10 @@ class NodeHealthMonitor:
                         sample_count=1,
                     )
                     db.add(ping_record)
+                    records_added += 1
             
             db.commit()
+            print(f"[PING] Stored {records_added} ping records", flush=True)
         except Exception as e:
             logger.error(f"Failed to store ping history: {e}")
             db.rollback()
