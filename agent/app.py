@@ -151,6 +151,34 @@ YOUTUBE_PREMIUM_COOKIES = (
     "1809531354.1646633279"
 )
 
+# ASN Correction Rules - fix known ip-api.com errors
+# Maps ASN to correction rules: blocked countries and replacement values
+ASN_CORRECTIONS = {
+    # DOD/Military ASNs that shouldn't appear on civilian Chinese IPs
+    749: {"blocked_countries": ["cn", "china"], "replacement_asn": None, "replacement_isp": "Unknown"},
+    750: {"blocked_countries": ["cn", "china"], "replacement_asn": None, "replacement_isp": "Unknown"},
+    721: {"blocked_countries": ["cn", "china"], "replacement_asn": None, "replacement_isp": "Unknown"},
+}
+
+# Known Chinese ISP ASN mappings for better identification
+CHINA_ISP_ASN_MAP = {
+    4134: "Chinanet",           # China Telecom backbone
+    4809: "China Telecom",      # China Telecom Next Generation Carrier Network
+    4837: "China Unicom",       # China Unicom backbone  
+    9929: "China Unicom",       # China Unicom Industrial Internet
+    58453: "China Mobile",      # CMI - China Mobile International
+    58807: "China Mobile",      # China Mobile Guangdong
+    9808: "China Mobile",       # China Mobile
+    56040: "China Mobile",      # China Mobile
+    56041: "China Mobile",      # China Mobile
+    56042: "China Mobile",      # China Mobile
+    56044: "China Mobile",      # China Mobile
+    56046: "China Mobile",      # China Mobile
+    56047: "China Mobile",      # China Mobile
+    56048: "China Mobile",      # China Mobile
+    59019: "China Mobile",      # China Mobile Beijing
+}
+
 _media_cookie_cache: str | None = None
 
 
@@ -1742,6 +1770,51 @@ def _parse_traceroute_output(raw: str) -> list:
     return hops
 
 
+def _validate_asn(asn: int | None, country: str, country_code: str, isp: str) -> tuple[int | None, str]:
+    """
+    Validate ASN against geographic context and correct known errors.
+    
+    Args:
+        asn: ASN number (can be None)
+        country: Country name from ip-api.com
+        country_code: Two-letter country code
+        isp: ISP name from ip-api.com
+    
+    Returns: (corrected_asn, corrected_isp)
+    """
+    if asn is None:
+        return asn, isp
+    
+    # Check if ASN is in correction rules
+    correction = ASN_CORRECTIONS.get(asn)
+    if correction:
+        blocked_countries = correction.get("blocked_countries", [])
+        country_lower = (country or "").lower()
+        code_lower = (country_code or "").lower()
+        
+        # Check if this ASN is blocked for this country
+        for blocked in blocked_countries:
+            if blocked.lower() in country_lower or blocked.lower() == code_lower:
+                print(f"[ASN] Correcting invalid ASN {asn} for country {country}", flush=True)
+                return correction.get("replacement_asn"), correction.get("replacement_isp", isp)
+    
+    # For Chinese IPs, try to match ISP name to known ASN if current ASN seems wrong
+    if country_code and country_code.lower() == "cn":
+        isp_lower = (isp or "").lower()
+        # Check if ISP matches known Chinese ISP names
+        for known_asn, known_isp in CHINA_ISP_ASN_MAP.items():
+            if known_isp.lower() in isp_lower or isp_lower in known_isp.lower():
+                if asn != known_asn:
+                    # ASN doesn't match expected for this ISP - could be a database error
+                    # Only override if current ASN is suspicious (e.g., non-Chinese)
+                    if asn and asn < 4000:  # Many incorrect ASNs are old/low numbers
+                        print(f"[ASN] Overriding ASN {asn} with {known_asn} for ISP {isp}", flush=True)
+                        return known_asn, isp
+                break
+    
+    return asn, isp
+
+
 def _get_hop_geo(ip: str) -> dict | None:
     """Get geographic location for an IP address."""
     if ip == '*' or ip.startswith('10.') or ip.startswith('192.168.') or ip.startswith('172.'):
@@ -1762,11 +1835,17 @@ def _get_hop_geo(ip: str) -> dict | None:
                     if match:
                         asn = int(match.group(1))
                 
+                # Validate and correct ASN if needed
+                country = data.get("country", "")
+                country_code = data.get("countryCode", "")
+                isp = data.get("isp", "")
+                asn, isp = _validate_asn(asn, country, country_code, isp)
+                
                 return {
-                    "country": data.get("country", ""),
-                    "country_code": data.get("countryCode", "").lower(),
+                    "country": country,
+                    "country_code": country_code.lower(),
                     "city": data.get("city", ""),
-                    "isp": data.get("isp", ""),
+                    "isp": isp,
                     "asn": asn,
                 }
     except Exception:
