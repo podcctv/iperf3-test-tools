@@ -65,6 +65,61 @@ check_dependencies() {
     log_success "All dependencies found"
 }
 
+check_existing_installation() {
+    local existing_files=()
+    local existing_count=0
+    
+    # Check for existing installation files
+    if [ -f "$WATCHDOG_SCRIPT" ]; then
+        existing_files+=("$WATCHDOG_SCRIPT")
+        ((existing_count++))
+    fi
+    
+    if [ -f "$CRON_FILE" ]; then
+        existing_files+=("$CRON_FILE")
+        ((existing_count++))
+    fi
+    
+    if [ -f "$CONFIG_FILE" ]; then
+        existing_files+=("$CONFIG_FILE")
+        ((existing_count++))
+    fi
+    
+    if [ $existing_count -gt 0 ]; then
+        echo ""
+        log_warn "检测到已存在的安装!"
+        log_warn "Existing installation detected!"
+        echo ""
+        echo -e "${YELLOW}已安装的文件 / Existing files:${NC}"
+        for file in "${existing_files[@]}"; do
+            echo "   • $file"
+        done
+        echo ""
+        
+        # Check if running interactively
+        if [ -t 0 ]; then
+            read -rp "是否覆盖现有安装? Overwrite existing installation? [y/N]: " response
+            case "$response" in
+                [yY][eE][sS]|[yY])
+                    log_info "继续安装，将覆盖现有文件..."
+                    log_info "Proceeding with installation, overwriting existing files..."
+                    ;;
+                *)
+                    log_info "安装已取消"
+                    log_info "Installation cancelled"
+                    exit 0
+                    ;;
+            esac
+        else
+            # Non-interactive mode (piped), show warning and continue
+            log_warn "非交互模式，将自动覆盖现有安装"
+            log_warn "Non-interactive mode, automatically overwriting existing installation"
+        fi
+    else
+        log_success "未检测到现有安装 / No existing installation found"
+    fi
+}
+
 # ==============================================================================
 # Installation
 # ==============================================================================
@@ -252,6 +307,7 @@ main() {
     
     check_root
     check_dependencies
+    check_existing_installation
     
     setup_directories
     clone_or_update_repo
