@@ -7360,6 +7360,81 @@ def _schedules_html() -> str:
       }, 3000);
     }
 
+    // Update ping badges with trend arrows for a node
+    async function updateNodePingBadges(nodeId) {
+      const container = document.getElementById(`vps-ping-${nodeId}`);
+      if (!container) return;
+      
+      try {
+        const res = await fetch(`/api/ping/history/${nodeId}`);
+        const data = await res.json();
+        
+        if (data.status !== 'ok' || !data.trends) {
+          container.innerHTML = '<span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-700/40 text-slate-400">暂无数据</span>';
+          return;
+        }
+        
+        const carriers = ['CU', 'CM', 'CT'];
+        const carrierNames = { CU: '联通', CM: '移动', CT: '电信' };
+        const carrierColors = { 
+          CU: 'bg-red-500/20 border-red-500/30 text-red-300',
+          CM: 'bg-blue-500/20 border-blue-500/30 text-blue-300',
+          CT: 'bg-green-500/20 border-green-500/30 text-green-300'
+        };
+        
+        let badgesHtml = '';
+        carriers.forEach(carrier => {
+          const trend = data.trends[carrier];
+          const points = data.carriers?.[carrier] || [];
+          const latestMs = points.length > 0 ? points[points.length - 1].ms : null;
+          
+          if (latestMs === null) return;
+          
+          const trendSymbol = trend?.symbol || '→';
+          const trendColor = trend?.color || '#94a3b8';
+          const color = carrierColors[carrier] || 'bg-slate-700/40 text-slate-300';
+          
+          // Generate mini sparkline SVG for hover
+          let sparklineSvg = '';
+          if (points.length >= 3) {
+            const vals = points.slice(-30).map(p => p.ms);
+            const minV = Math.min(...vals);
+            const maxV = Math.max(...vals);
+            const range = maxV - minV || 1;
+            const sparkPoints = vals.map((v, i) => {
+              const x = (i / (vals.length - 1)) * 80;
+              const y = 20 - ((v - minV) / range) * 18;
+              return `${x},${y}`;
+            }).join(' ');
+            sparklineSvg = `<svg class="w-20 h-5" viewBox="0 0 80 22"><polyline points="${sparkPoints}" fill="none" stroke="${trendColor}" stroke-width="1.5"/></svg>`;
+          }
+          
+          badgesHtml += `
+            <div class="relative group/ping">
+              <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-mono border ${color} cursor-help">
+                <span style="color: ${trendColor}">${trendSymbol}</span>
+                <span class="font-bold">${carrier}</span>
+                <span>${latestMs}ms</span>
+              </span>
+              ${points.length >= 3 ? `
+                <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover/ping:block z-50">
+                  <div class="bg-slate-800 border border-slate-600 rounded-lg p-2 shadow-lg">
+                    <div class="text-[9px] text-slate-400 mb-1 text-center">${carrierNames[carrier]} 24h趋势</div>
+                    ${sparklineSvg}
+                    <div class="text-[8px] text-center mt-1" style="color: ${trendColor}">${trend?.diff > 0 ? '+' : ''}${trend?.diff || 0}ms</div>
+                  </div>
+                </div>
+              ` : ''}
+            </div>
+          `;
+        });
+        
+        container.innerHTML = badgesHtml || '<span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-700/40 text-slate-400">暂无数据</span>';
+      } catch (e) {
+        container.innerHTML = '<span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-700/40 text-slate-400">获取失败</span>';
+      }
+    }
+
     // 保存定时任务
     async function saveSchedule() {
       // Determine direction based on tab
@@ -7704,6 +7779,11 @@ def _schedules_html() -> str:
                             <div id="vps-isp-${n.node_id}" class="text-[10px] text-slate-500 truncate max-w-[120px]"></div>
                           </div>
                         </div>
+                        
+                        <!-- ISP Ping Badges with Trend Arrows -->
+                        <div id="vps-ping-${n.node_id}" class="flex flex-wrap gap-1.5 mt-2 pt-2 border-t border-slate-700/30">
+                          <span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-700/40 text-slate-400">检测中...</span>
+                        </div>
                       </div>
                     `;
                 }).join('');
@@ -7728,6 +7808,11 @@ def _schedules_html() -> str:
                           }
                       })
                       .catch(() => void 0);
+                });
+                
+                // Fetch ping history with trends for each node
+                data.nodes.forEach(n => {
+                    updateNodePingBadges(n.node_id);
                 });
                 
                 // Update task counts for each node
