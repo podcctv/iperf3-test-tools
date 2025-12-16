@@ -3952,7 +3952,7 @@ def _login_html() -> str:
           const agentPortDisplay = maskPort(agentPort, privacyEnabled || window.isGuest);
           const iperfPortDisplay = maskPort(ports, privacyEnabled || window.isGuest);
           const streamingBadges = renderStreamingBadges(node.id);
-          const backboneBadges = renderBackboneBadges(node.backbone_latency);
+          const backboneBadges = renderBackboneBadges(node.backbone_latency, node.id);
           const ipMasked = maskIp(node.ip, privacyEnabled || window.isGuest);
 
         const item = document.createElement('div');
@@ -4112,17 +4112,6 @@ def _login_html() -> str:
                          el.title = d.country_code || '';
                          // Save to cache
                          ispCache[node.ip] = { isp: d.isp, country_code: d.country_code };
-                         saveIspCache(ispCache);
-                     }
-                 })
-                 .catch(() => {});
-             }
-          }
-      });
-
-      syncTestPort();
-      syncSuitePort();
-      } finally {
         isRefreshingNodes = false;
       }
     }
@@ -4978,21 +4967,53 @@ def _login_html() -> str:
       return grid.childNodes.length ? grid : null;
     }
 
-    function renderBackboneBadges(entries) {
+    function renderBackboneBadges(entries, nodeId) {
       if (!entries || !entries.length) return '';
 
       const labelMap = { zj_cu: 'CU', zj_ct: 'CT', zj_cm: 'CM' };
+      const colorMap = {
+        'CU': 'bg-red-500/15 text-red-200 border-red-500/40',
+        'CT': 'bg-green-500/15 text-green-200 border-green-500/40',
+        'CM': 'bg-blue-500/15 text-blue-200 border-blue-500/40'
+      };
       return entries
         .map((item) => {
           const label = labelMap[item.key] || (item.name || item.key || '').slice(0, 2).toUpperCase();
           const hasLatency = item.latency_ms !== undefined && item.latency_ms !== null;
           const chipStyle = hasLatency
-            ? 'bg-sky-500/10 text-sky-100 border-sky-500/40'
+            ? (colorMap[label] || 'bg-sky-500/10 text-sky-100 border-sky-500/40')
             : 'bg-rose-500/15 text-rose-200 border-rose-500/40';
           const latencyLabel = hasLatency ? `${formatMetric(item.latency_ms, 0)} ms` : '不可达';
-          return `<span class="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${chipStyle}">${label}<span class=\"text-[10px] text-slate-300\">${latencyLabel}</span></span>`;
+          const trendSpanId = nodeId ? ` id="trend-${nodeId}-${label}"` : '';
+          return `<span class="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${chipStyle} cursor-help" title="点击刷新趋势">` +
+            `<span${trendSpanId} class="text-slate-400">→</span>` +
+            `<span>${label}</span>` +
+            `<span class=\"text-[10px] text-slate-300\">${latencyLabel}</span></span>`;
         })
         .join('');
+    }
+    
+    // Async fetch and update ping trends for a node
+    async function updateNodePingTrends(nodeId) {
+      try {
+        const res = await fetch(`/api/ping/history/${nodeId}`);
+        const data = await res.json();
+        
+        if (data.status !== 'ok' || !data.trends) return;
+        
+        // Update each carrier trend arrow
+        Object.entries(data.trends).forEach(([carrier, trend]) => {
+          const trendEl = document.getElementById(`trend-${nodeId}-${carrier}`);
+          if (trendEl && trend) {
+            trendEl.textContent = trend.symbol || '→';
+            trendEl.style.color = trend.color || '#94a3b8';
+            const diffText = (trend.diff > 0 ? '+' : '') + (trend.diff || 0) + 'ms';
+            trendEl.title = `趋势: ${diffText}`;
+          }
+        });
+      } catch (e) {
+        console.warn('Failed to fetch ping trends:', e);
+      }
     }
 
     function formatNodeLabel(nodeId) {
