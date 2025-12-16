@@ -1392,9 +1392,9 @@ class NodeHealthMonitor:
                     
                     # Map carrier key to standard name
                     carrier_map = {
-                        "cu": "CU", "unicom": "CU",
-                        "cm": "CM", "mobile": "CM", "cmcc": "CM",
-                        "ct": "CT", "telecom": "CT", "chinanet": "CT",
+                        "cu": "CU", "unicom": "CU", "zj_cu": "CU",
+                        "cm": "CM", "mobile": "CM", "cmcc": "CM", "zj_cm": "CM",
+                        "ct": "CT", "telecom": "CT", "chinanet": "CT", "zj_ct": "CT",
                     }
                     carrier = carrier_map.get(lat.key.lower(), lat.key.upper())
                     
