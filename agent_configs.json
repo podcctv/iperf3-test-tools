@@ -3,14 +3,14 @@
     "name": "RN 3GB",
     "host": "107.172.16.232",
     "agent_port": 8000,
-    "iperf_port": 62001,
+    "iperf_port": 60870,
     "description": ""
   },
   {
     "name": "RN 1GB",
     "host": "23.95.240.51",
     "agent_port": 8000,
-    "iperf_port": 62001,
+    "iperf_port": 42583,
     "description": ""
   }
 ]

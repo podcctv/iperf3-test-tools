@@ -12309,36 +12309,34 @@ async def get_ping_history(node_id: int, db: Session = Depends(get_db)):
     
     # Calculate trend for each carrier
     def calc_trend(data_points):
-        """Calculate trend based on recent data points."""
-        if len(data_points) < 3:
-            return {"symbol": "→", "color": "gray", "diff": 0, "direction": "stable"}
+        """Calculate trend: current value vs 24h average with percentage thresholds."""
+        if len(data_points) < 5:  # Need at least 5 samples for meaningful average
+            return {"symbol": "→", "color": "#94a3b8", "diff": 0, "direction": "stable", "samples": len(data_points)}
         
-        # Compare average of last 5 points vs previous 5 points
-        recent = data_points[-5:] if len(data_points) >= 5 else data_points[-len(data_points)//2:]
-        previous = data_points[:-5] if len(data_points) > 5 else data_points[:len(data_points)//2]
+        # Get current (latest) value and calculate average of previous values
+        current = data_points[-1]["ms"]
+        previous_values = [p["ms"] for p in data_points[:-1]]
+        avg_24h = sum(previous_values) / len(previous_values)
         
-        if not recent or not previous:
-            return {"symbol": "→", "color": "gray", "diff": 0, "direction": "stable"}
+        # Calculate difference and percentage change
+        diff = round(current - avg_24h, 1)
+        pct_change = (diff / avg_24h * 100) if avg_24h > 0 else 0
         
-        recent_avg = sum(p["ms"] for p in recent) / len(recent)
-        prev_avg = sum(p["ms"] for p in previous) / len(previous)
-        diff = recent_avg - prev_avg
-        
-        # Determine trend symbol and color
-        if diff < -10:
-            return {"symbol": "↓↓↓", "color": "#22c55e", "diff": round(diff, 1), "direction": "sharp_down"}
-        elif diff < -5:
-            return {"symbol": "↓↓", "color": "#22c55e", "diff": round(diff, 1), "direction": "down"}
-        elif diff < -2:
-            return {"symbol": "↓", "color": "#22c55e", "diff": round(diff, 1), "direction": "slight_down"}
-        elif diff <= 2:
-            return {"symbol": "→", "color": "#94a3b8", "diff": round(diff, 1), "direction": "stable"}
-        elif diff <= 5:
-            return {"symbol": "↗", "color": "#eab308", "diff": round(diff, 1), "direction": "slight_up"}
-        elif diff <= 10:
-            return {"symbol": "↑↑", "color": "#f97316", "diff": round(diff, 1), "direction": "up"}
-        else:
-            return {"symbol": "↑↑↑", "color": "#ef4444", "diff": round(diff, 1), "direction": "sharp_up"}
+        # Use percentage thresholds for more meaningful comparison
+        if pct_change < -15:  # More than 15% improvement
+            return {"symbol": "↓↓↓", "color": "#22c55e", "diff": diff, "direction": "sharp_down", "avg_24h": round(avg_24h, 1), "pct": round(pct_change, 1)}
+        elif pct_change < -8:  # 8-15% improvement
+            return {"symbol": "↓↓", "color": "#22c55e", "diff": diff, "direction": "down", "avg_24h": round(avg_24h, 1), "pct": round(pct_change, 1)}
+        elif pct_change < -3:  # 3-8% improvement
+            return {"symbol": "↓", "color": "#22c55e", "diff": diff, "direction": "slight_down", "avg_24h": round(avg_24h, 1), "pct": round(pct_change, 1)}
+        elif pct_change <= 3:  # Within ±3% = stable
+            return {"symbol": "→", "color": "#94a3b8", "diff": diff, "direction": "stable", "avg_24h": round(avg_24h, 1), "pct": round(pct_change, 1)}
+        elif pct_change <= 8:  # 3-8% degradation
+            return {"symbol": "↗", "color": "#eab308", "diff": diff, "direction": "slight_up", "avg_24h": round(avg_24h, 1), "pct": round(pct_change, 1)}
+        elif pct_change <= 15:  # 8-15% degradation
+            return {"symbol": "↑↑", "color": "#f97316", "diff": diff, "direction": "up", "avg_24h": round(avg_24h, 1), "pct": round(pct_change, 1)}
+        else:  # More than 15% degradation
+            return {"symbol": "↑↑↑", "color": "#ef4444", "diff": diff, "direction": "sharp_up", "avg_24h": round(avg_24h, 1), "pct": round(pct_change, 1)}
     
     trends = {}
     for carrier, points in carriers.items():
@@ -12376,44 +12374,45 @@ async def daily_traffic_stats(db: Session = Depends(get_db)):
     from .models import PingHistory
     
     # Helper function to calculate trend
-    def calc_carrier_trend(node_id: int, carrier: str):
-        """Calculate ping trend from recent history."""
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=6)  # Use last 6 hours for faster trends
+    def calc_carrier_trend(node_id: int, carrier: str, current_ms: float = None):
+        """Calculate ping trend: current value vs 24h average for stability."""
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
         records = db.query(PingHistory).filter(
             PingHistory.node_id == node_id,
             PingHistory.carrier == carrier.upper(),
             PingHistory.recorded_at >= cutoff
-        ).order_by(PingHistory.recorded_at.asc()).all()
+        ).order_by(PingHistory.recorded_at.desc()).all()
         
-        if len(records) < 3:
-            return {"symbol": "→", "color": "#94a3b8", "diff": 0}
+        if len(records) < 5:  # Need at least 5 samples for meaningful average
+            return {"symbol": "→", "color": "#94a3b8", "diff": 0, "avg_24h": None, "samples": len(records)}
         
-        # Compare average of last 3 vs previous 3
-        vals = [r.latency_ms for r in records]
-        recent = vals[-3:]
-        previous = vals[:-3] if len(vals) > 3 else vals[:len(vals)//2]
+        # Calculate 24h average (excluding the most recent sample)
+        all_latencies = [r.latency_ms for r in records]
+        avg_24h = sum(all_latencies[1:]) / len(all_latencies[1:]) if len(all_latencies) > 1 else all_latencies[0]
         
-        if not recent or not previous:
-            return {"symbol": "→", "color": "#94a3b8", "diff": 0}
+        # Use provided current value or latest record
+        current = current_ms if current_ms is not None else all_latencies[0]
         
-        recent_avg = sum(recent) / len(recent)
-        prev_avg = sum(previous) / len(previous)
-        diff = round(recent_avg - prev_avg, 1)
+        # Calculate difference: positive = latency increased (bad), negative = latency decreased (good)
+        diff = round(current - avg_24h, 1)
+        pct_change = (diff / avg_24h * 100) if avg_24h > 0 else 0
         
-        if diff < -10:
-            return {"symbol": "↓↓↓", "color": "#22c55e", "diff": diff}
-        elif diff < -5:
-            return {"symbol": "↓↓", "color": "#22c55e", "diff": diff}
-        elif diff < -2:
-            return {"symbol": "↓", "color": "#22c55e", "diff": diff}
-        elif diff <= 2:
-            return {"symbol": "→", "color": "#94a3b8", "diff": diff}
-        elif diff <= 5:
-            return {"symbol": "↗", "color": "#eab308", "diff": diff}
-        elif diff <= 10:
-            return {"symbol": "↑↑", "color": "#f97316", "diff": diff}
-        else:
-            return {"symbol": "↑↑↑", "color": "#ef4444", "diff": diff}
+        # Use percentage thresholds for more meaningful comparison
+        # Small absolute changes on high latency links shouldn't trigger alarms
+        if pct_change < -15:  # More than 15% improvement
+            return {"symbol": "↓↓↓", "color": "#22c55e", "diff": diff, "avg_24h": round(avg_24h, 1), "pct": round(pct_change, 1)}
+        elif pct_change < -8:  # 8-15% improvement
+            return {"symbol": "↓↓", "color": "#22c55e", "diff": diff, "avg_24h": round(avg_24h, 1), "pct": round(pct_change, 1)}
+        elif pct_change < -3:  # 3-8% improvement
+            return {"symbol": "↓", "color": "#22c55e", "diff": diff, "avg_24h": round(avg_24h, 1), "pct": round(pct_change, 1)}
+        elif pct_change <= 3:  # Within ±3% = stable
+            return {"symbol": "→", "color": "#94a3b8", "diff": diff, "avg_24h": round(avg_24h, 1), "pct": round(pct_change, 1)}
+        elif pct_change <= 8:  # 3-8% degradation
+            return {"symbol": "↗", "color": "#eab308", "diff": diff, "avg_24h": round(avg_24h, 1), "pct": round(pct_change, 1)}
+        elif pct_change <= 15:  # 8-15% degradation
+            return {"symbol": "↑↑", "color": "#f97316", "diff": diff, "avg_24h": round(avg_24h, 1), "pct": round(pct_change, 1)}
+        else:  # More than 15% degradation
+            return {"symbol": "↑↑↑", "color": "#ef4444", "diff": diff, "avg_24h": round(avg_24h, 1), "pct": round(pct_change, 1)}
     
     traffic_by_node = {}
     for n in nodes:
