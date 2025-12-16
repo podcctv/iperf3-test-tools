@@ -5001,8 +5001,8 @@ def _login_html() -> str:
             : 'bg-rose-500/15 text-rose-200 border-rose-500/40';
           const latencyLabel = hasLatency ? `${formatMetric(item.latency_ms, 0)} ms` : '不可达';
           const trendSpanId = nodeId ? ` id="trend-${nodeId}-${label}"` : '';
-          return `<span class="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${chipStyle} cursor-help" title="点击刷新趋势">` +
-            `<span${trendSpanId} class="text-slate-400">→</span>` +
+          return `<span class="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${chipStyle}">` +
+            `<span${trendSpanId} class="text-slate-400 cursor-help" title="加载趋势中...">→</span>` +
             `<span>${label}</span>` +
             `<span class=\"text-[10px] text-slate-300\">${latencyLabel}</span></span>`;
         })
@@ -7830,8 +7830,8 @@ def _schedules_html() -> str:
                               const color = colorMap[key] || 'bg-slate-700/40 border-slate-600/40 text-slate-300';
                               const trendSymbol = lat.trend_symbol || '→';
                               const trendColor = lat.trend_color || '#94a3b8';
-                              const trendDiff = lat.trend_diff || 0;
-                              const diffText = trendDiff > 0 ? `+${trendDiff}ms` : `${trendDiff}ms`;
+                              const trendDiff = lat.trend_diff;
+                              const diffText = (trendDiff === undefined || trendDiff === null) ? '采集中...' : (trendDiff === 0 ? '稳定' : (trendDiff > 0 ? `+${trendDiff}ms` : `${trendDiff}ms`));
                               return `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono border ${color} cursor-help" title="趋势: ${diffText}">
                                 <span style="color: ${trendColor}">${trendSymbol}</span>
                                 <span class="font-bold">${key}</span>
@@ -11857,25 +11857,30 @@ async def daily_schedule_traffic_stats(
     day_start = target_date.replace(hour=0, minute=0, second=0, microsecond=0)
     day_end = day_start + timedelta(days=1)
     
-    # Optimized query: use SQL aggregation instead of Python loops
-    # Sum bytes_transferred from ScheduleResult directly
-    results = db.execute(
-        select(
-            ScheduleResult.schedule_id,
-            sqla_func.sum(ScheduleResult.bytes_transferred).label("total_bytes")
-        )
+    # Query schedule results with related test results to get traffic data
+    from sqlalchemy.orm import joinedload
+    
+    results = db.scalars(
+        select(ScheduleResult)
+        .options(joinedload(ScheduleResult.test_result))
         .where(ScheduleResult.executed_at >= day_start)
         .where(ScheduleResult.executed_at < day_end)
         .where(ScheduleResult.status == "success")
-        .group_by(ScheduleResult.schedule_id)
     ).all()
     
-    # Build stats dict
+    # Aggregate bytes per schedule from test result summaries
     stats = {}
-    for row in results:
-        schedule_id = row[0]
-        total_bytes = row[1] or 0
-        stats[schedule_id] = total_bytes
+    for sr in results:
+        schedule_id = sr.schedule_id
+        if schedule_id not in stats:
+            stats[schedule_id] = 0
+        
+        # Extract bytes from test result summary
+        if sr.test_result and sr.test_result.summary:
+            summary = sr.test_result.summary
+            upload_bytes = summary.get("upload_bytes", 0) or 0
+            download_bytes = summary.get("download_bytes", 0) or 0
+            stats[schedule_id] += upload_bytes + download_bytes
     
     return {
         "status": "ok",
