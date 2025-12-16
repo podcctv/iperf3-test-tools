@@ -54,7 +54,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 # Expected agent version - update when releasing new agent versions
-EXPECTED_AGENT_VERSION = "1.3.0"
+EXPECTED_AGENT_VERSION = "1.4.0"
 
 # Whitelist hash tracking for smart sync
 _whitelist_hash_file = Path(os.getenv("DATA_DIR", "/app/data")) / "whitelist_hash.txt"
@@ -3923,7 +3923,7 @@ def _login_html() -> str:
           }
           
           // Version Mismatch Badge - only show when agent reports a different version
-          const expectedVersion = '1.3.0';
+          const expectedVersion = '1.4.0';
           let versionBadge = '';
           if (node.agent_version && node.agent_version !== expectedVersion) {
               versionBadge = `<span class="inline-flex items-center rounded-md bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-400 ring-1 ring-inset ring-amber-500/20 cursor-help" title="Agent版本 ${node.agent_version} 与预期版本 ${expectedVersion} 不一致，请更新">⬆️ 需更新</span>`;
@@ -7780,7 +7780,7 @@ def _schedules_html() -> str:
                           </div>
                         </div>
                         
-                        <!-- ISP Ping Badges -->
+                        <!-- ISP Ping Badges with Trends -->
                         <div class="flex flex-wrap gap-1.5 mt-2 pt-2 border-t border-slate-700/30">
                           ${(n.backbone_latency && n.backbone_latency.length > 0) ? 
                             n.backbone_latency.map(lat => {
@@ -7791,7 +7791,12 @@ def _schedules_html() -> str:
                                 'CT': 'bg-green-500/20 border-green-500/40 text-green-300'
                               };
                               const color = colorMap[key] || 'bg-slate-700/40 border-slate-600/40 text-slate-300';
-                              return `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono border ${color}">
+                              const trendSymbol = lat.trend_symbol || '→';
+                              const trendColor = lat.trend_color || '#94a3b8';
+                              const trendDiff = lat.trend_diff || 0;
+                              const diffText = trendDiff > 0 ? `+${trendDiff}ms` : `${trendDiff}ms`;
+                              return `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono border ${color} cursor-help" title="趋势: ${diffText}">
+                                <span style="color: ${trendColor}">${trendSymbol}</span>
                                 <span class="font-bold">${key}</span>
                                 <span>${lat.ms}ms</span>
                               </span>`;
@@ -11934,13 +11939,67 @@ async def daily_traffic_stats(db: Session = Depends(get_db)):
     health_statuses = await health_monitor.get_statuses()
     status_by_id = {s.id: s for s in health_statuses}
     
-    # Initialize traffic counters with backbone latency
+    # Initialize traffic counters with backbone latency and trends
+    from .models import PingHistory
+    
+    # Helper function to calculate trend
+    def calc_carrier_trend(node_id: int, carrier: str):
+        """Calculate ping trend from recent history."""
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=6)  # Use last 6 hours for faster trends
+        records = db.query(PingHistory).filter(
+            PingHistory.node_id == node_id,
+            PingHistory.carrier == carrier.upper(),
+            PingHistory.recorded_at >= cutoff
+        ).order_by(PingHistory.recorded_at.asc()).all()
+        
+        if len(records) < 3:
+            return {"symbol": "→", "color": "#94a3b8", "diff": 0}
+        
+        # Compare average of last 3 vs previous 3
+        vals = [r.latency_ms for r in records]
+        recent = vals[-3:]
+        previous = vals[:-3] if len(vals) > 3 else vals[:len(vals)//2]
+        
+        if not recent or not previous:
+            return {"symbol": "→", "color": "#94a3b8", "diff": 0}
+        
+        recent_avg = sum(recent) / len(recent)
+        prev_avg = sum(previous) / len(previous)
+        diff = round(recent_avg - prev_avg, 1)
+        
+        if diff < -10:
+            return {"symbol": "↓↓↓", "color": "#22c55e", "diff": diff}
+        elif diff < -5:
+            return {"symbol": "↓↓", "color": "#22c55e", "diff": diff}
+        elif diff < -2:
+            return {"symbol": "↓", "color": "#22c55e", "diff": diff}
+        elif diff <= 2:
+            return {"symbol": "→", "color": "#94a3b8", "diff": diff}
+        elif diff <= 5:
+            return {"symbol": "↗", "color": "#eab308", "diff": diff}
+        elif diff <= 10:
+            return {"symbol": "↑↑", "color": "#f97316", "diff": diff}
+        else:
+            return {"symbol": "↑↑↑", "color": "#ef4444", "diff": diff}
+    
     traffic_by_node = {}
     for n in nodes:
         hs = status_by_id.get(n.id)
         latency_data = []
         if hs and hs.backbone_latency:
-            latency_data = [{"key": lat.key, "name": lat.name, "ms": lat.latency_ms} for lat in hs.backbone_latency if lat.latency_ms is not None]
+            for lat in hs.backbone_latency:
+                if lat.latency_ms is None:
+                    continue
+                carrier_key = lat.key.upper() if lat.key else "N/A"
+                trend = calc_carrier_trend(n.id, carrier_key)
+                latency_data.append({
+                    "key": lat.key, 
+                    "name": lat.name, 
+                    "ms": lat.latency_ms,
+                    "trend_symbol": trend["symbol"],
+                    "trend_color": trend["color"],
+                    "trend_diff": trend["diff"]
+                })
         traffic_by_node[n.id] = {
             "bytes": 0, 
             "name": n.name, 
