@@ -5182,6 +5182,32 @@ def _login_html() -> str:
       return grid.childNodes.length ? grid : null;
     }
 
+    // Trend cache to prevent flicker on refresh
+    const TREND_CACHE_KEY = 'pingTrendCache';
+    function getTrendCache() {
+      try {
+        return JSON.parse(localStorage.getItem(TREND_CACHE_KEY) || '{}');
+      } catch { return {}; }
+    }
+    function setTrendCache(nodeId, carrier, trend) {
+      try {
+        const cache = getTrendCache();
+        const key = `${nodeId}-${carrier}`;
+        cache[key] = { symbol: trend.symbol, color: trend.color, ts: Date.now() };
+        localStorage.setItem(TREND_CACHE_KEY, JSON.stringify(cache));
+      } catch {}
+    }
+    function getCachedTrend(nodeId, carrier) {
+      const cache = getTrendCache();
+      const key = `${nodeId}-${carrier}`;
+      const item = cache[key];
+      // Use cache if less than 5 minutes old
+      if (item && Date.now() - item.ts < 300000) {
+        return item;
+      }
+      return null;
+    }
+
     function renderBackboneBadges(entries, nodeId) {
       if (!entries || !entries.length) return '';
 
@@ -5200,8 +5226,15 @@ def _login_html() -> str:
             : 'bg-rose-500/15 text-rose-200 border-rose-500/40';
           const latencyLabel = hasLatency ? `${formatMetric(item.latency_ms, 0)} ms` : '不可达';
           const trendSpanId = nodeId ? ` id="trend-${nodeId}-${label}"` : '';
+          
+          // Use cached trend if available to prevent flicker
+          const cached = nodeId ? getCachedTrend(nodeId, label) : null;
+          const trendSymbol = cached ? cached.symbol : '·';
+          const trendColor = cached ? cached.color : '#64748b';
+          const trendTitle = cached ? '上次趋势' : '加载中...';
+          
           return `<span class="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${chipStyle}">` +
-            `<span${trendSpanId} class="text-slate-400 cursor-help" title="加载趋势中...">→</span>` +
+            `<span${trendSpanId} class="cursor-help" style="color: ${trendColor}; transition: all 0.3s" title="${trendTitle}">${trendSymbol}</span>` +
             `<span>${label}</span>` +
             `<span class=\"text-[10px] text-slate-300\">${latencyLabel}</span></span>`;
         })
@@ -5249,6 +5282,9 @@ def _login_html() -> str:
             const avgText = trend.avg_24h ? ` (24h平均: ${trend.avg_24h}ms)` : '';
             const pctText = trend.pct ? ` ${trend.pct > 0 ? '+' : ''}${trend.pct}%` : '';
             trendEl.title = `趋势: ${diffText}${pctText}${avgText}`;
+            
+            // Save to cache for next page load
+            setTrendCache(nodeId, carrier, { symbol: newSymbol, color: newColor });
           }
         });
       } catch (e) {
