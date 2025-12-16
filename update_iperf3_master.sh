@@ -174,9 +174,10 @@ echo "9) 查看 iperf-agent 日志"
 echo "10) 查看 master-api 日志"
 echo "================ 其他选项 ================"
 echo "11) 配置 Agent 自动更新 (安装 Watchdog)"
-echo "12) 退出"
+echo "12) 卸载 Agent 自动更新 (移除 Watchdog)"
+echo "13) 退出"
 echo "=========================================="
-read -rp "请选择 [1-12]：" choice
+read -rp "请选择 [1-13]：" choice
 
 # GHCR.io 镜像地址
 GHCR_MASTER="ghcr.io/podcctv/iperf3-master-api:latest"
@@ -307,6 +308,58 @@ EOF
     
     echo "[INFO] Watchdog 自动更新安装完成！"
     echo "[提示] 确保容器挂载 data 目录: -v $DATA_DIR:/app/data"
+}
+
+# 卸载 watchdog 自动更新
+uninstall_watchdog() {
+    local WATCHDOG_SCRIPT="/usr/local/bin/iperf-agent-watchdog.sh"
+    local CRON_FILE="/etc/cron.d/iperf-agent-watchdog"
+    local CONFIG_FILE="/etc/iperf-agent-watchdog.conf"
+    local LOG_FILE="/var/log/iperf-agent-watchdog.log"
+    
+    echo ""
+    echo "============================================"
+    echo "      卸载 Agent 自动更新 (Watchdog)"
+    echo "============================================"
+    echo ""
+    
+    local removed=0
+    
+    if [ -f "$WATCHDOG_SCRIPT" ]; then
+        rm -f "$WATCHDOG_SCRIPT"
+        echo "[OK] 已删除 Watchdog 脚本: $WATCHDOG_SCRIPT"
+        ((removed++))
+    fi
+    
+    if [ -f "$CRON_FILE" ]; then
+        rm -f "$CRON_FILE"
+        echo "[OK] 已删除 Cron 定时任务: $CRON_FILE"
+        ((removed++))
+    fi
+    
+    if [ -f "$CONFIG_FILE" ]; then
+        rm -f "$CONFIG_FILE"
+        echo "[OK] 已删除配置文件: $CONFIG_FILE"
+        ((removed++))
+    fi
+    
+    if [ -f "$LOG_FILE" ]; then
+        read -rp "是否删除日志文件 $LOG_FILE? [y/N]: " response
+        if [[ "$response" =~ ^[yY] ]]; then
+            rm -f "$LOG_FILE"
+            echo "[OK] 已删除日志文件: $LOG_FILE"
+            ((removed++))
+        else
+            echo "[INFO] 保留日志文件: $LOG_FILE"
+        fi
+    fi
+    
+    if [ $removed -eq 0 ]; then
+        echo "[INFO] 未找到 Watchdog 相关文件，可能未安装"
+    else
+        echo ""
+        echo "[INFO] Watchdog 卸载完成！已删除 $removed 个文件"
+    fi
 }
 
 case "$choice" in
@@ -576,6 +629,10 @@ case "$choice" in
         fi
         ;;
     12)
+        # 卸载 Agent 自动更新
+        uninstall_watchdog
+        ;;
+    13)
         echo "[INFO] 退出安装程序。"
         exit 0
         ;;
