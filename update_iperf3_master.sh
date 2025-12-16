@@ -325,7 +325,6 @@ case "$choice" in
         echo "[INFO] 本地编译安装 agent..."
         bash "$AGENT_INSTALL_SCRIPT"
         echo "[INFO] Agent 安装完成！"
-        install_watchdog_silent
         ;;
     3)
         # 本地编译 - 手动安装 agent（NAT VPS）

@@ -458,10 +458,10 @@ AGENT_IMAGE="iperf-agent:latest"
 REPO_DIR="${REPO_ROOT}"
 EOF
 
-  # Install cron job to run every minute
+  # Install cron job to run every hour
   cat > "$cron_file" <<EOF
-# iperf-agent watchdog - check for updates every minute
-* * * * * root /usr/local/bin/iperf-agent-watchdog.sh >> /var/log/iperf-agent-watchdog.log 2>&1
+# iperf-agent watchdog - check for updates every hour
+0 * * * * root /usr/local/bin/iperf-agent-watchdog.sh >> /var/log/iperf-agent-watchdog.log 2>&1
 EOF
 
   chmod 644 "$cron_file"
@@ -469,7 +469,7 @@ EOF
   # Ensure log file exists
   touch /var/log/iperf-agent-watchdog.log
   
-  log "Watchdog cron job installed (runs every minute)"
+  log "Watchdog cron job installed (runs every hour)"
 }
 
 start_agent() {

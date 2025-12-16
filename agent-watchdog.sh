@@ -5,7 +5,7 @@
 # Runs on the host machine, monitors for update requests from the agent container.
 # 
 # Install location: /usr/local/bin/iperf-agent-watchdog.sh
-# Runs via cron every minute.
+# Runs via cron every hour.
 
 set -euo pipefail
 
