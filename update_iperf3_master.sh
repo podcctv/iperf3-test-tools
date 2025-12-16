@@ -317,6 +317,7 @@ case "$choice" in
         bash "$MASTER_INSTALL_SCRIPT"
         echo "[INFO] Master 安装完成！(含本机 agent)"
         show_master_password
+        install_watchdog_silent
         ;;
     2)
         # 本地编译 - 自动安装 agent
@@ -446,6 +447,7 @@ case "$choice" in
         echo "[INFO] Agent API 端口: $AGENT_PORT"
         echo "[INFO] iperf3 端口: $IPERF_PORT"
         show_master_password
+        install_watchdog_silent
         ;;
     6)
         # GHCR - 自动安装 agent
