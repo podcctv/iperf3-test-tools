@@ -3150,22 +3150,39 @@ def _login_html() -> str:
     
     async function loadAlertNodeList() {
       const listEl = document.getElementById('node-selection-list');
+      if (!listEl) return;
+      
+      listEl.innerHTML = '<div class="text-slate-500 text-sm">加载节点列表中...</div>';
+      
       try {
         const res = await apiFetch('/api/nodes');
+        console.log('[Alert] loadAlertNodeList response status:', res.status);
+        
         if (res.ok) {
           const nodes = await res.json();
+          console.log('[Alert] Loaded nodes:', nodes.length);
+          
+          if (!nodes || nodes.length === 0) {
+            listEl.innerHTML = '<div class="text-slate-400 text-sm">暂无节点</div>';
+            return;
+          }
+          
           const selectedNodes = window._alertSelectedNodes || new Set();
           
           listEl.innerHTML = nodes.map(n => `
             <label class="flex items-center gap-2 cursor-pointer p-1 rounded hover:bg-slate-800">
               <input type="checkbox" class="form-checkbox alert-node-checkbox" value="${n.id}" ${selectedNodes.has(n.id) ? 'checked' : ''} />
               <span class="text-sm text-slate-200">${n.name}</span>
-              <span class="text-xs text-slate-500">${n.ip}</span>
+              <span class="text-xs text-slate-500">${n.ip || ''}</span>
             </label>
           `).join('');
+        } else {
+          console.error('[Alert] Failed to load nodes:', res.status);
+          listEl.innerHTML = '<div class="text-rose-400 text-sm">加载失败 (' + res.status + ')</div>';
         }
       } catch (e) {
-        listEl.innerHTML = '<div class="text-rose-400 text-sm">加载失败</div>';
+        console.error('[Alert] Error loading nodes:', e);
+        listEl.innerHTML = '<div class="text-rose-400 text-sm">加载出错</div>';
       }
     }
     
