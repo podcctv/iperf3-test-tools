@@ -9,3 +9,4 @@ apscheduler==3.10.4
 croniter>=2.0.0
 requests
 cachetools
+redis

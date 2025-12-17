@@ -17,6 +17,18 @@ services:
       retries: 5
       start_period: 10s
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    volumes:
+      - redis_data:/data
+
   master-api:
     build: ./master-api
     environment:
@@ -29,11 +41,14 @@ services:
       STATE_RECENT_TESTS: ${STATE_RECENT_TESTS:-50}
       MASTER_IP: ${MASTER_IP:-}
       EXTRA_WHITELIST_IPS: ${EXTRA_WHITELIST_IPS:-}
+      REDIS_URL: redis://redis:6379/0
     ports:
       - "${MASTER_API_PORT:-9000}:8000"
       - "${MASTER_WEB_PORT:-9100}:8000"
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
@@ -48,3 +63,4 @@ services:
 
 volumes:
   db_data:
+  redis_data:
