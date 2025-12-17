@@ -5312,10 +5312,10 @@ def _login_html() -> str:
           const cached = nodeId ? getCachedTrend(nodeId, label) : null;
           const trendSymbol = cached ? cached.symbol : '·';
           const trendColor = cached ? cached.color : '#64748b';
-          const trendTitle = cached ? '上次趋势' : '加载中...';
+          // No title attribute - using sparkline popover instead
           
           return `<span class="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${chipStyle}">` +
-            `<span${trendSpanId} class="cursor-help" style="color: ${trendColor}; transition: all 0.3s" title="${trendTitle}">${trendSymbol}</span>` +
+            `<span${trendSpanId} class="cursor-help" style="color: ${trendColor}; transition: all 0.3s">${trendSymbol}</span>` +
             `<span>${label}</span>` +
             `<span class=\"text-[10px] text-slate-300\">${latencyLabel}</span></span>`;
         })
@@ -5358,11 +5358,8 @@ def _login_html() -> str:
               }, 150);
             }
             
-            // Build rich tooltip
-            const diffText = (trend.diff > 0 ? '+' : '') + (trend.diff || 0) + 'ms';
-            const avgText = trend.avg_24h ? ` (24h平均: ${trend.avg_24h}ms)` : '';
-            const pctText = trend.pct ? ` ${trend.pct > 0 ? '+' : ''}${trend.pct}%` : '';
-            trendEl.title = `趋势: ${diffText}${pctText}${avgText}`;
+            // Remove native tooltip - using sparkline popover instead
+            trendEl.removeAttribute('title');
             
             // Save to cache for next page load
             setTrendCache(nodeId, carrier, { symbol: newSymbol, color: newColor });
