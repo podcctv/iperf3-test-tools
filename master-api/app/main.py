@@ -2312,6 +2312,8 @@ def _login_html() -> str:
                   <div class="nav-dropdown-menu">
                     <a href="/web/trace" class="nav-dropdown-item">🔍 单次追踪</a>
                     <a href="/web/trace#schedules" class="nav-dropdown-item">📅 定时追踪</a>
+                    <a href="/web/trace#compare" class="nav-dropdown-item">📊 多元对比</a>
+                    <a href="/web/trace#history" class="nav-dropdown-item">📜 历史记录</a>
                   </div>
                 </div>
                 <div class="nav-dropdown">
