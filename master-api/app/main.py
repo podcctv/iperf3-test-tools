@@ -1403,7 +1403,18 @@ class NodeHealthMonitor:
             if telegram_config and telegram_config.enabled and telegram_config.value:
                 notify_node_offline = telegram_config.value.get("notify_node_offline", False)
             
+            # Node filtering
+            node_scope = "all"
+            selected_nodes = set()
+            if thresholds_config and thresholds_config.value:
+                node_scope = thresholds_config.value.get("node_scope", "all")
+                selected_nodes = set(thresholds_config.value.get("selected_nodes", []))
+            
             for status in statuses:
+                # Skip nodes not in selection (if using selected mode)
+                if node_scope == "selected" and status.id not in selected_nodes:
+                    continue
+                
                 # Check for offline nodes
                 if status.status == "offline" and notify_node_offline:
                     await trigger_alert(
@@ -2759,6 +2770,47 @@ def _login_html() -> str:
             </label>
           </div>
         </div>
+        
+        <!-- Threshold Configuration -->
+        <div class="rounded-xl border border-slate-800/60 bg-slate-950/40 p-4">
+          <h4 class="mb-3 text-lg font-semibold text-white">⚙️ 告警阈值</h4>
+          <p class="mb-4 text-sm text-slate-400">自定义触发告警的阈值。</p>
+          
+          <div class="grid gap-4 md:grid-cols-2">
+            <div class="space-y-2">
+              <label class="text-xs font-semibold text-slate-300">高延迟阈值 (ms)</label>
+              <input id="threshold-ping-high" type="number" class="form-input" value="500" min="50" max="5000" step="50" />
+              <p class="text-xs text-slate-500">Ping 延迟超过此值时触发告警</p>
+            </div>
+            <div class="space-y-2">
+              <label class="text-xs font-semibold text-slate-300">告警冷却时间 (分钟)</label>
+              <input id="threshold-cooldown" type="number" class="form-input" value="5" min="1" max="60" />
+              <p class="text-xs text-slate-500">同类告警的最小间隔时间</p>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Node Selection -->
+        <div class="rounded-xl border border-slate-800/60 bg-slate-950/40 p-4">
+          <h4 class="mb-3 text-lg font-semibold text-white">📍 监控节点</h4>
+          <p class="mb-4 text-sm text-slate-400">选择需要接收告警的节点。</p>
+          
+          <div class="mb-3 flex items-center gap-3">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="alert-node-scope" id="alert-all-nodes" value="all" class="form-radio" checked onchange="toggleNodeSelection()" />
+              <span class="text-sm text-slate-200">所有节点</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="alert-node-scope" id="alert-selected-nodes" value="selected" class="form-radio" onchange="toggleNodeSelection()" />
+              <span class="text-sm text-slate-200">仅选中节点</span>
+            </label>
+          </div>
+          
+          <div id="node-selection-list" class="hidden grid gap-2 max-h-48 overflow-y-auto rounded-lg border border-slate-700 bg-slate-900/50 p-3">
+            <!-- Populated by JS -->
+            <div class="text-slate-500 text-sm">加载节点列表中...</div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -3038,20 +3090,75 @@ def _login_html() -> str:
         if (res.ok) {
           const data = await res.json();
           const telegramConfig = data.configs?.telegram?.value || {};
+          const thresholdsConfig = data.configs?.thresholds?.value || {};
+          
+          // Bot settings
           document.getElementById('telegram-bot-token').value = telegramConfig.bot_token || '';
           document.getElementById('telegram-chat-id').value = telegramConfig.chat_id || '';
+          
+          // Notification types
           document.getElementById('notify-route-change').checked = telegramConfig.notify_route_change ?? true;
           document.getElementById('notify-schedule-failure').checked = telegramConfig.notify_schedule_failure ?? false;
           document.getElementById('notify-node-offline').checked = telegramConfig.notify_node_offline ?? false;
           document.getElementById('notify-daily-report').checked = telegramConfig.notify_daily_report ?? false;
+          
+          // Thresholds
+          document.getElementById('threshold-ping-high').value = thresholdsConfig.ping_high_ms || 500;
+          document.getElementById('threshold-cooldown').value = thresholdsConfig.cooldown_minutes || 5;
+          
+          // Node selection
+          const nodeScope = thresholdsConfig.node_scope || 'all';
+          document.getElementById('alert-all-nodes').checked = nodeScope === 'all';
+          document.getElementById('alert-selected-nodes').checked = nodeScope === 'selected';
+          toggleNodeSelection();
+          
+          // Load and mark selected nodes
+          if (thresholdsConfig.selected_nodes && thresholdsConfig.selected_nodes.length > 0) {
+            window._alertSelectedNodes = new Set(thresholdsConfig.selected_nodes);
+          } else {
+            window._alertSelectedNodes = new Set();
+          }
+          await loadAlertNodeList();
         }
       } catch (e) {
         console.log('No telegram config found or error loading:', e);
       }
     }
     
+    function toggleNodeSelection() {
+      const listEl = document.getElementById('node-selection-list');
+      const isSelected = document.getElementById('alert-selected-nodes').checked;
+      if (isSelected) {
+        listEl.classList.remove('hidden');
+        loadAlertNodeList();
+      } else {
+        listEl.classList.add('hidden');
+      }
+    }
+    
+    async function loadAlertNodeList() {
+      const listEl = document.getElementById('node-selection-list');
+      try {
+        const res = await apiFetch('/api/nodes');
+        if (res.ok) {
+          const nodes = await res.json();
+          const selectedNodes = window._alertSelectedNodes || new Set();
+          
+          listEl.innerHTML = nodes.map(n => `
+            <label class="flex items-center gap-2 cursor-pointer p-1 rounded hover:bg-slate-800">
+              <input type="checkbox" class="form-checkbox alert-node-checkbox" value="${n.id}" ${selectedNodes.has(n.id) ? 'checked' : ''} />
+              <span class="text-sm text-slate-200">${n.name}</span>
+              <span class="text-xs text-slate-500">${n.ip}</span>
+            </label>
+          `).join('');
+        }
+      } catch (e) {
+        listEl.innerHTML = '<div class="text-rose-400 text-sm">加载失败</div>';
+      }
+    }
+    
     async function saveTelegramConfig() {
-      const value = {
+      const telegramValue = {
         bot_token: document.getElementById('telegram-bot-token').value,
         chat_id: document.getElementById('telegram-chat-id').value,
         notify_route_change: document.getElementById('notify-route-change').checked,
@@ -3060,17 +3167,38 @@ def _login_html() -> str:
         notify_daily_report: document.getElementById('notify-daily-report').checked,
       };
       
+      // Gather selected nodes
+      const selectedNodes = [];
+      document.querySelectorAll('.alert-node-checkbox:checked').forEach(cb => {
+        selectedNodes.push(parseInt(cb.value));
+      });
+      
+      const thresholdsValue = {
+        ping_high_ms: parseInt(document.getElementById('threshold-ping-high').value) || 500,
+        cooldown_minutes: parseInt(document.getElementById('threshold-cooldown').value) || 5,
+        node_scope: document.getElementById('alert-selected-nodes').checked ? 'selected' : 'all',
+        selected_nodes: selectedNodes,
+      };
+      
       try {
-        const res = await apiFetch('/api/alerts/config', {
+        // Save telegram config
+        const res1 = await apiFetch('/api/alerts/config', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ key: 'telegram', value, enabled: true })
+          body: JSON.stringify({ key: 'telegram', value: telegramValue, enabled: true })
+        });
+        
+        // Save thresholds config
+        const res2 = await apiFetch('/api/alerts/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: 'thresholds', value: thresholdsValue, enabled: true })
         });
         
         const alertEl = document.getElementById('telegram-alert');
-        if (res.ok) {
+        if (res1.ok && res2.ok) {
           alertEl.className = 'alert mb-4 rounded-xl px-4 py-3 text-sm font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40';
-          alertEl.textContent = '✅ Telegram 设置已保存';
+          alertEl.textContent = '✅ 设置已保存（含阈值和节点选择）';
         } else {
           alertEl.className = 'alert mb-4 rounded-xl px-4 py-3 text-sm font-semibold bg-rose-500/20 text-rose-400 border border-rose-500/40';
           alertEl.textContent = '❌ 保存失败';
