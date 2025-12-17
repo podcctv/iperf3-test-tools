@@ -25,7 +25,8 @@ from .config import settings
 from .constants import DEFAULT_IPERF_PORT
 from .database import SessionLocal, engine, get_db
 from .agent_store import AgentConfigStore
-from .models import Base, Node, TestResult, TestSchedule, ScheduleResult, PendingTask, AsnCache
+from .models import Base, Node, TestResult, TestSchedule, ScheduleResult, PendingTask, AsnCache, AlertConfig, AlertHistory
+from . import alert_service
 from .asn_cache import sync_peeringdb, get_asn_info, get_asn_count
 from .remote_agent import fetch_agent_logs, redeploy_agent, remove_agent_container, RemoteCommandError
 from .schemas import (
@@ -15128,3 +15129,168 @@ async def admin_page(request: Request):
     
     return HTMLResponse(content=_admin_html())
 
+
+# ============== Alert Notification API ==============
+
+class AlertConfigUpdate(BaseModel):
+    """Request model for updating alert configuration."""
+    key: str  # "telegram", "webhook", "thresholds"
+    value: dict
+    enabled: bool = True
+
+
+@app.get("/api/alerts/config")
+async def get_alert_configs(db: Session = Depends(get_db)):
+    """Get all alert configurations."""
+    configs = db.scalars(select(AlertConfig)).all()
+    return {
+        "status": "ok",
+        "configs": {c.key: {"value": c.value, "enabled": c.enabled} for c in configs}
+    }
+
+
+@app.post("/api/alerts/config")
+async def update_alert_config(payload: AlertConfigUpdate, db: Session = Depends(get_db)):
+    """Update alert configuration."""
+    config = db.query(AlertConfig).filter(AlertConfig.key == payload.key).first()
+    if config:
+        config.value = payload.value
+        config.enabled = payload.enabled
+    else:
+        config = AlertConfig(key=payload.key, value=payload.value, enabled=payload.enabled)
+        db.add(config)
+    
+    db.commit()
+    return {"status": "ok", "message": f"Alert config '{payload.key}' updated"}
+
+
+class TestAlertRequest(BaseModel):
+    """Request model for testing alert notification."""
+    channel: str = "telegram"  # "telegram" or "webhook"
+
+
+@app.post("/api/alerts/test")
+async def test_alert_notification(payload: TestAlertRequest, db: Session = Depends(get_db)):
+    """Send a test notification to verify configuration."""
+    # Get config
+    config = db.query(AlertConfig).filter(AlertConfig.key == payload.channel).first()
+    if not config or not config.enabled:
+        return {"status": "error", "message": f"Channel '{payload.channel}' not configured or disabled"}
+    
+    message = alert_service.format_alert_message(
+        alert_type="test_alert",
+        severity="info",
+        node_name="测试节点",
+        message="这是一条测试告警消息。如果您看到此消息，说明告警配置正确！",
+        details={"current_value": "N/A", "threshold": "N/A"}
+    )
+    
+    success = False
+    if payload.channel == "telegram":
+        bot_token = config.value.get("bot_token")
+        chat_id = config.value.get("chat_id")
+        success = await alert_service.send_telegram(bot_token, chat_id, message)
+    elif payload.channel == "webhook":
+        webhook_url = config.value.get("url")
+        webhook_payload = alert_service.format_webhook_payload(
+            alert_type="test_alert",
+            severity="info",
+            node_id=0,
+            node_name="测试节点",
+            message="这是一条测试告警消息",
+            details={}
+        )
+        success = await alert_service.send_webhook(webhook_url, webhook_payload)
+    
+    if success:
+        return {"status": "ok", "message": "测试消息发送成功！"}
+    else:
+        return {"status": "error", "message": "发送失败，请检查配置"}
+
+
+@app.get("/api/alerts/history")
+async def get_alert_history(limit: int = 50, db: Session = Depends(get_db)):
+    """Get alert history."""
+    alerts = db.scalars(
+        select(AlertHistory)
+        .order_by(AlertHistory.created_at.desc())
+        .limit(limit)
+    ).all()
+    
+    return {
+        "status": "ok",
+        "alerts": [
+            {
+                "id": a.id,
+                "alert_type": a.alert_type,
+                "severity": a.severity,
+                "node_id": a.node_id,
+                "node_name": a.node_name,
+                "message": a.message,
+                "channels_sent": a.channels_sent,
+                "is_resolved": a.is_resolved,
+                "created_at": a.created_at.isoformat() if a.created_at else None
+            }
+            for a in alerts
+        ]
+    }
+
+
+async def trigger_alert(
+    db: Session,
+    alert_type: str,
+    severity: str,
+    node_id: int | None,
+    node_name: str,
+    message: str,
+    details: dict = None
+):
+    """Core function to trigger an alert - checks rate limit, sends notification, logs history."""
+    # Check rate limit
+    if alert_service.is_rate_limited(alert_type, node_id):
+        return False
+    
+    channels_sent = []
+    
+    # Get configs
+    telegram_config = db.query(AlertConfig).filter(AlertConfig.key == "telegram").first()
+    webhook_config = db.query(AlertConfig).filter(AlertConfig.key == "webhook").first()
+    
+    # Send Telegram
+    if telegram_config and telegram_config.enabled and telegram_config.value:
+        bot_token = telegram_config.value.get("bot_token")
+        chat_id = telegram_config.value.get("chat_id")
+        if bot_token and chat_id:
+            formatted_msg = alert_service.format_alert_message(
+                alert_type, severity, node_name, message, details
+            )
+            if await alert_service.send_telegram(bot_token, chat_id, formatted_msg):
+                channels_sent.append("telegram")
+    
+    # Send Webhook
+    if webhook_config and webhook_config.enabled and webhook_config.value:
+        webhook_url = webhook_config.value.get("url")
+        if webhook_url:
+            payload = alert_service.format_webhook_payload(
+                alert_type, severity, node_id, node_name, message, details
+            )
+            if await alert_service.send_webhook(webhook_url, payload):
+                channels_sent.append("webhook")
+    
+    # Log to history if any channel was sent
+    if channels_sent:
+        history = AlertHistory(
+            alert_type=alert_type,
+            severity=severity,
+            node_id=node_id,
+            node_name=node_name,
+            message=message,
+            details=details,
+            channels_sent=channels_sent
+        )
+        db.add(history)
+        db.commit()
+        alert_service.record_alert_sent(alert_type, node_id)
+        return True
+    
+    return False

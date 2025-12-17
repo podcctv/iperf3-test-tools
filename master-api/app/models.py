@@ -209,3 +209,36 @@ class PingHistory(Base):
     recorded_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     
     node = relationship("Node", foreign_keys=[node_id])
+
+
+# ============== Alert Notification System ==============
+
+class AlertConfig(Base):
+    """Global alert configuration settings."""
+    __tablename__ = "alert_configs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    key = Column(String, unique=True, nullable=False, index=True)  # "telegram", "webhook", "thresholds"
+    value = Column(JSON, nullable=False)  # Configuration data
+    enabled = Column(Boolean, default=True)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class AlertHistory(Base):
+    """Log of sent alerts for tracking and avoiding duplicates."""
+    __tablename__ = "alert_history"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    alert_type = Column(String, nullable=False, index=True)  # "ping_high", "node_offline", "bandwidth_low", "route_change"
+    severity = Column(String, default="warning")  # "info", "warning", "critical"
+    node_id = Column(Integer, ForeignKey("nodes.id"), nullable=True)
+    node_name = Column(String, nullable=True)  # Cache node name for history display
+    message = Column(Text, nullable=False)
+    details = Column(JSON, nullable=True)  # Additional context data
+    channels_sent = Column(JSON, default=list)  # ["telegram", "webhook"]
+    is_resolved = Column(Boolean, default=False)  # Whether the alert condition was resolved
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    
+    node = relationship("Node", foreign_keys=[node_id])
+
