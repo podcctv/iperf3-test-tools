@@ -1113,41 +1113,41 @@ def _summarize_metrics(raw: dict | None, direction_label: str | None = None) -> 
         latency_ms = latency_ms / 1000
 
     # Determine upload/download bits_per_second
-    # Use TARGET NODE perspective (not source/client perspective):
-    # - sum_sent = data sent BY source TO target = target's DOWNLOAD
-    # - sum_received = data sent BY target TO source = target's UPLOAD
-    # This makes the stats meaningful from the destination/server viewpoint
-    download_bps = (sum_sent or {}).get("bits_per_second")  # Source sends → Target downloads
-    upload_bps = (sum_received or {}).get("bits_per_second")  # Source receives → Target uploads
+    # Use SOURCE NODE perspective (user configures src → dst direction):
+    # - sum_sent = data sent BY source TO target = source's UPLOAD
+    # - sum_received = data received BY source FROM target = source's DOWNLOAD
+    # This matches user expectation: upload test shows source's upload speed
+    upload_bps = (sum_sent or {}).get("bits_per_second")  # Source sends → Source upload
+    download_bps = (sum_received or {}).get("bits_per_second")  # Source receives → Source download
     
     # For UDP tests: iperf3 only provides 'sum' field, not sum_sent/sum_received
-    # Use direction_label to assign correctly (also swapped for target perspective)
+    # Use direction_label to assign correctly (source perspective)
     if not upload_bps and not download_bps and sum_general.get("bits_per_second"):
         general_bps = sum_general.get("bits_per_second")
-        # Direction is from source's perspective, so swap for target
+        # Direction is from source's perspective
         if direction_label == "upload":
-            # Source uploading = Target downloading
-            download_bps = general_bps
-        elif direction_label == "download":
-            # Source downloading = Target uploading
+            # Source uploading
             upload_bps = general_bps
-        else:
-            # Default to download if no direction specified (backward compat)
+        elif direction_label == "download":
+            # Source downloading
             download_bps = general_bps
+        else:
+            # Default to upload if no direction specified
+            upload_bps = general_bps
 
-    # Calculate bytes for traffic badge
-    upload_bytes = (sum_received or {}).get("bytes")  # Target's upload bytes
-    download_bytes = (sum_sent or {}).get("bytes")  # Target's download bytes
+    # Calculate bytes for traffic badge (source perspective)
+    upload_bytes = (sum_sent or {}).get("bytes")  # Source's upload bytes
+    download_bytes = (sum_received or {}).get("bytes")  # Source's download bytes
     
     # Fallback to general sum for UDP
     if not upload_bytes and not download_bytes and sum_general.get("bytes"):
         general_bytes = sum_general.get("bytes")
         if direction_label == "upload":
-            download_bytes = general_bytes
-        elif direction_label == "download":
             upload_bytes = general_bytes
-        else:
+        elif direction_label == "download":
             download_bytes = general_bytes
+        else:
+            upload_bytes = general_bytes
 
     return {
         "bits_per_second": bits_per_second,
