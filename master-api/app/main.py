@@ -2002,56 +2002,69 @@ def _login_html() -> str:
       box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
     }
     
-    /* Sparkline Popover */
+    /* Sparkline Popover - Compact Design */
     .sparkline-popover {
       position: fixed;
       z-index: 9999;
       background: linear-gradient(135deg, rgba(15, 23, 42, 0.98), rgba(30, 41, 59, 0.98));
       border: 1px solid rgba(100, 116, 139, 0.3);
-      border-radius: 12px;
-      padding: 12px;
+      border-radius: 10px;
+      padding: 10px 12px;
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.05) inset;
       backdrop-filter: blur(12px);
       pointer-events: none;
       opacity: 0;
-      transform: translateY(8px);
-      transition: opacity 0.2s ease, transform 0.2s ease;
+      transform: translateY(8px) scale(0.95);
+      transition: opacity 0.15s ease, transform 0.15s ease;
+      min-width: 220px;
     }
     .sparkline-popover.show {
       opacity: 1;
-      transform: translateY(0);
+      transform: translateY(0) scale(1);
     }
     .sparkline-header {
       display: flex;
       align-items: center;
-      gap: 8px;
-      margin-bottom: 8px;
-      font-size: 11px;
-      color: #94a3b8;
+      justify-content: space-between;
+      margin-bottom: 6px;
     }
     .sparkline-carrier {
       font-weight: 700;
-      font-size: 12px;
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 4px;
     }
-    .sparkline-carrier.cu { color: #f87171; }
-    .sparkline-carrier.cm { color: #60a5fa; }
-    .sparkline-carrier.ct { color: #4ade80; }
-    .sparkline-stats {
-      display: flex;
-      gap: 12px;
-      margin-top: 8px;
+    .sparkline-carrier.cu { color: #fca5a5; background: rgba(239, 68, 68, 0.2); }
+    .sparkline-carrier.cm { color: #93c5fd; background: rgba(59, 130, 246, 0.2); }
+    .sparkline-carrier.ct { color: #86efac; background: rgba(34, 197, 94, 0.2); }
+    .sparkline-title {
       font-size: 10px;
       color: #64748b;
     }
-    .sparkline-stats span {
-      display: flex;
-      align-items: center;
-      gap: 4px;
+    .sparkline-canvas-wrap {
+      background: rgba(0,0,0,0.2);
+      border-radius: 6px;
+      padding: 4px;
+      margin-bottom: 6px;
     }
-    .sparkline-stats .current { color: #22d3ee; font-weight: 600; }
-    .sparkline-stats .avg { color: #a78bfa; }
-    .sparkline-stats .min { color: #4ade80; }
-    .sparkline-stats .max { color: #f87171; }
+    .sparkline-stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 4px;
+      font-size: 9px;
+    }
+    .sparkline-stats .stat-item {
+      text-align: center;
+      padding: 3px 0;
+      border-radius: 4px;
+      background: rgba(0,0,0,0.2);
+    }
+    .sparkline-stats .stat-label { color: #64748b; display: block; }
+    .sparkline-stats .stat-value { font-weight: 700; font-size: 10px; }
+    .sparkline-stats .current .stat-value { color: #22d3ee; }
+    .sparkline-stats .avg .stat-value { color: #a78bfa; }
+    .sparkline-stats .min .stat-value { color: #4ade80; }
+    .sparkline-stats .max .stat-value { color: #f87171; }
   </style>
 </head>
 <body>
@@ -2081,14 +2094,16 @@ def _login_html() -> str:
   <div id="sparkline-popover" class="sparkline-popover">
     <div class="sparkline-header">
       <span id="sparkline-carrier" class="sparkline-carrier">CU</span>
-      <span id="sparkline-title">24小时延迟趋势</span>
+      <span id="sparkline-title" class="sparkline-title">24h延迟</span>
     </div>
-    <canvas id="sparkline-canvas" width="200" height="60"></canvas>
+    <div class="sparkline-canvas-wrap">
+      <canvas id="sparkline-canvas" width="196" height="50"></canvas>
+    </div>
     <div class="sparkline-stats">
-      <span class="current">当前: <b id="sparkline-current">--</b>ms</span>
-      <span class="avg">平均: <b id="sparkline-avg">--</b>ms</span>
-      <span class="min">最低: <b id="sparkline-min">--</b>ms</span>
-      <span class="max">最高: <b id="sparkline-max">--</b>ms</span>
+      <div class="stat-item current"><span class="stat-label">当前</span><span class="stat-value" id="sparkline-current">--</span></div>
+      <div class="stat-item avg"><span class="stat-label">平均</span><span class="stat-value" id="sparkline-avg">--</span></div>
+      <div class="stat-item min"><span class="stat-label">最低</span><span class="stat-value" id="sparkline-min">--</span></div>
+      <div class="stat-item max"><span class="stat-label">最高</span><span class="stat-value" id="sparkline-max">--</span></div>
     </div>
   </div>
   <script>
