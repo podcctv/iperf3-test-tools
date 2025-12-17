@@ -17,6 +17,8 @@ from croniter import croniter
 import httpx
 from fastapi import BackgroundTasks, Body, Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.gzip import GZipMiddleware
 from sqlalchemy import or_, select, text
 from sqlalchemy.orm import Session, joinedload
 
@@ -480,6 +482,16 @@ async def lifespan(app):
 
 app = FastAPI(title="iperf3 master api", lifespan=lifespan)
 agent_store = AgentConfigStore(settings.agent_config_file)
+
+# Performance optimizations
+app.add_middleware(GZipMiddleware, minimum_size=1000)  # Enable Gzip compression
+
+# Mount static files directory if it exists
+import os
+static_dir = Path(__file__).parent / "static"
+if static_dir.exists():
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
 
 
 # ============================================================================

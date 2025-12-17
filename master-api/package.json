@@ -1,0 +1,12 @@
+{
+    "name": "iperf3-master-api",
+    "version": "1.0.0",
+    "description": "Frontend build tools for iperf3 test tools",
+    "scripts": {
+        "build:css": "tailwindcss -i ./input.css -o ./app/static/styles.css --minify",
+        "watch:css": "tailwindcss -i ./input.css -o ./app/static/styles.css --watch"
+    },
+    "devDependencies": {
+        "tailwindcss": "^3.4.0"
+    }
+}
