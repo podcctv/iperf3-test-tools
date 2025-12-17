@@ -2975,18 +2975,19 @@ def _login_html() -> str:
       console.log('setActiveSettingsTab completed');
     }
     
-    // Telegram Functions
+    // Telegram Functions - Using Alert API
     async function loadTelegramConfig() {
       try {
-        const res = await apiFetch('/admin/telegram');
+        const res = await apiFetch('/api/alerts/config');
         if (res.ok) {
           const data = await res.json();
-          document.getElementById('telegram-bot-token').value = data.bot_token || '';
-          document.getElementById('telegram-chat-id').value = data.chat_id || '';
-          document.getElementById('notify-route-change').checked = data.notify_route_change ?? true;
-          document.getElementById('notify-schedule-failure').checked = data.notify_schedule_failure ?? false;
-          document.getElementById('notify-node-offline').checked = data.notify_node_offline ?? false;
-          document.getElementById('notify-daily-report').checked = data.notify_daily_report ?? false;
+          const telegramConfig = data.configs?.telegram?.value || {};
+          document.getElementById('telegram-bot-token').value = telegramConfig.bot_token || '';
+          document.getElementById('telegram-chat-id').value = telegramConfig.chat_id || '';
+          document.getElementById('notify-route-change').checked = telegramConfig.notify_route_change ?? true;
+          document.getElementById('notify-schedule-failure').checked = telegramConfig.notify_schedule_failure ?? false;
+          document.getElementById('notify-node-offline').checked = telegramConfig.notify_node_offline ?? false;
+          document.getElementById('notify-daily-report').checked = telegramConfig.notify_daily_report ?? false;
         }
       } catch (e) {
         console.log('No telegram config found or error loading:', e);
@@ -2994,7 +2995,7 @@ def _login_html() -> str:
     }
     
     async function saveTelegramConfig() {
-      const data = {
+      const value = {
         bot_token: document.getElementById('telegram-bot-token').value,
         chat_id: document.getElementById('telegram-chat-id').value,
         notify_route_change: document.getElementById('notify-route-change').checked,
@@ -3004,10 +3005,10 @@ def _login_html() -> str:
       };
       
       try {
-        const res = await apiFetch('/admin/telegram', {
+        const res = await apiFetch('/api/alerts/config', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data)
+          body: JSON.stringify({ key: 'telegram', value, enabled: true })
         });
         
         const alertEl = document.getElementById('telegram-alert');
@@ -3027,16 +3028,20 @@ def _login_html() -> str:
     
     async function testTelegramConfig() {
       try {
-        const res = await apiFetch('/admin/telegram/test', { method: 'POST' });
+        const res = await apiFetch('/api/alerts/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ channel: 'telegram' })
+        });
         const alertEl = document.getElementById('telegram-alert');
+        const data = await res.json();
         
-        if (res.ok) {
+        if (data.status === 'ok') {
           alertEl.className = 'alert mb-4 rounded-xl px-4 py-3 text-sm font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40';
           alertEl.textContent = '✅ 测试消息已发送，请检查Telegram';
         } else {
-          const data = await res.json();
           alertEl.className = 'alert mb-4 rounded-xl px-4 py-3 text-sm font-semibold bg-rose-500/20 text-rose-400 border border-rose-500/40';
-          alertEl.textContent = `❌ 发送失败: ${data.detail || '请检查配置'}`;
+          alertEl.textContent = `❌ 发送失败: ${data.message || '请检查配置'}`;
         }
         alertEl.classList.remove('hidden');
         setTimeout(() => alertEl.classList.add('hidden'), 5000);
