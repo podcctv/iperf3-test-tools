@@ -1400,8 +1400,10 @@ class NodeHealthMonitor:
             
             # Check if telegram notifications are enabled for these alert types
             notify_node_offline = False
+            notify_ping_high = False
             if telegram_config and telegram_config.enabled and telegram_config.value:
                 notify_node_offline = telegram_config.value.get("notify_node_offline", False)
+                notify_ping_high = telegram_config.value.get("notify_ping_high", False)
             
             # Node filtering
             node_scope = "all"
@@ -1428,7 +1430,7 @@ class NodeHealthMonitor:
                     )
                 
                 # Check for high ping latency
-                if status.backbone_latency:
+                if status.backbone_latency and notify_ping_high:
                     for lat in status.backbone_latency:
                         if lat.latency_ms and lat.latency_ms > ping_threshold_ms:
                             await trigger_alert(
@@ -2769,6 +2771,13 @@ def _login_html() -> str:
               </div>
             </label>
             <label class="flex items-center gap-3 rounded-lg border border-slate-700 bg-slate-800/50 p-3 cursor-pointer hover:border-slate-600 transition">
+              <input type="checkbox" id="notify-ping-high" class="form-checkbox">
+              <div>
+                <span class="font-semibold text-white">📶 高延迟告警</span>
+                <p class="text-xs text-slate-400">Ping延迟超过阈值时通知</p>
+              </div>
+            </label>
+            <label class="flex items-center gap-3 rounded-lg border border-slate-700 bg-slate-800/50 p-3 cursor-pointer hover:border-slate-600 transition">
               <input type="checkbox" id="notify-daily-report" class="form-checkbox">
               <div>
                 <span class="font-semibold text-white">📊 每日报告</span>
@@ -3112,6 +3121,7 @@ def _login_html() -> str:
           document.getElementById('notify-route-change').checked = telegramConfig.notify_route_change ?? true;
           document.getElementById('notify-schedule-failure').checked = telegramConfig.notify_schedule_failure ?? false;
           document.getElementById('notify-node-offline').checked = telegramConfig.notify_node_offline ?? false;
+          document.getElementById('notify-ping-high').checked = telegramConfig.notify_ping_high ?? false;
           document.getElementById('notify-daily-report').checked = telegramConfig.notify_daily_report ?? false;
           
           // Thresholds
@@ -3155,7 +3165,7 @@ def _login_html() -> str:
       listEl.innerHTML = '<div class="text-slate-500 text-sm">加载节点列表中...</div>';
       
       try {
-        const res = await apiFetch('/api/nodes');
+        const res = await apiFetch('/nodes');
         console.log('[Alert] loadAlertNodeList response status:', res.status);
         
         if (res.ok) {
@@ -3193,6 +3203,7 @@ def _login_html() -> str:
         notify_route_change: document.getElementById('notify-route-change').checked,
         notify_schedule_failure: document.getElementById('notify-schedule-failure').checked,
         notify_node_offline: document.getElementById('notify-node-offline').checked,
+        notify_ping_high: document.getElementById('notify-ping-high').checked,
         notify_daily_report: document.getElementById('notify-daily-report').checked,
       };
       
