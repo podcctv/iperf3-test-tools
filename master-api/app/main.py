@@ -2324,14 +2324,13 @@ def _login_html() -> str:
                     <span>设置</span>
                   </div>
                   <div class="nav-dropdown-menu">
+                    <a href="javascript:void(0)" onclick="openSettingsTab('password')" class="nav-dropdown-item">🔐 修改密码</a>
+                    <a href="javascript:void(0)" onclick="openSettingsTab('telegram')" class="nav-dropdown-item">📱 Telegram告警</a>
+                    <a href="javascript:void(0)" onclick="openSettingsTab('config')" class="nav-dropdown-item">📦 配置管理</a>
+                    <a href="javascript:void(0)" onclick="openSettingsTab('admin')" class="nav-dropdown-item">🗄️ 数据库管理</a>
                     <a href="/web/whitelist" class="nav-dropdown-item">🛡️ 白名单管理</a>
-                    <a href="javascript:void(0)" onclick="toggleSettingsModal(true)" class="nav-dropdown-item">⚙️ 系统设置</a>
                   </div>
                 </div>
-                <button onclick="togglePasswordModal(true)" class="guest-hide rounded-lg border border-slate-600 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-amber-500 hover:text-amber-200 inline-flex items-center gap-2">
-                  <span class="text-base">🔑</span>
-                  <span>修改密码</span>
-                </button>
                 <button id="logout-btn" class="rounded-lg border border-slate-600 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-rose-500 hover:text-rose-200">退出登录</button>
               </div>
             </div>
@@ -2880,6 +2879,11 @@ def _login_html() -> str:
     // Initialize all elements when DOM is ready
     
     // Settings Modal Functions
+    function openSettingsTab(tabName) {
+      toggleSettingsModal(true);
+      setActiveSettingsTab(tabName);
+    }
+    
     function toggleSettingsModal(show) {
       const modal = document.getElementById('settings-modal');
       if (modal) {
