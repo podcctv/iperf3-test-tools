@@ -1313,10 +1313,28 @@ async def get_flag(code: str) -> Response:
                     },
                 )
             else:
-                raise HTTPException(status_code=resp.status_code, detail="Flag not found")
+                # Return fallback SVG if upstream fails
+                return _get_fallback_flag(code)
     except httpx.RequestError as e:
         logger.warning(f"Failed to fetch flag for {code}: {e}")
-        raise HTTPException(status_code=502, detail="Failed to fetch flag image")
+        # Return fallback instead of error
+        return _get_fallback_flag(code)
+
+
+def _get_fallback_flag(code: str) -> Response:
+    """Return a simple SVG placeholder when flag image cannot be fetched."""
+    svg = f'''<svg width="24" height="18" xmlns="http://www.w3.org/2000/svg">
+        <rect width="24" height="18" fill="#394150"/>
+        <text x="12" y="13" font-family="Arial" font-size="10" fill="#9BA3AF" text-anchor="middle">{code.upper()}</text>
+    </svg>'''
+    return Response(
+        content=svg,
+        media_type="image/svg+xml",
+        headers={
+            "Cache-Control": "public, max-age=3600",
+            "X-Cache": "FALLBACK"
+        },
+    )
 
 
 def _is_authenticated(request: Request) -> bool:
