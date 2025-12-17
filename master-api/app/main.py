@@ -1371,6 +1371,7 @@ class NodeHealthMonitor:
             try:
                 statuses = await self.refresh()
                 await self._sync_ports(statuses)
+                await self._check_alerts(statuses)  # Check for alerts
                 
                 # Store ping history every 60 seconds (every 2 cycles at 30s interval)
                 ping_cycle_counter += 1
@@ -1381,6 +1382,61 @@ class NodeHealthMonitor:
             except Exception:
                 logger.exception("Failed to refresh node health")
             await asyncio.sleep(self.interval_seconds)
+
+    async def _check_alerts(self, statuses: List[NodeWithStatus]) -> None:
+        """Check for alert conditions and trigger notifications."""
+        # Get alert thresholds from config
+        db = SessionLocal()
+        try:
+            thresholds_config = db.query(AlertConfig).filter(AlertConfig.key == "thresholds").first()
+            telegram_config = db.query(AlertConfig).filter(AlertConfig.key == "telegram").first()
+            
+            # Default thresholds
+            ping_threshold_ms = 500
+            offline_threshold = 3  # Not used yet - would need consecutive tracking
+            
+            if thresholds_config and thresholds_config.value:
+                ping_threshold_ms = thresholds_config.value.get("ping_high_ms", 500)
+            
+            # Check if telegram notifications are enabled for these alert types
+            notify_node_offline = False
+            if telegram_config and telegram_config.enabled and telegram_config.value:
+                notify_node_offline = telegram_config.value.get("notify_node_offline", False)
+            
+            for status in statuses:
+                # Check for offline nodes
+                if status.status == "offline" and notify_node_offline:
+                    await trigger_alert(
+                        db=db,
+                        alert_type="node_offline",
+                        severity="critical",
+                        node_id=status.id,
+                        node_name=status.name,
+                        message=f"节点 {status.name} 离线！无法连接到 Agent。",
+                        details={"ip": status.ip}
+                    )
+                
+                # Check for high ping latency
+                if status.backbone_latency:
+                    for lat in status.backbone_latency:
+                        if lat.latency_ms and lat.latency_ms > ping_threshold_ms:
+                            await trigger_alert(
+                                db=db,
+                                alert_type="ping_high",
+                                severity="warning",
+                                node_id=status.id,
+                                node_name=status.name,
+                                message=f"节点 {status.name} 的 {lat.name} 延迟过高: {lat.latency_ms}ms",
+                                details={
+                                    "carrier": lat.name,
+                                    "current_value": f"{lat.latency_ms}ms",
+                                    "threshold": f"{ping_threshold_ms}ms"
+                                }
+                            )
+        except Exception as e:
+            logger.error(f"Failed to check alerts: {e}")
+        finally:
+            db.close()
 
     async def _store_ping_history(self, statuses: List[NodeWithStatus]) -> None:
         """Store backbone latency data to PingHistory table for trend analysis."""
