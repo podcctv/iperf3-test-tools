@@ -2601,9 +2601,9 @@ def _login_html() -> str:
   </div>
 
   <!-- Settings Modal -->
-  <div id="settings-modal" class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-950/80 px-4 py-6 backdrop-blur">
-    <div class="relative w-full max-w-2xl rounded-3xl border border-slate-800 bg-slate-900/80 p-6 shadow-2xl shadow-black/40">
-      <button id="close-settings" onclick="toggleSettingsModal(false)" class="absolute right-4 top-4 rounded-full border border-slate-700/80 bg-slate-800/80 p-2 text-slate-300 transition hover:bg-slate-700/80 z-10">✕</button>
+  <div id="settings-modal" class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-950/80 px-4 py-6 backdrop-blur overflow-y-auto">
+    <div class="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl border border-slate-800 bg-slate-900/80 p-6 shadow-2xl shadow-black/40 my-auto">
+      <button id="close-settings" onclick="toggleSettingsModal(false)" class="sticky top-0 right-0 float-right rounded-full border border-slate-700/80 bg-slate-800/80 p-2 text-slate-300 transition hover:bg-slate-700/80 z-10 mb-2">✕</button>
       
       <div class="mb-6 flex items-center justify-between gap-2 pr-12">
         <div>
