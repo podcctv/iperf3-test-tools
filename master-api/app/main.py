@@ -2065,6 +2065,97 @@ def _login_html() -> str:
     .sparkline-stats .avg .stat-value { color: #a78bfa; }
     .sparkline-stats .min .stat-value { color: #4ade80; }
     .sparkline-stats .max .stat-value { color: #f87171; }
+    
+    /* ============ Mobile Responsive Styles ============ */
+    
+    /* Mobile Navigation */
+    @media (max-width: 768px) {
+      .nav-dropdown-menu { min-width: 180px; }
+      .container { padding-left: 12px; padding-right: 12px; }
+    }
+    
+    /* Mobile: < 640px */
+    @media (max-width: 640px) {
+      /* Header adjustments */
+      .flex-wrap.items-center.gap-3 { gap: 6px; }
+      
+      /* Full width buttons on mobile */
+      .mobile-full-width { width: 100% !important; }
+      
+      /* Card grid - single column */
+      .grid.grid-cols-1.lg\\:grid-cols-2 { grid-template-columns: 1fr !important; }
+      
+      /* Smaller text on mobile */
+      .text-3xl { font-size: 1.5rem !important; }
+      .text-2xl { font-size: 1.25rem !important; }
+      .text-xl { font-size: 1.1rem !important; }
+      
+      /* Touch-friendly buttons */
+      button, .btn-primary, [class*="rounded-lg"][class*="px-4"] {
+        min-height: 44px;
+        padding-top: 10px;
+        padding-bottom: 10px;
+      }
+      
+      /* Ping badges wrap */
+      .flex.flex-wrap.gap-2 { gap: 4px; }
+      .flex.flex-wrap.gap-2 > span { font-size: 10px; padding: 4px 8px; }
+      
+      /* Streaming badges horizontal scroll */
+      .streaming-badges-mobile {
+        display: flex;
+        overflow-x: auto;
+        gap: 6px;
+        padding-bottom: 4px;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+      }
+      .streaming-badges-mobile::-webkit-scrollbar { display: none; }
+      
+      /* Modal full screen on mobile */
+      .custom-modal {
+        width: 95vw;
+        max-width: none;
+        margin: 10px;
+        max-height: 90vh;
+        overflow-y: auto;
+      }
+      
+      /* Sparkline popover adjustment */
+      .sparkline-popover {
+        left: 10px !important;
+        right: 10px !important;
+        width: auto !important;
+      }
+      
+      /* Node card actions */
+      .node-card-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .node-card-actions button {
+        width: 100%;
+      }
+    }
+    
+    /* Tablet: 641px - 1024px */
+    @media (min-width: 641px) and (max-width: 1024px) {
+      .grid.grid-cols-1.lg\\:grid-cols-2 { grid-template-columns: repeat(2, 1fr) !important; }
+      
+      /* Two column VPS summary on tablet */
+      .grid.lg\\:grid-cols-4 { grid-template-columns: repeat(2, 1fr) !important; }
+    }
+    
+    /* Hide on mobile helper */
+    @media (max-width: 640px) {
+      .hide-mobile { display: none !important; }
+    }
+    
+    /* Show only on mobile helper */
+    @media (min-width: 641px) {
+      .show-mobile-only { display: none !important; }
+    }
   </style>
 </head>
 <body>
@@ -6901,19 +6992,19 @@ def _schedules_html() -> str:
   </script>
   <div class="container mx-auto px-4 py-8 max-w-7xl">
     <!-- Header -->
-    <div class="mb-8 flex items-center justify-between">
+    <div class="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
-        <h1 class="text-3xl font-bold text-white">定时任务管理</h1>
-        <p class="text-slate-400 mt-1">Schedule Management & Monitoring</p>
+        <h1 class="text-2xl sm:text-3xl font-bold text-white">定时任务管理</h1>
+        <p class="text-slate-400 mt-1 text-sm">Schedule Management & Monitoring</p>
       </div>
-      <div class="flex gap-3">
-        <a href="/web" class="px-4 py-2 rounded-lg border border-slate-700 bg-slate-800/60 text-sm font-semibold text-slate-100 hover:border-sky-500 transition">
+      <div class="flex flex-wrap gap-2 sm:gap-3">
+        <a href="/web" class="px-3 sm:px-4 py-2 rounded-lg border border-slate-700 bg-slate-800/60 text-xs sm:text-sm font-semibold text-slate-100 hover:border-sky-500 transition">
           ← 返回主页
         </a>
-        <button id="create-schedule-btn" class="px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-sky-500 text-sm font-semibold text-white shadow-lg hover:scale-105 transition">
+        <button id="create-schedule-btn" class="px-3 sm:px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-sky-500 text-xs sm:text-sm font-semibold text-white shadow-lg hover:scale-105 transition">
           + 新建任务
         </button>
-        <button id="refresh-btn" class="px-4 py-2 rounded-lg border border-slate-700 bg-slate-800/60 text-sm font-semibold text-slate-100 hover:border-sky-500 transition">
+        <button id="refresh-btn" class="px-3 sm:px-4 py-2 rounded-lg border border-slate-700 bg-slate-800/60 text-xs sm:text-sm font-semibold text-slate-100 hover:border-sky-500 transition">
           🔄 刷新
         </button>
       </div>
