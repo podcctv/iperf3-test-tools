@@ -2304,10 +2304,16 @@ def _login_html() -> str:
                 <p class="text-sm text-slate-400" id="auth-hint"></p>
               </div>
               <div class="flex flex-wrap items-center gap-3">
-                <a href="/web/trace" class="rounded-lg border border-slate-600 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-cyan-500 hover:text-cyan-200 inline-flex items-center gap-2">
-                  <span class="text-base">🌐</span>
-                  <span>路由追踪测试</span>
-                </a>
+                <div class="nav-dropdown">
+                  <div class="nav-dropdown-btn rounded-lg border border-slate-600 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-cyan-500 hover:text-cyan-200">
+                    <span class="text-base">🌐</span>
+                    <span>路由追踪</span>
+                  </div>
+                  <div class="nav-dropdown-menu">
+                    <a href="/web/trace" class="nav-dropdown-item">🔍 单次追踪</a>
+                    <a href="/web/trace#schedules" class="nav-dropdown-item">📅 定时追踪</a>
+                  </div>
+                </div>
                 <div class="nav-dropdown">
                   <div class="nav-dropdown-btn rounded-lg border border-slate-600 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200">
                     <span class="text-base">📊</span>
