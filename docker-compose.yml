@@ -19,6 +19,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    command: redis-server /usr/local/etc/redis/redis.conf
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -28,6 +29,7 @@ services:
       start_period: 5s
     volumes:
       - redis_data:/data
+      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
 
   master-api:
     build: ./master-api

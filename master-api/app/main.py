@@ -463,6 +463,19 @@ async def lifespan(app):
             db.close()
         except Exception as e:
             logger.error(f"[WHITELIST-SYNC] Periodic sync failed: {e}")
+    
+    scheduler.add_job(
+        _run_whitelist_sync,
+        'interval',
+        hours=1,
+        id='whitelist_hourly_sync',
+        replace_existing=True,
+        next_run_time=datetime.now(timezone.utc) + timedelta(minutes=2)  # First run 2 min after startup
+    )
+    logger.info("[WHITELIST-SYNC] Hourly whitelist sync scheduled")
+    
+    yield
+    
     # Shutdown: 关闭调度器
     scheduler.shutdown()
     logger.info("APScheduler shutdown")
@@ -492,6 +505,7 @@ async def health_check():
     Returns 200 OK if the service is healthy.
     """
     from datetime import datetime, timezone
+    import time
     
     health_status = {
         "status": "healthy",
@@ -508,6 +522,22 @@ async def health_check():
     except Exception as e:
         health_status["status"] = "degraded"
         health_status["checks"]["database"] = f"error: {str(e)[:100]}"
+    
+    # Check Redis connectivity and measure latency
+    try:
+        from .redis_client import get_redis_client
+        client = get_redis_client()
+        if client:
+            start = time.perf_counter()
+            client.ping()
+            latency_ms = (time.perf_counter() - start) * 1000
+            health_status["checks"]["redis"] = "ok"
+            health_status["checks"]["redis_latency_ms"] = round(latency_ms, 2)
+        else:
+            health_status["checks"]["redis"] = "disconnected"
+    except Exception as e:
+        health_status["status"] = "degraded"
+        health_status["checks"]["redis"] = f"error: {str(e)[:100]}"
     
     # Check scheduler status
     health_status["checks"]["scheduler"] = "running" if scheduler.running else "stopped"
@@ -742,6 +772,109 @@ async def cleanup_old_data(
         "status": "ok",
         "cutoff_date": cutoff_date.isoformat(),
         "deleted": deleted_counts
+    }
+
+
+
+
+# ============================================================================
+# Redis Cache Management APIs
+# ============================================================================
+
+@app.get("/api/cache/stats")
+async def get_cache_statistics():
+    """
+    Get comprehensive Redis cache statistics and performance metrics.
+    """
+    from .redis_client import get_cache_stats
+    
+    stats = get_cache_stats()
+    return stats
+
+
+@app.post("/api/cache/clear")
+async def clear_cache(
+    request: Request,
+    pattern: Optional[str] = Query(None, description="Redis pattern (e.g. 'nodes:*')"),
+    all: bool = Query(False, description="Clear all cache entries"),
+    db: Session = Depends(get_db)
+):
+    """
+    Clear cache entries (admin only).
+    
+    - Use `pattern` to clear specific keys matching a pattern
+    - Use `all=true` to clear all cache entries
+    """
+    if not auth_manager().is_authenticated(request):
+        raise HTTPException(status_code=401, detail="unauthorized")
+    
+    from .redis_client import cache_clear_pattern, cache_clear_all
+    
+    result = {"status": "ok", "cleared": 0}
+    
+    if all:
+        success = cache_clear_all()
+        result["message"] = "All cache entries cleared" if success else "Failed to clear cache"
+        result["cleared"] = "all" if success else 0
+    elif pattern:
+        cleared = cache_clear_pattern(pattern)
+        result["cleared"] = cleared
+        result["pattern"] = pattern
+        result["message"] = f"Cleared {cleared} keys matching pattern: {pattern}"
+    else:
+        raise HTTPException(status_code=400, detail="Must specify either 'pattern' or 'all=true'")
+    
+    # Log the cache clear action
+    client_ip = _get_client_ip(request)
+    audit_log(db, "cache_clear", actor_ip=client_ip, 
+              details={"pattern": pattern, "all": all, "cleared": result["cleared"]})
+    
+    return result
+
+
+@app.post("/api/cache/warmup")
+async def warmup_cache(
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Preload frequently accessed data into cache (admin only).
+    This helps improve initial response times after cache clear or restart.
+    """
+    if not auth_manager().is_authenticated(request):
+        raise HTTPException(status_code=401, detail="unauthorized")
+    
+    from .redis_client import cache_set
+    
+    warmed_count = 0
+    
+    # Warm up nodes list
+    try:
+        nodes = db.scalars(select(Node)).all()
+        nodes_list = [NodeRead.model_validate(n).model_dump() for n in nodes]
+        if cache_set("nodes:list", nodes_list, ttl=60):
+            warmed_count += 1
+    except Exception as e:
+        logger.error(f"Failed to warm up nodes cache: {e}")
+    
+    # Warm up nodes with status
+    try:
+        statuses = await health_monitor.get_statuses(db)
+        statuses_list = [s.model_dump() for s in statuses]
+        if cache_set("nodes:with_status", statuses_list, ttl=10):
+            warmed_count += 1
+    except Exception as e:
+        logger.error(f"Failed to warm up nodes status cache: {e}")
+    
+    # Log the warmup action
+    client_ip = _get_client_ip(request)
+    audit_log(db, "cache_warmup", actor_ip=client_ip, 
+              details={"warmed_entries": warmed_count})
+    
+    return {
+        "status": "ok",
+        "warmed_entries": warmed_count,
+        "message": f"Successfully warmed up {warmed_count} cache entries"
     }
 
 
