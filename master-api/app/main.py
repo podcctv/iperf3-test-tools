@@ -2003,7 +2003,7 @@ def _login_html() -> str:
     
     .btn-primary {
       width: 100%;
-      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 50%, #1d4ed8 100%);
       color: white;
       font-weight: 600;
       padding: 0.75rem;
@@ -2011,40 +2011,111 @@ def _login_html() -> str:
       border: none;
       cursor: pointer;
       font-size: 1rem;
-      transition: transform 0.1s, box-shadow 0.2s;
-      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+      position: relative;
+      overflow: hidden;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 
+        0 1px 2px 0 rgba(0, 0, 0, 0.05),
+        0 4px 12px rgba(37, 99, 235, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
+    .btn-primary::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+      transition: left 0.5s;
     }
     .btn-primary:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 6px 16px rgba(37, 99, 235, 0.4);
+      transform: translateY(-2px);
+      box-shadow: 
+        0 4px 6px -1px rgba(0, 0, 0, 0.1),
+        0 8px 20px rgba(37, 99, 235, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
     }
-    .btn-primary:active { transform: translateY(0); }
+    .btn-primary:hover::before {
+      left: 100%;
+    }
+    .btn-primary:active { 
+      transform: translateY(0); 
+      box-shadow: 
+        0 1px 2px 0 rgba(0, 0, 0, 0.05),
+        0 2px 8px rgba(37, 99, 235, 0.3);
+    }
     
     .status-badge {
       display: inline-flex;
       align-items: center;
       gap: 0.5rem;
-      padding: 0.25rem 0.75rem;
+      padding: 0.375rem 1rem;
       border-radius: 999px;
       font-size: 0.75rem;
-      font-weight: 500;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      font-weight: 600;
+      background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.95));
+      border: 1px solid rgba(148, 163, 184, 0.2);
       color: var(--text-muted);
       margin: 0 auto;
+      box-shadow: 
+        0 1px 2px 0 rgba(0, 0, 0, 0.05),
+        0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+      transition: all 0.3s ease;
+    }
+    .status-badge:hover {
+      transform: scale(1.05);
+      border-color: rgba(148, 163, 184, 0.3);
     }
     .status-dot {
       width: 8px; height: 8px;
       border-radius: 50%;
       background-color: #fbbf24;
-      box-shadow: 0 0 8px rgba(251, 191, 36, 0.5);
+      box-shadow: 
+        0 0 0 2px rgba(251, 191, 36, 0.2),
+        0 0 8px rgba(251, 191, 36, 0.6);
+      animation: pulse-dot 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.3), 0 0 12px rgba(251, 191, 36, 0.8); }
     }
     
     /* Dashboard Specifics */
     .panel-card {
-      background: rgba(30, 41, 59, 0.4);
-      border: 1px solid rgba(148, 163, 184, 0.1);
-      backdrop-filter: blur(8px);
+      background: linear-gradient(
+        135deg,
+        rgba(30, 41, 59, 0.6) 0%,
+        rgba(30, 41, 59, 0.4) 50%,
+        rgba(15, 23, 42, 0.5) 100%
+      );
+      border: 1px solid;
+      border-image: linear-gradient(135deg, rgba(148, 163, 184, 0.15), rgba(100, 116, 139, 0.1)) 1;
+      backdrop-filter: blur(12px);
+      box-shadow: 
+        0 1px 2px 0 rgba(0, 0, 0, 0.05),
+        0 4px 6px -1px rgba(0, 0, 0, 0.1),
+        0 10px 15px -3px rgba(0, 0, 0, 0.1),
+        0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+      position: relative;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .panel-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+    }
+    .panel-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 
+        0 4px 6px -1px rgba(0, 0, 0, 0.1),
+        0 10px 15px -3px rgba(0, 0, 0, 0.2),
+        0 20px 25px -5px rgba(0, 0, 0, 0.15),
+        0 0 0 1px rgba(255, 255, 255, 0.08) inset;
     }
     .alert {
       padding: 0.75rem 1rem;
@@ -2052,16 +2123,19 @@ def _login_html() -> str:
       font-size: 0.9rem;
       margin-bottom: 1rem;
       border: 1px solid transparent;
+      backdrop-filter: blur(8px);
     }
     .alert-error {
-      background: rgba(239, 68, 68, 0.15);
+      background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(220, 38, 38, 0.1));
       border-color: rgba(239, 68, 68, 0.3);
       color: #fca5a5;
+      box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.1) inset;
     }
     .alert-success {
-      background: rgba(34, 197, 94, 0.15);
+      background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(22, 163, 74, 0.1));
       border-color: rgba(34, 197, 94, 0.3);
       color: #86efac;
+      box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.1) inset;
     }
     .hidden { display: none !important; }
 
