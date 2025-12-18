@@ -15682,3 +15682,403 @@ async def trigger_alert(
         return True
     
     return False
+
+
+# ============================================================================
+# Redis Monitoring Page
+# ============================================================================
+
+def _redis_monitoring_html() -> str:
+    """Redis cache monitoring and management page."""
+    return '''<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Redis 监控 - iperf3 Master</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { 
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); 
+      min-height: 100vh; 
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    .glass-card { 
+      background: rgba(15, 23, 42, 0.7); 
+      backdrop-filter: blur(10px); 
+      border: 1px solid rgba(148, 163, 184, 0.1); 
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .animate-spin { animation: spin 1s linear infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .animate-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+    
+    /* Progress bar animation */
+    .progress-bar {
+      transition: width 0.3s ease-in-out;
+    }
+    
+    /* Stat card hover effect */
+    .stat-card {
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .stat-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+    }
+  </style>
+</head>
+<body class="min-h-screen p-6">
+  <div class="max-w-7xl mx-auto">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-8">
+      <div class="flex items-center gap-4">
+        <a href="/web" class="text-slate-400 hover:text-white transition-colors">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+          </svg>
+        </a>
+        <h1 class="text-3xl font-bold text-white flex items-center gap-3">
+          <span class="text-4xl">📊</span>
+          Redis 缓存监控
+        </h1>
+      </div>
+      <button id="refresh-btn" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-white font-medium transition-colors flex items-center gap-2">
+        <svg id="refresh-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+        </svg>
+        刷新数据
+      </button>
+    </div>
+
+    <!-- Loading State -->
+    <div id="loading-state" class="glass-card rounded-2xl p-8 text-center">
+      <div class="inline-block w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+      <p class="text-slate-300">加载 Redis 统计数据...</p>
+    </div>
+
+    <!-- Error State -->
+    <div id="error-state" class="hidden glass-card rounded-2xl p-8 border-red-500/30">
+      <div class="flex items-center gap-3 text-red-400 mb-2">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
+        <span class="font-semibold">连接失败</span>
+      </div>
+      <p id="error-message" class="text-slate-400"></p>
+    </div>
+
+    <!-- Main Content -->
+    <div id="main-content" class="hidden space-y-6">
+      <!-- Status Overview Cards -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Connection Status -->
+        <div class="glass-card rounded-xl p-6 stat-card">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-slate-400 text-sm">连接状态</span>
+            <span id="status-badge" class="px-3 py-1 rounded-full text-xs font-semibold"></span>
+          </div>
+          <div id="status-text" class="text-2xl font-bold text-white"></div>
+        </div>
+
+        <!-- Hit Rate -->
+        <div class="glass-card rounded-xl p-6 stat-card">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-slate-400 text-sm">缓存命中率</span>
+            <span id="hit-rate-trend" class="text-xl"></span>
+          </div>
+          <div id="hit-rate" class="text-2xl font-bold text-emerald-400"></div>
+          <div class="text-xs text-slate-500 mt-1">
+            <span id="hit-count">0</span> 命中 / <span id="miss-count">0</span> 未命中
+          </div>
+        </div>
+
+        <!-- Memory Usage -->
+        <div class="glass-card rounded-xl p-6 stat-card">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-slate-400 text-sm">内存使用</span>
+            <span id="memory-percent" class="text-xs font-semibold"></span>
+          </div>
+          <div id="memory-used" class="text-2xl font-bold text-blue-400"></div>
+          <div class="w-full bg-slate-700 rounded-full h-2 mt-3">
+            <div id="memory-bar" class="progress-bar bg-gradient-to-r from-blue-500 to-cyan-500 h-2 rounded-full" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <!-- Total Keys -->
+        <div class="glass-card rounded-xl p-6 stat-card">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-slate-400 text-sm">缓存键总数</span>
+            <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"></path>
+            </svg>
+          </div>
+          <div id="total-keys" class="text-2xl font-bold text-purple-400"></div>
+          <div class="text-xs text-slate-500 mt-1">
+            <span id="evicted-keys">0</span> 已淘汰 · <span id="expired-keys">0</span> 已过期
+          </div>
+        </div>
+      </div>
+
+      <!-- Detailed Statistics -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Performance Metrics -->
+        <div class="glass-card rounded-2xl p-6">
+          <h2 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+            <span>⚡</span>
+            性能指标
+          </h2>
+          <div class="space-y-3">
+            <div class="flex justify-between items-center py-2 border-b border-slate-700">
+              <span class="text-slate-300">总连接数</span>
+              <span id="total-connections" class="text-white font-semibold"></span>
+            </div>
+            <div class="flex justify-between items-center py-2 border-b border-slate-700">
+              <span class="text-slate-300">活跃客户端</span>
+              <span id="connected-clients" class="text-white font-semibold"></span>
+            </div>
+            <div class="flex justify-between items-center py-2 border-b border-slate-700">
+              <span class="text-slate-300">处理的命令数</span>
+              <span id="total-commands" class="text-white font-semibold"></span>
+            </div>
+            <div class="flex justify-between items-center py-2">
+              <span class="text-slate-300">内存峰值</span>
+              <span id="memory-peak" class="text-white font-semibold"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Cache Management -->
+        <div class="glass-card rounded-2xl p-6">
+          <h2 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+            <span>🛠️</span>
+            缓存管理
+          </h2>
+          <div class="space-y-3">
+            <button id="clear-nodes-btn" class="w-full px-4 py-3 bg-amber-600 hover:bg-amber-500 rounded-lg text-white font-medium transition-colors flex items-center justify-center gap-2">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+              </svg>
+              清除节点缓存 (nodes:*)
+            </button>
+            
+            <button id="clear-all-btn" class="w-full px-4 py-3 bg-red-600 hover:bg-red-500 rounded-lg text-white font-medium transition-colors flex items-center justify-center gap-2">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+              </svg>
+              清除所有缓存
+            </button>
+            
+            <button id="warmup-btn" class="w-full px-4 py-3 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-white font-medium transition-colors flex items-center justify-center gap-2">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+              </svg>
+              缓存预热
+            </button>
+          </div>
+
+          <!-- Auto-refresh Toggle -->
+          <div class="mt-6 pt-4 border-t border-slate-700">
+            <label class="flex items-center justify-between cursor-pointer">
+              <span class="text-slate-300">自动刷新 (30秒)</span>
+              <div class="relative">
+                <input type="checkbox" id="auto-refresh-toggle" class="sr-only peer">
+                <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+              </div>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Last Updated -->
+      <div class="text-center text-slate-500 text-sm">
+        最后更新: <span id="last-updated"></span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = '';
+    let autoRefreshInterval = null;
+
+    // Fetch and display Redis stats
+    async function loadStats() {
+      const refreshIcon = document.getElementById('refresh-icon');
+      refreshIcon.classList.add('animate-spin');
+
+      try {
+        const response = await fetch(`${API_BASE}/api/cache/stats`);
+        const data = await response.json();
+
+        document.getElementById('loading-state').classList.add('hidden');
+        document.getElementById('error-state').classList.add('hidden');
+        document.getElementById('main-content').classList.remove('hidden');
+
+        // Status
+        if (data.status === 'connected') {
+          document.getElementById('status-badge').className = 'px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-400';
+          document.getElementById('status-badge').textContent = '在线';
+          document.getElementById('status-text').textContent = '已连接';
+          document.getElementById('status-text').className = 'text-2xl font-bold text-emerald-400';
+        } else {
+          document.getElementById('status-badge').className = 'px-3 py-1 rounded-full text-xs font-semibold bg-red-500/20 text-red-400';
+          document.getElementById('status-badge').textContent = '离线';
+          document.getElementById('status-text').textContent = '未连接';
+          document.getElementById('status-text').className = 'text-2xl font-bold text-red-400';
+        }
+
+        // Hit Rate
+        const hitRate = data.hit_rate || 0;
+        document.getElementById('hit-rate').textContent = hitRate.toFixed(2) + '%';
+        document.getElementById('hit-count').textContent = (data.keyspace_hits || 0).toLocaleString();
+        document.getElementById('miss-count').textContent = (data.keyspace_misses || 0).toLocaleString();
+        
+        // Trend indicator
+        if (hitRate >= 90) {
+          document.getElementById('hit-rate-trend').textContent = '🔥';
+        } else if (hitRate >= 70) {
+          document.getElementById('hit-rate-trend').textContent = '✅';
+        } else if (hitRate >= 50) {
+          document.getElementById('hit-rate-trend').textContent = '⚠️';
+        } else {
+          document.getElementById('hit-rate-trend').textContent = '📉';
+        }
+
+        // Memory
+        document.getElementById('memory-used').textContent = data.memory_used || 'N/A';
+        document.getElementById('memory-peak').textContent = data.memory_peak || 'N/A';
+        
+        // Calculate memory percentage (rough estimate based on maxmemory 256MB)
+        const memUsed = data.memory_used || '0M';
+        const memMatch = memUsed.match(/(\d+\.?\d*)/);
+        if (memMatch) {
+          const memMB = parseFloat(memMatch[1]);
+          const memPercent = (memMB / 256 * 100).toFixed(1);
+          document.getElementById('memory-percent').textContent = memPercent + '%';
+          document.getElementById('memory-bar').style.width = Math.min(memPercent, 100) + '%';
+          
+          // Color code the bar
+          const bar = document.getElementById('memory-bar');
+          if (memPercent > 90) {
+            bar.className = 'progress-bar bg-gradient-to-r from-red-500 to-orange-500 h-2 rounded-full';
+          } else if (memPercent > 70) {
+            bar.className = 'progress-bar bg-gradient-to-r from-amber-500 to-yellow-500 h-2 rounded-full';
+          } else {
+            bar.className = 'progress-bar bg-gradient-to-r from-blue-500 to-cyan-500 h-2 rounded-full';
+          }
+        }
+
+        // Keys
+        document.getElementById('total-keys').textContent = (data.total_keys || 0).toLocaleString();
+        document.getElementById('evicted-keys').textContent = (data.evicted_keys || 0).toLocaleString();
+        document.getElementById('expired-keys').textContent = (data.expired_keys || 0).toLocaleString();
+
+        // Performance
+        document.getElementById('total-connections').textContent = (data.total_connections_received || 0).toLocaleString();
+        document.getElementById('connected-clients').textContent = data.connected_clients || 0;
+        document.getElementById('total-commands').textContent = (data.total_commands_processed || 0).toLocaleString();
+
+        // Last updated
+        document.getElementById('last-updated').textContent = new Date().toLocaleString('zh-CN');
+
+      } catch (error) {
+        console.error('Error loading stats:', error);
+        document.getElementById('loading-state').classList.add('hidden');
+        document.getElementById('main-content').classList.add('hidden');
+        document.getElementById('error-state').classList.remove('hidden');
+        document.getElementById('error-message').textContent = error.message;
+      } finally {
+        refreshIcon.classList.remove('animate-spin');
+      }
+    }
+
+    // Clear nodes cache
+    async function clearNodesCache() {
+      if (!confirm('确定要清除节点缓存吗？')) return;
+
+      try {
+        const response = await fetch(`${API_BASE}/api/cache/clear?pattern=nodes:*`, {
+          method: 'POST',
+          credentials: 'include'
+        });
+        const data = await response.json();
+        alert(`成功清除 ${data.cleared} 个缓存键`);
+        loadStats();
+      } catch (error) {
+        alert('清除失败: ' + error.message);
+      }
+    }
+
+    // Clear all cache
+    async function clearAllCache() {
+      if (!confirm('⚠️ 警告：确定要清除所有缓存吗？这将影响系统性能！')) return;
+
+      try {
+        const response = await fetch(`${API_BASE}/api/cache/clear?all=true`, {
+          method: 'POST',
+          credentials: 'include'
+        });
+        const data = await response.json();
+        alert(data.message || '缓存已清除');
+        loadStats();
+      } catch (error) {
+        alert('清除失败: ' + error.message);
+      }
+    }
+
+    // Warmup cache
+    async function warmupCache() {
+      const btn = document.getElementById('warmup-btn');
+      const originalText = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<div class="inline-block w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> 预热中...';
+
+      try {
+        const response = await fetch(`${API_BASE}/api/cache/warmup`, {
+          method: 'POST',
+          credentials: 'include'
+        });
+        const data = await response.json();
+        alert(data.message || `缓存预热完成，${data.warmed_entries} 个条目已加载`);
+        loadStats();
+      } catch (error) {
+        alert('预热失败: ' + error.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+      }
+    }
+
+    // Auto-refresh toggle
+    document.getElementById('auto-refresh-toggle').addEventListener('change', (e) => {
+      if (e.target.checked) {
+        autoRefreshInterval = setInterval(loadStats, 30000);
+      } else {
+        if (autoRefreshInterval) {
+          clearInterval(autoRefreshInterval);
+          autoRefreshInterval = null;
+        }
+      }
+    });
+
+    // Event listeners
+    document.getElementById('refresh-btn').addEventListener('click', loadStats);
+    document.getElementById('clear-nodes-btn').addEventListener('click', clearNodesCache);
+    document.getElementById('clear-all-btn').addEventListener('click', clearAllCache);
+    document.getElementById('warmup-btn').addEventListener('click', warmupCache);
+
+    // Initial load
+    loadStats();
+  </script>
+</body>
+</html>
+'''
+
+
+@app.get("/web/redis")
+async def redis_monitoring_page(request: Request):
+    """Redis cache monitoring and management page."""
+    if not auth_manager().is_authenticated(request):
+        return HTMLResponse(content="<script>window.location.href='/web';</script>")
+    
+    return HTMLResponse(content=_redis_monitoring_html())
