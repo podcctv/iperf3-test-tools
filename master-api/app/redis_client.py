@@ -263,21 +263,20 @@ def get_cache_stats() -> Dict[str, Any]:
         if client is None:
             return {"status": "disconnected", "enabled": False}
         
+        # Get Redis INFO - returns a flat dictionary
         info = client.info()
-        stats_info = info.get('stats', {})
-        memory_info = info.get('memory', {})
         
-        hits = stats_info.get('keyspace_hits', 0)
-        misses = stats_info.get('keyspace_misses', 0)
+        # Extract statistics
+        hits = info.get('keyspace_hits', 0)
+        misses = info.get('keyspace_misses', 0)
         total_requests = hits + misses
         hit_rate = (hits / total_requests * 100) if total_requests > 0 else 0
         
-        # Get total keys count
+        # Get total keys count from db0, db1, etc.
         total_keys = 0
-        keyspace_info = {k: v for k, v in info.items() if k.startswith('db')}
-        for db_info in keyspace_info.values():
-            if isinstance(db_info, dict):
-                total_keys += db_info.get('keys', 0)
+        for key, value in info.items():
+            if key.startswith('db') and isinstance(value, dict):
+                total_keys += value.get('keys', 0)
         
         return {
             "status": "connected",
@@ -287,13 +286,13 @@ def get_cache_stats() -> Dict[str, Any]:
             "total_requests": total_requests,
             "hit_rate": round(hit_rate, 2),
             "total_keys": total_keys,
-            "memory_used": memory_info.get('used_memory_human', 'unknown'),
-            "memory_peak": memory_info.get('used_memory_peak_human', 'unknown'),
+            "memory_used": info.get('used_memory_human', 'unknown'),
+            "memory_peak": info.get('used_memory_peak_human', 'unknown'),
             "connected_clients": info.get('connected_clients', 0),
-            "total_connections_received": stats_info.get('total_connections_received', 0),
-            "total_commands_processed": stats_info.get('total_commands_processed', 0),
-            "evicted_keys": stats_info.get('evicted_keys', 0),
-            "expired_keys": stats_info.get('expired_keys', 0)
+            "total_connections_received": info.get('total_connections_received', 0),
+            "total_commands_processed": info.get('total_commands_processed', 0),
+            "evicted_keys": info.get('evicted_keys', 0),
+            "expired_keys": info.get('expired_keys', 0)
         }
     except Exception as e:
         logger.error(f"Failed to get cache stats: {e}")
