@@ -2484,11 +2484,11 @@ def _login_html() -> str:
                     <span>设置</span>
                   </div>
                   <div class="nav-dropdown-menu">
+                    <a href="/web/redis" class="nav-dropdown-item">📊 Redis监控</a>
+                    <a href="/web/whitelist" class="nav-dropdown-item">🛡️ 白名单管理</a>
                     <a href="javascript:void(0)" onclick="openSettingsTab('password')" class="nav-dropdown-item">🔐 修改密码</a>
                     <a href="javascript:void(0)" onclick="openSettingsTab('telegram')" class="nav-dropdown-item">📱 Telegram告警</a>
-                    <a href="javascript:void(0)" onclick="openSettingsTab('config')" class="nav-dropdown-item">📦 配置管理</a>
                     <a href="javascript:void(0)" onclick="openSettingsTab('admin')" class="nav-dropdown-item">🗄️ 数据库管理</a>
-                    <a href="/web/whitelist" class="nav-dropdown-item">🛡️ 白名单管理</a>
                   </div>
                 </div>
                 <button id="logout-btn" class="rounded-lg border border-slate-600 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-rose-500 hover:text-rose-200">退出登录</button>
