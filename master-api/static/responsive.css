@@ -1,0 +1,265 @@
+/* ============================================
+   Responsive Design Improvements
+   Mobile-first approach with enhanced breakpoints
+   ============================================ */
+
+/* Base: Mobile First (< 640px) */
+
+/* Improved Touch Targets */
+button,
+a,
+input,
+select {
+    min-height: 44px;
+    /* iOS recommended */
+    min-width: 44px;
+}
+
+/* Mobile Navigation */
+@media (max-width: 768px) {
+    .nav-dropdown-menu {
+        left: auto;
+        right: 0;
+        min-width: 200px;
+    }
+
+    .flex-wrap {
+        gap: 0.5rem !important;
+    }
+
+    /* Stack buttons vertically on mobile */
+    .flex.gap-2:has(button) {
+        flex-direction: column;
+        width: 100%;
+    }
+
+    .flex.gap-2 button {
+        width: 100%;
+    }
+}
+
+/* Small Devices (sm: 640px-768px) */
+@media (min-width: 640px) and (max-width: 768px) {
+    .page-content {
+        max-width: 640px;
+        padding: 0 1.5rem;
+    }
+
+    .panel-card {
+        padding: 1.25rem;
+    }
+
+    /* 2-column grid for node cards */
+    .nodes-list,
+    #nodes-list>div.grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+}
+
+/* Medium Devices (md: 768px-1024px) */
+@media (min-width: 768px) and (max-width: 1024px) {
+    .page-content {
+        max-width: 768px;
+    }
+
+    /* 3-column grid */
+    .nodes-list,
+    #nodes-list>div.grid {
+        grid-template-columns: repeat(3, 1fr) !important;
+    }
+
+    /* Optimize spacing */
+    .panel-card {
+        padding: 1.5rem;
+    }
+}
+
+/* Large Devices (lg: 1024px-1280px) */
+@media (min-width: 1024px) and (max-width: 1280px) {
+    .page-content {
+        max-width: 1024px;
+    }
+
+    /* 4-column grid */
+    .nodes-list,
+    #nodes-list>div.grid {
+        grid-template-columns: repeat(4, 1fr) !important;
+    }
+}
+
+/* Extra Large Devices (xl: > 1280px) */
+@media (min-width: 1280px) {
+    .page-content {
+        max-width: 1280px;
+    }
+
+    /* 5-column grid for extra space */
+    .nodes-list,
+    #nodes-list>div.grid {
+        grid-template-columns: repeat(5, 1fr) !important;
+    }
+}
+
+/* Tablet Landscape Optimization */
+@media (min-width: 768px) and (max-width: 1024px) and (orientation: landscape) {
+    .page-frame {
+        padding: 1rem;
+    }
+
+    /* Maximize vertical space */
+    .panel-card {
+        padding: 1rem;
+    }
+
+    h3 {
+        font-size: 1rem;
+    }
+}
+
+/* Mobile Portrait Specific */
+@media (max-width: 640px) and (orientation: portrait) {
+    .page-frame {
+        padding: 1rem 0.75rem;
+    }
+
+    .panel-card {
+        padding: 1rem;
+        border-radius: 1rem;
+    }
+
+    /* Single column layout */
+    .grid {
+        grid-template-columns: 1fr !important;
+    }
+
+    /* Larger text for readability */
+    body {
+        font-size: 16px;
+    }
+
+    h2 {
+        font-size: 1.5rem;
+    }
+
+    h3 {
+        font-size: 1.125rem;
+    }
+
+    /* Compact header */
+    .flex.flex-col.gap-3 {
+        gap: 0.5rem !important;
+    }
+}
+
+/* iPhone SE and small phones */
+@media (max-width: 375px) {
+    .page-content {
+        gap: 1rem;
+    }
+
+    .panel-card {
+        padding: 0.875rem;
+    }
+
+    button {
+        font-size: 0.875rem;
+        padding: 0.625rem 1rem;
+    }
+}
+
+/* High DPI Displays */
+@media (-webkit-min-device-pixel-ratio: 2),
+(min-resolution: 192dpi) {
+
+    /* Crisper borders */
+    .panel-card,
+    .glass-panel,
+    button {
+        border-width: 0.5px;
+    }
+}
+
+/* Dark Mode Media Query Support */
+@media (prefers-color-scheme: light) {
+    :root:not([data-theme]) {
+        /* Auto light mode if system preference is light */
+        --bg-dark: #f8fafc;
+        --text-main: #0f172a;
+        --card-bg: rgba(255, 255, 255, 0.95);
+    }
+}
+
+/* Reduced Motion Support */
+@media (prefers-reduced-motion: reduce) {
+
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* Print Styles */
+@media print {
+
+    .nav-dropdown,
+    button,
+    .guest-hide {
+        display: none !important;
+    }
+
+    .panel-card {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+
+    body {
+        background: white;
+        color: black;
+    }
+}
+
+/* Hover-capable devices only */
+@media (hover: hover) and (pointer: fine) {
+    .panel-card:hover {
+        transform: translateY(-2px);
+    }
+
+    button:hover {
+        transform: translateY(-1px);
+    }
+}
+
+/* Touch devices - remove hover effects */
+@media (hover: none) and (pointer: coarse) {
+    .panel-card:hover {
+        transform: none;
+    }
+
+    button:hover {
+        transform: none;
+    }
+
+    /* Larger touch targets */
+    button,
+    a,
+    input,
+    select {
+        min-height: 48px;
+    }
+}
+
+/* Container Queries (Modern browsers) */
+@container (min-width: 600px) {
+    .responsive-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@container (min-width: 900px) {
+    .responsive-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
