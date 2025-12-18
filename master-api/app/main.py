@@ -463,19 +463,6 @@ async def lifespan(app):
             db.close()
         except Exception as e:
             logger.error(f"[WHITELIST-SYNC] Periodic sync failed: {e}")
-    
-    scheduler.add_job(
-        _run_whitelist_sync,
-        'interval',
-        hours=1,
-        id='whitelist_hourly_sync',
-        replace_existing=True,
-        next_run_time=datetime.now(timezone.utc) + timedelta(minutes=2)  # First run 2 min after startup
-    )
-    logger.info("[WHITELIST-SYNC] Hourly whitelist sync scheduled")
-    
-    yield
-    
     # Shutdown: 关闭调度器
     scheduler.shutdown()
     logger.info("APScheduler shutdown")
@@ -11641,25 +11628,30 @@ def create_node(node: NodeCreate, db: Session = Depends(get_db)):
     )
     db.add(obj)
     db.commit()
-    db.refresh(obj)
-    _persist_state(db)
-    _sync_agent_config(obj)
-    health_monitor.invalidate(obj.id)
-    
-    # Sync whitelist to all agents (async, don't wait)
-    import asyncio
-    try:
-        asyncio.create_task(_sync_whitelist_to_agents(db))
-    except:
-        pass  # Ignore if event loop not running
     
     return obj
 
 
 @app.get("/nodes", response_model=List[NodeRead])
 def list_nodes(db: Session = Depends(get_db)):
+    # Try cache first
+    from .redis_client import cache_get, cache_set
+    cache_key = "nodes:list"
+    
+    cached = cache_get(cache_key)
+    if cached is not None:
+        logger.debug(f"Cache HIT: {cache_key}")
+        return cached
+    
+    # Cache miss - query database
+    logger.debug(f"Cache MISS: {cache_key}")
     nodes = db.scalars(select(Node)).all()
-    return nodes
+    nodes_list = [NodeRead.model_validate(n) for n in nodes]
+    
+    # Cache for 60 seconds
+    cache_set(cache_key, [n.model_dump() for n in nodes_list], ttl=60)
+    
+    return nodes_list
 
 
 @app.put("/nodes/{node_id}", response_model=NodeRead)
@@ -11678,6 +11670,10 @@ def update_node(node_id: int, payload: NodeUpdate, db: Session = Depends(get_db)
     _persist_state(db)
     _sync_agent_config(node, previous_name=previous_name)
     health_monitor.invalidate(node.id)
+    
+    # Invalidate nodes cache
+    from .redis_client import cache_delete
+    cache_delete("nodes:list")
     return node
 
 
