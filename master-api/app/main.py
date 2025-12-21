@@ -11736,7 +11736,9 @@ async def receive_agent_result(payload: AgentResultPayload, db: Session = Depend
         else:
             db.commit()
     else:
-        logger.warning(f"[REVERSE-RESULT] PendingTask {task_id} not found in DB")
+        # This is expected for tasks queued via queue_task_for_internal_agent()
+        # which uses memory-only task queue without PendingTask DB records
+        logger.info(f"[REVERSE-RESULT] Task {task_id} result received (memory-only task, no DB record)")
     
     return {"status": "ok", "task_id": task_id}
 
