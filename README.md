@@ -1,6 +1,11 @@
-# iperf3-test-tools / iperf3 测试工具包
-
-一个轻量级的 **主控/代理** 分布式网络测试工具，支持一键安装、自动更新、可视化监控。
+<img width="2000" height="600" alt="YouTube横幅 - VPS TOWN 共建云上新生态 (文档Banner)" src="https://github.com/user-attachments/assets/ebf24bcd-cf45-4834-9f60-81fffd0b9a5f" />
+<p align="left">
+  <strong>服务器资源赞助：
+    <a href="https://vps.town/" target="_blank">VPS.Town</a>
+  </strong><br>
+  本项目运行所需的服务器与网络基础设施由 VPS.Town 提供支持，
+  为分布式 iperf3 性能测试提供稳定、高带宽的运行环境。
+</p>
 
 A lightweight **master/agent** distributed network testing toolkit with one-click installation, auto-update, and visual monitoring.
 
