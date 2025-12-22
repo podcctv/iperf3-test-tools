@@ -2098,11 +2098,12 @@ def _login_html() -> str:
       }
     }
     
-    /* Streaming Badges Grid Layout */
+    /* Streaming Badges Flex Layout */
     .streaming-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(68px, 1fr));
-      gap: 4px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
     }
     .streaming-badge {
       position: relative;
