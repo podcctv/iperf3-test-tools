@@ -1829,7 +1829,7 @@ def _login_html() -> str:
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>iperf3 主控面板</title>
+  <title>Iperf3 节点监控中心</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/themes/dark.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@radix-ui/themes@3.1.1/dist/css/themes.css" />
   <script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/shoelace.js"></script>
@@ -2081,6 +2081,88 @@ def _login_html() -> str:
       50% { opacity: 0.5; box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.3), 0 0 12px rgba(251, 191, 36, 0.8); }
     }
     
+    /* Online Status Dot - Breathing Animation */
+    .status-dot-online {
+      background: linear-gradient(135deg, #22c55e, #16a34a);
+      box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.3), 0 0 8px rgba(34, 197, 94, 0.6);
+      animation: breathe-online 2s ease-in-out infinite;
+    }
+    @keyframes breathe-online {
+      0%, 100% { 
+        box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.3), 0 0 8px rgba(34, 197, 94, 0.6);
+        transform: scale(1);
+      }
+      50% { 
+        box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.2), 0 0 16px rgba(34, 197, 94, 0.8);
+        transform: scale(1.1);
+      }
+    }
+    
+    /* Streaming Badges Grid Layout */
+    .streaming-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(68px, 1fr));
+      gap: 4px;
+    }
+    .streaming-badge {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 10px;
+      font-weight: 600;
+      border: 1px solid;
+      transition: all 0.15s ease;
+    }
+    .streaming-badge:hover {
+      transform: translateY(-1px);
+    }
+    /* Region corner badge */
+    .region-corner {
+      position: absolute;
+      top: -5px;
+      right: -3px;
+      font-size: 8px;
+      font-weight: 700;
+      padding: 1px 3px;
+      border-radius: 3px;
+      background: rgba(0, 0, 0, 0.75);
+      color: #94a3b8;
+      line-height: 1;
+      letter-spacing: 0.02em;
+    }
+    /* Streaming Badge Colors */
+    .streaming-native { color: #4ade80; border-color: rgba(34, 197, 94, 0.4); background: rgba(34, 197, 94, 0.12); }
+    .streaming-dns { color: #a78bfa; border-color: rgba(139, 92, 246, 0.4); background: rgba(139, 92, 246, 0.12); }
+    .streaming-failed { color: #64748b; border-color: rgba(71, 85, 105, 0.4); background: rgba(30, 41, 59, 0.6); }
+    
+    /* Ping Latency Tags - Outline Style */
+    .ping-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 2px 8px;
+      border-radius: 5px;
+      font-size: 10px;
+      font-weight: 600;
+      border: 1px solid;
+      background: transparent;
+      transition: all 0.15s ease;
+    }
+    .ping-tag:hover { transform: scale(1.05); }
+    .ping-good { color: #4ade80; border-color: rgba(34, 197, 94, 0.4); }
+    .ping-medium { color: #fbbf24; border-color: rgba(251, 191, 36, 0.4); }
+    .ping-bad { color: #f87171; border-color: rgba(248, 113, 113, 0.4); }
+    .ping-carrier {
+      font-size: 9px;
+      opacity: 0.7;
+      font-weight: 500;
+    }
+    
+
     /* Dashboard Specifics */
     .panel-card {
       background: linear-gradient(
@@ -2525,9 +2607,9 @@ def _login_html() -> str:
           <div id="app-card" class="hidden space-y-8 app-card">
             <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <p class="text-sm uppercase tracking-[0.25em] text-sky-300/80">控制面板</p>
-                <h2 class="text-2xl font-semibold text-white">iperf3 主控面板</h2>
-                <p class="text-sm text-slate-400" id="auth-hint"></p>
+                <p class="text-sm uppercase tracking-[0.25em] text-sky-300/80">节点监控中心</p>
+                <h2 class="text-2xl font-semibold text-white">Iperf3 节点监控中心</h2>
+                <p class="text-sm text-slate-400" id="auth-hint">实时监控全网节点连通性、三网延迟及流媒体解锁状态</p>
               </div>
               <div class="flex flex-wrap items-center gap-3">
                 <div class="nav-dropdown">
@@ -2545,7 +2627,7 @@ def _login_html() -> str:
                 <div class="nav-dropdown">
                   <div class="nav-dropdown-btn rounded-lg border border-slate-600 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200">
                     <span class="text-base">📊</span>
-                    <span>iperf测试</span>
+                    <span>新建测速</span>
                   </div>
                   <div class="nav-dropdown-menu">
                     <a href="/web/tests" class="nav-dropdown-item">🚀 单次测试</a>
@@ -2573,8 +2655,8 @@ def _login_html() -> str:
               <div class="panel-card rounded-2xl p-5 space-y-4">
                 <div class="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <h3 class="text-lg font-semibold text-white">节点列表</h3>
-                    <p class="text-sm text-slate-400">实时状态与检测到的 iperf 端口。</p>
+                    <h3 class="text-lg font-semibold text-white">在线节点</h3>
+                    <p class="text-sm text-slate-400">实时监控节点连通性、延迟及流媒体解锁</p>
                   </div>
                   <div class="flex flex-wrap gap-2">
                     <button data-refresh-nodes onclick="refreshNodes()" class="rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200">刷新</button>
@@ -4276,60 +4358,57 @@ def _login_html() -> str:
         return `<span class=\"text-xs text-amber-300\">${cache.message || '检测异常'}</span>`;
       }
 
-      const mutedStyle = 'text-slate-500 border-slate-800 bg-slate-900/60';
-      return streamingServices
+      const badges = streamingServices
         .map((svc) => {
           const status = cache[svc.key];
-          // For Netflix, tier takes precedence over unlocked flag
           const tier = status?.tier;
           let unlocked = null;
           if (svc.key === 'netflix' && tier) {
-            // Netflix tier-based unlock status
             unlocked = tier === 'full' ? true : (tier === 'originals' ? false : null);
           } else {
-            // Other services use unlocked flag or tier
             unlocked = status ? (status.unlocked ?? (tier === 'full')) : null;
           }
           
           const detail = status && status.detail ? status.detail.replace(/"/g, "'") : '';
           const region = status?.region;
-          const tags = [];
-
-          let badgeColor = unlocked === true ? `${svc.color} ${svc.bg}` : mutedStyle;
-          let statusLabel = unlocked === true ? '可解锁' : unlocked === false ? '未解锁' : '未检测';
-          let badgeLabel = svc.label;
-
+          
+          // Determine badge style class
+          let badgeClass = 'streaming-failed';
+          let statusLabel = '未检测';
+          
+          if (unlocked === true) {
+            // Check if it's DNS/proxy unlock based on detail
+            const isDnsUnlock = detail && (detail.toLowerCase().includes('dns') || detail.toLowerCase().includes('proxy'));
+            badgeClass = isDnsUnlock ? 'streaming-dns' : 'streaming-native';
+            statusLabel = '可解锁';
+          } else if (unlocked === false) {
+            badgeClass = 'streaming-failed';
+            statusLabel = '未解锁';
+          }
+          
+          // Special handling for Netflix tiers
           if (svc.key === 'netflix' && status) {
             const netflixTier = tier || (unlocked ? 'full' : 'none');
             if (netflixTier === 'full') {
               statusLabel = '全解锁';
-              badgeColor = `${svc.color} ${svc.bg}`;
-              tags.push('全解锁');
-              unlocked = true;  // Ensure unlocked is true for full tier
+              badgeClass = 'streaming-native';
             } else if (netflixTier === 'originals') {
-              statusLabel = '仅解锁自制剧';
-              badgeColor = mutedStyle;
-              tags.push('自制剧');
-              unlocked = false;  // Originals-only is not considered fully unlocked
-            } else {
-              statusLabel = '未解锁';
-              badgeColor = mutedStyle;
-              unlocked = false;
+              statusLabel = '自制剧';
+              badgeClass = 'streaming-dns';
             }
           }
-
-          const regionColor = unlocked === true ? svc.color : mutedStyle;
-          const regionTag = region ? `<span class=\"rounded-sm px-1 text-[10px] font-bold ${regionColor}\">[${region}]</span>` : '';
-          const tagBadges = tags
-            .filter(Boolean)
-            .map((tag) => `<span class=\"rounded-sm bg-slate-800/60 px-1 text-[10px]\">[${tag}]</span>`)
-            .join('');
-
-          const title = `${region ? `[${region}]` : ''}${badgeLabel}：${statusLabel}${detail ? ' · ' + detail : ''}`;
-          return `<span class=\"inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold ${badgeColor}\" title=\"${title}\">${regionTag}<span>${badgeLabel}</span>${tagBadges}</span>`;
+          
+          // Region as corner badge
+          const regionBadge = region ? `<span class=\"region-corner\">${region}</span>` : '';
+          
+          const title = `${region ? `[${region}] ` : ''}${svc.label}：${statusLabel}${detail ? ' · ' + detail : ''}`;
+          return `<span class=\"streaming-badge ${badgeClass}\" title=\"${title}\">${regionBadge}${svc.label}</span>`;
         })
         .join('');
+      
+      return `<div class=\"streaming-grid\">${badges}</div>`;
     }
+
 
     async function exportAgentConfigs() {
       clearAlert(configAlert);
