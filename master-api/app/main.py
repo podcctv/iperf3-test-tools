@@ -5808,8 +5808,64 @@ def _login_html() -> str:
       return grid.childNodes.length ? grid : null;
     }
 
-    // Trend cache to prevent flicker on refresh
+    // ============ Ping History Shared Cache System ============
+    // Shared cache for both trend updates and sparkline popovers
+    const pingHistoryCache = {};
+    const PING_CACHE_TTL = 60000; // 60 seconds
     const TREND_CACHE_KEY = 'pingTrendCache';
+    
+    // Request throttling to prevent concurrent API calls
+    const pendingRequests = {};
+    const REQUEST_TIMEOUT = 8000; // 8 second timeout
+    
+    // Fetch ping history with caching and deduplication
+    async function fetchPingHistory(nodeId) {
+      const cacheKey = `node-${nodeId}`;
+      const now = Date.now();
+      
+      // Return cached data if fresh
+      if (pingHistoryCache[cacheKey] && now - pingHistoryCache[cacheKey].ts < PING_CACHE_TTL) {
+        return pingHistoryCache[cacheKey].data;
+      }
+      
+      // If request already pending, wait for it
+      if (pendingRequests[cacheKey]) {
+        return pendingRequests[cacheKey];
+      }
+      
+      // Create new request with timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+      
+      pendingRequests[cacheKey] = (async () => {
+        try {
+          const res = await fetch(`/api/ping/history/${nodeId}`, { signal: controller.signal });
+          clearTimeout(timeoutId);
+          
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          
+          if (data.status === 'ok') {
+            pingHistoryCache[cacheKey] = { data, ts: now };
+            return data;
+          }
+          return null;
+        } catch (e) {
+          if (e.name === 'AbortError') {
+            console.warn(`Ping history request timeout for node ${nodeId}`);
+          } else {
+            console.warn(`Failed to fetch ping history for node ${nodeId}:`, e.message);
+          }
+          return null;
+        } finally {
+          delete pendingRequests[cacheKey];
+        }
+      })();
+      
+      return pendingRequests[cacheKey];
+    }
+    
+    // LocalStorage trend cache for persistence across page loads
     function getTrendCache() {
       try {
         return JSON.parse(localStorage.getItem(TREND_CACHE_KEY) || '{}');
@@ -5832,6 +5888,27 @@ def _login_html() -> str:
         return item;
       }
       return null;
+    }
+    
+    // Generate human-readable trend description
+    function getTrendDescription(trend) {
+      if (!trend) return '数据不足';
+      const pct = trend.pct !== undefined ? trend.pct : 0;
+      const avg = trend.avg_24h !== undefined ? trend.avg_24h : null;
+      
+      const descriptions = {
+        'sharp_down': `延迟显著改善 (${pct > 0 ? '+' : ''}${pct}%)`,
+        'down': `延迟改善 (${pct > 0 ? '+' : ''}${pct}%)`,
+        'slight_down': `延迟略有改善 (${pct > 0 ? '+' : ''}${pct}%)`,
+        'stable': '延迟稳定',
+        'slight_up': `延迟略有上升 (+${Math.abs(pct)}%)`,
+        'up': `延迟上升 (+${Math.abs(pct)}%)`,
+        'sharp_up': `延迟显著恶化 (+${Math.abs(pct)}%)`
+      };
+      
+      let desc = descriptions[trend.direction] || '延迟稳定';
+      if (avg !== null) desc += ` · 24h均值: ${avg}ms`;
+      return desc;
     }
 
     function renderBackboneBadges(entries, nodeId) {
@@ -5869,50 +5946,59 @@ def _login_html() -> str:
     
     // Async fetch and update ping trends for a node with smooth animation
     async function updateNodePingTrends(nodeId) {
-      try {
-        const res = await fetch(`/api/ping/history/${nodeId}`);
-        const data = await res.json();
-        
-        if (data.status !== 'ok' || !data.trends) return;
-        
-        // Update each carrier trend arrow with smooth transition
-        Object.entries(data.trends).forEach(([carrier, trend]) => {
+      const data = await fetchPingHistory(nodeId);
+      
+      // Handle fetch failure - show error state
+      if (!data || !data.trends) {
+        ['CU', 'CM', 'CT'].forEach(carrier => {
           const trendEl = document.getElementById(`trend-${nodeId}-${carrier}`);
-          if (trendEl && trend) {
-            const newSymbol = trend.symbol || '→';
-            const newColor = trend.color || '#94a3b8';
-            const oldSymbol = trendEl.textContent;
-            
-            // Only animate if value changed
-            if (oldSymbol !== newSymbol || trendEl.style.color !== newColor) {
-              // Add transition style for smooth color change
-              trendEl.style.transition = 'all 0.3s ease-out';
-              
-              // Subtle pulse animation for updates
-              trendEl.animate([
-                { opacity: 1, transform: 'scale(1)' },
-                { opacity: 0.5, transform: 'scale(0.8)' },
-                { opacity: 1, transform: 'scale(1.1)' },
-                { opacity: 1, transform: 'scale(1)' }
-              ], { duration: 400, easing: 'ease-out' });
-              
-              // Update content with slight delay for smoother effect
-              setTimeout(() => {
-                trendEl.textContent = newSymbol;
-                trendEl.style.color = newColor;
-              }, 150);
-            }
-            
-            // Remove native tooltip - using sparkline popover instead
-            trendEl.removeAttribute('title');
-            
-            // Save to cache for next page load
-            setTrendCache(nodeId, carrier, { symbol: newSymbol, color: newColor });
+          if (trendEl && trendEl.textContent !== '?' && !getCachedTrend(nodeId, carrier)) {
+            trendEl.textContent = '?';
+            trendEl.style.color = '#64748b';
+            trendEl.title = '数据获取失败';
           }
         });
-      } catch (e) {
-        console.warn('Failed to fetch ping trends:', e);
+        return;
       }
+      
+      // Update each carrier trend arrow with smooth transition
+      Object.entries(data.trends).forEach(([carrier, trend]) => {
+        const trendEl = document.getElementById(`trend-${nodeId}-${carrier}`);
+        if (trendEl && trend) {
+          const newSymbol = trend.symbol || '→';
+          const newColor = trend.color || '#94a3b8';
+          const oldSymbol = trendEl.textContent;
+          
+          // Store trend data for popover description
+          trendEl.dataset.trend = JSON.stringify(trend);
+          
+          // Only animate if value changed
+          if (oldSymbol !== newSymbol || trendEl.style.color !== newColor) {
+            // Add transition style for smooth color change
+            trendEl.style.transition = 'all 0.3s ease-out';
+            
+            // Subtle pulse animation for updates
+            trendEl.animate([
+              { opacity: 1, transform: 'scale(1)' },
+              { opacity: 0.5, transform: 'scale(0.8)' },
+              { opacity: 1, transform: 'scale(1.1)' },
+              { opacity: 1, transform: 'scale(1)' }
+            ], { duration: 400, easing: 'ease-out' });
+            
+            // Update content with slight delay for smoother effect
+            setTimeout(() => {
+              trendEl.textContent = newSymbol;
+              trendEl.style.color = newColor;
+            }, 150);
+          }
+          
+          // Remove native tooltip - using sparkline popover instead
+          trendEl.removeAttribute('title');
+          
+          // Save to cache for next page load
+          setTrendCache(nodeId, carrier, { symbol: newSymbol, color: newColor });
+        }
+      });
     }
 
     // ============ Sparkline Popover System ============
@@ -5987,11 +6073,32 @@ def _login_html() -> str:
       const popover = document.getElementById('sparkline-popover');
       const canvas = document.getElementById('sparkline-canvas');
       const carrierEl = document.getElementById('sparkline-carrier');
+      const descEl = document.getElementById('sparkline-desc');
       
-      // Position popover near the target
+      // Smart positioning: detect edges and adjust
       const rect = targetEl.getBoundingClientRect();
-      popover.style.left = `${rect.left - 50}px`;
-      popover.style.top = `${rect.bottom + 8}px`;
+      const popoverWidth = 220;
+      const popoverHeight = 140;
+      const margin = 8;
+      
+      let left = rect.left - 50;
+      let top = rect.bottom + margin;
+      
+      // Adjust if too close to right edge
+      if (left + popoverWidth > window.innerWidth - margin) {
+        left = window.innerWidth - popoverWidth - margin;
+      }
+      // Adjust if too close to left edge
+      if (left < margin) {
+        left = margin;
+      }
+      // Adjust if too close to bottom edge - show above instead
+      if (top + popoverHeight > window.innerHeight - margin) {
+        top = rect.top - popoverHeight - margin;
+      }
+      
+      popover.style.left = `${left}px`;
+      popover.style.top = `${top}px`;
       
       // Update carrier label
       carrierEl.textContent = carrier;
@@ -6002,30 +6109,36 @@ def _login_html() -> str:
       document.getElementById('sparkline-avg').textContent = '...';
       document.getElementById('sparkline-min').textContent = '...';
       document.getElementById('sparkline-max').textContent = '...';
+      if (descEl) descEl.textContent = '加载中...';
       
       popover.classList.add('show');
       
-      // Check cache first
-      const cacheKey = `${nodeId}-${carrier}`;
-      if (sparklineCache[cacheKey] && Date.now() - sparklineCache[cacheKey].ts < 60000) {
-        renderSparklineData(sparklineCache[cacheKey].data, carrier, canvas);
-        return;
-      }
-      
-      // Fetch data
+      // Get trend data from element for description
+      let trendData = null;
       try {
-        const res = await fetch(`/api/ping/history/${nodeId}`);
-        const data = await res.json();
-        if (data.status === 'ok' && data.carriers && data.carriers[carrier]) {
-          sparklineCache[cacheKey] = { data: data.carriers[carrier], ts: Date.now() };
-          renderSparklineData(data.carriers[carrier], carrier, canvas);
+        if (targetEl.dataset.trend) {
+          trendData = JSON.parse(targetEl.dataset.trend);
         }
-      } catch (e) {
-        console.warn('Failed to fetch sparkline data:', e);
+      } catch {}
+      
+      // Use shared cache via fetchPingHistory
+      const data = await fetchPingHistory(nodeId);
+      
+      if (data && data.carriers && data.carriers[carrier]) {
+        renderSparklineData(data.carriers[carrier], carrier, canvas, trendData);
+      } else {
+        // Show error state
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#ef4444';
+        ctx.font = '11px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('数据获取失败', canvas.width/2, canvas.height/2 + 4);
+        if (descEl) descEl.textContent = '无法获取数据';
       }
     }
     
-    function renderSparklineData(data, carrier, canvas) {
+    function renderSparklineData(data, carrier, canvas, trendData = null) {
       if (!data || !data.length) return;
       
       drawSparkline(canvas, data, carrier);
@@ -6040,6 +6153,12 @@ def _login_html() -> str:
       document.getElementById('sparkline-avg').textContent = avg;
       document.getElementById('sparkline-min').textContent = min;
       document.getElementById('sparkline-max').textContent = max;
+      
+      // Show trend description
+      const descEl = document.getElementById('sparkline-desc');
+      if (descEl) {
+        descEl.textContent = getTrendDescription(trendData);
+      }
     }
     
     function hideSparklinePopover() {
@@ -13199,6 +13318,98 @@ async def get_ping_history(node_id: int, db: Session = Depends(get_db)):
         "trends": trends
     }
 
+
+@app.get("/api/ping/history/batch")
+async def get_ping_history_batch(
+    node_ids: str = Query(..., description="Comma-separated node IDs"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get 24-hour ping history for multiple nodes in one request.
+    
+    This reduces the number of API calls when displaying trend indicators
+    for many nodes on the dashboard.
+    
+    Args:
+        node_ids: Comma-separated list of node IDs (e.g., "1,2,3")
+    
+    Returns:
+        Dictionary mapping node_id to their carriers and trends data
+    """
+    from .models import PingHistory
+    
+    # Parse node IDs
+    try:
+        ids = [int(x.strip()) for x in node_ids.split(",") if x.strip()]
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid node_ids format")
+    
+    if not ids:
+        return {"status": "ok", "nodes": {}}
+    
+    if len(ids) > 50:
+        raise HTTPException(status_code=400, detail="Maximum 50 nodes per request")
+    
+    # Get last 24 hours of data for all nodes
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    
+    records = db.query(PingHistory).filter(
+        PingHistory.node_id.in_(ids),
+        PingHistory.recorded_at >= cutoff
+    ).order_by(PingHistory.node_id, PingHistory.recorded_at.asc()).all()
+    
+    # Group by node and carrier
+    nodes_data = {}
+    for rec in records:
+        if rec.node_id not in nodes_data:
+            nodes_data[rec.node_id] = {}
+        if rec.carrier not in nodes_data[rec.node_id]:
+            nodes_data[rec.node_id][rec.carrier] = []
+        nodes_data[rec.node_id][rec.carrier].append({
+            "ts": rec.recorded_at.isoformat() if rec.recorded_at else None,
+            "ms": rec.latency_ms
+        })
+    
+    # Calculate trend for each carrier (reuse calc_trend logic)
+    def calc_trend(data_points):
+        if len(data_points) < 5:
+            return {"symbol": "→", "color": "#94a3b8", "diff": 0, "direction": "stable", "samples": len(data_points)}
+        
+        current = data_points[-1]["ms"]
+        previous_values = [p["ms"] for p in data_points[:-1]]
+        avg_24h = sum(previous_values) / len(previous_values)
+        diff = round(current - avg_24h, 1)
+        pct_change = (diff / avg_24h * 100) if avg_24h > 0 else 0
+        
+        if pct_change < -15:
+            return {"symbol": "↓↓↓", "color": "#22c55e", "diff": diff, "direction": "sharp_down", "avg_24h": round(avg_24h, 1), "pct": round(pct_change, 1)}
+        elif pct_change < -8:
+            return {"symbol": "↓↓", "color": "#22c55e", "diff": diff, "direction": "down", "avg_24h": round(avg_24h, 1), "pct": round(pct_change, 1)}
+        elif pct_change < -3:
+            return {"symbol": "↓", "color": "#22c55e", "diff": diff, "direction": "slight_down", "avg_24h": round(avg_24h, 1), "pct": round(pct_change, 1)}
+        elif pct_change <= 3:
+            return {"symbol": "→", "color": "#94a3b8", "diff": diff, "direction": "stable", "avg_24h": round(avg_24h, 1), "pct": round(pct_change, 1)}
+        elif pct_change <= 8:
+            return {"symbol": "↗", "color": "#eab308", "diff": diff, "direction": "slight_up", "avg_24h": round(avg_24h, 1), "pct": round(pct_change, 1)}
+        elif pct_change <= 15:
+            return {"symbol": "↑↑", "color": "#f97316", "diff": diff, "direction": "up", "avg_24h": round(avg_24h, 1), "pct": round(pct_change, 1)}
+        else:
+            return {"symbol": "↑↑↑", "color": "#ef4444", "diff": diff, "direction": "sharp_up", "avg_24h": round(avg_24h, 1), "pct": round(pct_change, 1)}
+    
+    # Build response
+    result = {}
+    for node_id in ids:
+        carriers = nodes_data.get(node_id, {})
+        trends = {carrier: calc_trend(points) for carrier, points in carriers.items()}
+        result[node_id] = {
+            "carriers": carriers,
+            "trends": trends
+        }
+    
+    return {
+        "status": "ok",
+        "nodes": result
+    }
 
 @app.get("/api/daily_traffic_stats")
 async def daily_traffic_stats(db: Session = Depends(get_db)):
