@@ -9525,32 +9525,28 @@ def _trace_html() -> str:
     .hop-node:hover {
       background: rgba(51, 65, 85, 0.6);
       border-color: rgba(100, 116, 139, 0.4);
-      transform: translateX(4px);
-    }
-    .hop-node::before {
-      content: '';
-      position: absolute;
-      left: -29px;
-      top: 50%;
-      transform: translateY(-50%);
-      width: 12px;
-      height: 12px;
-      border-radius: 50%;
-      background: linear-gradient(135deg, #0ea5e9, #06b6d4);
-      border: 2px solid #1e293b;
-      box-shadow: 0 0 8px rgba(6, 182, 212, 0.4);
-    }
-    .hop-node.hop-timeout::before {
-      background: linear-gradient(135deg, #ef4444, #dc2626);
-      box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
-    }
-    .hop-node.hop-private::before {
-      background: transparent;
-      border: 2px dashed #64748b;
-      box-shadow: none;
     }
     .hop-node.hop-timeout {
       border-color: rgba(239, 68, 68, 0.3);
+      border-left: 3px solid #ef4444;
+    }
+    .hop-node.hop-private {
+      border-left: 3px dashed #64748b;
+    }
+    /* Inline status dot */
+    .hop-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #0ea5e9, #06b6d4);
+      flex-shrink: 0;
+    }
+    .hop-dot.dot-timeout {
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+    }
+    .hop-dot.dot-private {
+      background: transparent;
+      border: 2px dashed #64748b;
     }
     
     /* Latency Capsule Badges */
@@ -10738,13 +10734,15 @@ def _trace_html() -> str:
       const isTimeout = hop.ip === '*';
       const isPrivate = isPrivateIP(hop.ip);
       const nodeClass = isTimeout ? 'hop-node hop-timeout' : isPrivate ? 'hop-node hop-private' : 'hop-node';
+      const dotClass = isTimeout ? 'hop-dot dot-timeout' : isPrivate ? 'hop-dot dot-private' : 'hop-dot';
       return `<div class="${nodeClass}">
         <div class="flex items-center gap-2 mb-1">
+          <span class="${dotClass}"></span>
           ${renderBadge(badge)}
           <span class="font-mono text-xs ${isTimeout ? 'text-slate-500' : ''}">${hop.ip}</span>
           ${latencyCapsule}${loss}
         </div>
-        <div class="text-xs text-slate-500 flex items-center gap-1 truncate">${flag} ${isp}</div>
+        <div class="text-xs text-slate-500 flex items-center gap-1 truncate ml-4">${flag} ${isp}</div>
       </div>`;
     }
 
