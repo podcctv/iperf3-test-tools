@@ -9496,6 +9496,141 @@ def _trace_html() -> str:
     .as-name { font-size: 11px; color: #cbd5e1; margin: 4px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .as-hops { font-size: 10px; color: #94a3b8; font-weight: 500; }
     .as-arrow { color: #0ea5e9; font-size: 18px; font-weight: bold; display: flex; align-items: center; }
+    
+    /* ====== Metro Line Timeline (NEW) ====== */
+    .hop-timeline {
+      position: relative;
+      padding-left: 36px;
+    }
+    .hop-timeline::before {
+      content: '';
+      position: absolute;
+      left: 11px;
+      top: 16px;
+      bottom: 16px;
+      width: 2px;
+      background: linear-gradient(to bottom, #0ea5e9 0%, #06b6d4 50%, #14b8a6 100%);
+      border-radius: 2px;
+    }
+    .hop-node {
+      position: relative;
+      padding: 10px 14px;
+      margin: 6px 0;
+      background: rgba(30, 41, 59, 0.5);
+      border: 1px solid rgba(100, 116, 139, 0.25);
+      border-radius: 10px;
+      backdrop-filter: blur(8px);
+      transition: all 0.2s ease;
+    }
+    .hop-node:hover {
+      background: rgba(51, 65, 85, 0.6);
+      border-color: rgba(100, 116, 139, 0.4);
+      transform: translateX(4px);
+    }
+    .hop-node::before {
+      content: '';
+      position: absolute;
+      left: -29px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #0ea5e9, #06b6d4);
+      border: 2px solid #1e293b;
+      box-shadow: 0 0 8px rgba(6, 182, 212, 0.4);
+    }
+    .hop-node.hop-timeout::before {
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
+    }
+    .hop-node.hop-private::before {
+      background: transparent;
+      border: 2px dashed #64748b;
+      box-shadow: none;
+    }
+    .hop-node.hop-timeout {
+      border-color: rgba(239, 68, 68, 0.3);
+    }
+    
+    /* Latency Capsule Badges */
+    .latency-capsule {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    }
+    .latency-capsule.excellent { background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.3); }
+    .latency-capsule.good { background: rgba(234, 179, 8, 0.2); color: #fbbf24; border: 1px solid rgba(234, 179, 8, 0.3); }
+    .latency-capsule.bad { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+    
+    /* Lightweight Control Inputs */
+    .trace-input {
+      background: rgba(30, 41, 59, 0.4) !important;
+      border: 1px solid rgba(100, 116, 139, 0.3) !important;
+      border-radius: 10px !important;
+      transition: all 0.2s ease;
+    }
+    .trace-input:focus {
+      border-color: #06b6d4 !important;
+      box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.15) !important;
+      outline: none !important;
+    }
+    
+    /* Tab Underline Style */
+    .trace-tab {
+      border-bottom: 2px solid transparent;
+      background: none;
+      padding-bottom: 12px;
+      transition: all 0.2s ease;
+    }
+    .trace-tab.active {
+      border-bottom-color: #06b6d4;
+      color: #06b6d4;
+    }
+    
+    /* AS Breadcrumb Style */
+    .as-breadcrumb {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+    }
+    .as-crumb {
+      display: flex;
+      flex-direction: column;
+      padding: 8px 12px;
+      background: rgba(30, 41, 59, 0.7);
+      border: 1px solid var(--tier-color, rgba(100, 116, 139, 0.3));
+      border-radius: 8px;
+      min-width: 80px;
+      transition: all 0.2s ease;
+    }
+    .as-crumb:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+    .as-crumb-arrow {
+      color: #0ea5e9;
+      font-size: 16px;
+      font-weight: bold;
+    }
+    
+    /* Hop number badge */
+    .hop-num {
+      position: absolute;
+      left: -36px;
+      top: 50%;
+      transform: translateY(-50%) translateX(-100%);
+      font-size: 10px;
+      font-weight: 600;
+      color: #64748b;
+      width: 20px;
+      text-align: right;
+    }
   </style>
 </head>
 <body class="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
@@ -9517,19 +9652,19 @@ def _trace_html() -> str:
         <div class="grid gap-4 md:grid-cols-4">
           <div>
             <label class="text-xs font-medium text-slate-400">节点 A</label>
-            <select id="trace-src-node" class="w-full mt-1 rounded-lg border border-slate-600 bg-slate-700 p-2.5 text-sm text-white"><option value="">选择...</option></select>
+            <select id="trace-src-node" class="trace-input w-full mt-1 p-2.5 text-sm text-white"><option value="">选择...</option></select>
           </div>
           <div>
             <label class="text-xs font-medium text-slate-400">目标类型</label>
-            <select id="trace-target-type" onchange="toggleTargetInput()" class="w-full mt-1 rounded-lg border border-slate-600 bg-slate-700 p-2.5 text-sm text-white">
+            <select id="trace-target-type" onchange="toggleTargetInput()" class="trace-input w-full mt-1 p-2.5 text-sm text-white">
               <option value="node" selected>选择节点（双向对比）</option>
               <option value="custom">自定义地址（单向）</option>
             </select>
           </div>
           <div>
             <label class="text-xs font-medium text-slate-400">节点 B / 目标</label>
-            <select id="trace-target-node" class="w-full mt-1 rounded-lg border border-slate-600 bg-slate-700 p-2.5 text-sm text-white"><option value="">选择...</option></select>
-            <input type="text" id="trace-target-input" placeholder="IP或域名" class="hidden w-full mt-1 rounded-lg border border-slate-600 bg-slate-700 p-2.5 text-sm text-white">
+            <select id="trace-target-node" class="trace-input w-full mt-1 p-2.5 text-sm text-white"><option value="">选择...</option></select>
+            <input type="text" id="trace-target-input" placeholder="IP或域名" class="trace-input hidden w-full mt-1 p-2.5 text-sm text-white">
           </div>
           <div class="flex items-end">
             <button id="trace-start-btn" onclick="runBidirectionalTrace()" class="w-full px-4 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm font-bold">🚀 开始追踪</button>
@@ -10011,7 +10146,7 @@ def _trace_html() -> str:
       return path;
     }
     
-    // Render AS path as flow diagram
+    // Render AS path as breadcrumb flow diagram
     function renderAsPath(containerId, hops) {
       const container = document.getElementById(containerId);
       if (!container) return;
@@ -10025,38 +10160,30 @@ def _trace_html() -> str:
         return;
       }
       
-      // Calculate max hops for proportional width scaling
-      const maxHops = Math.max(...asPath.map(a => a.hopCount), 1);
+      // Tier border colors
+      const tierColors = {
+        't1': '#f97316', 't2': '#22c55e', 't3': '#3b82f6', 
+        'ix': '#a855f7', 'isp': '#64748b'
+      };
       
-      const html = '<div class="as-path-container">' + asPath.map((as, i) => {
+      const html = '<div class="as-breadcrumb">' + asPath.map((as, i) => {
         const tierClass = `as-tier-${as.tier.toLowerCase()}`;
         const avgLatency = as.hopCount > 0 ? (as.totalLatency / as.hopCount).toFixed(0) : 0;
-        
-        // Width proportional to hop count: base 100px + 25px per hop
-        const baseWidth = 100;
-        const widthPerHop = 25;
-        const cardWidth = baseWidth + (as.hopCount * widthPerHop);
-        
-        // Border color based on tier
-        const tierColors = {
-          't1': '#f97316', 't2': '#22c55e', 't3': '#3b82f6', 
-          'ix': '#a855f7', 'isp': '#64748b'
-        };
         const borderColor = tierColors[as.tier.toLowerCase()] || '#64748b';
         
-        const node = `
-          <div class="as-node" style="min-width: ${cardWidth}px; --tier-color: ${borderColor};" title="${as.name}\\n${as.hopCount}跳 | 平均${avgLatency}ms">
-            <div class="as-header">
+        const crumb = `
+          <div class="as-crumb" style="--tier-color: ${borderColor};" title="${as.name}\\n${as.hopCount}跳 | 平均${avgLatency}ms">
+            <div class="flex items-center gap-2 mb-1">
               <span class="as-tier ${tierClass}">${as.tier}</span>
-              <span class="as-asn">AS${as.asn}</span>
+              <span class="as-asn text-xs">AS${as.asn}</span>
             </div>
-            <div class="as-name">${as.name}</div>
+            <div class="as-name text-xs truncate max-w-[120px]">${as.name}</div>
             <div class="as-hops">${as.hopCount}跳</div>
           </div>
         `;
         
-        const arrow = i < asPath.length - 1 ? '<span class="as-arrow">→</span>' : '';
-        return node + arrow;
+        const arrow = i < asPath.length - 1 ? '<span class="as-crumb-arrow">→</span>' : '';
+        return crumb + arrow;
       }).join('') + '</div>';
       
       container.innerHTML = html;
