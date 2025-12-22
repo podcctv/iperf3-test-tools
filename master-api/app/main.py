@@ -9999,6 +9999,13 @@ def _trace_html() -> str:
       return '#ef4444';                 // red
     }
     
+    // Render latency capsule badge with color
+    function renderLatencyCapsule(rtt) {
+      if (!rtt || rtt <= 0) return '<span class="latency-capsule" style="color:#64748b">-</span>';
+      const capsuleClass = rtt < 50 ? 'excellent' : rtt < 150 ? 'good' : 'bad';
+      return `<span class="latency-capsule ${capsuleClass}">${rtt.toFixed(0)}ms</span>`;
+    }
+    
     // Chart instances
     let fwdChart = null, revChart = null;
     
@@ -10335,11 +10342,12 @@ def _trace_html() -> str:
             // Generate hop detail with changed rows highlighted in red
             const hopDetailsHtml = hops.map((h, i) => {
               const isChanged = changedPositions.includes(i);
-              const rowClass = isChanged ? 'text-rose-400 bg-rose-500/10' : '';
+              const rowClass = isChanged ? 'text-rose-400 bg-rose-500/10 hop-node hop-timeout' : 'hop-node';
               const hopNumClass = isChanged ? 'text-rose-300' : 'text-cyan-400';
               const ipClass = isChanged ? 'text-rose-200 font-bold' : 'text-slate-300';
+              const latencyHtml = renderLatencyCapsule(h.rtt_avg);
               
-              return `<div class="flex gap-2 ${rowClass}"><span class="${hopNumClass}">#${i+1}</span><span class="${ipClass}">${h.ip || '*'}</span><span class="text-slate-500">${h.rtt_avg ? h.rtt_avg.toFixed(1) + 'ms' : '-'}</span><span class="text-slate-600">${h.geo?.isp || ''}</span></div>`;
+              return `<div class="flex items-center gap-3 p-2 ${rowClass}"><span class="${hopNumClass} text-xs font-mono">#${i+1}</span><span class="${ipClass} font-mono text-xs">${h.ip || '*'}</span>${latencyHtml}<span class="text-slate-500 text-xs truncate max-w-[150px]">${h.geo?.isp || ''}</span></div>`;
             }).join('');
             
             return `
