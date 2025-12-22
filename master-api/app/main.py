@@ -9531,7 +9531,15 @@ def _trace_html() -> str:
       border-left: 3px solid #ef4444;
     }
     .hop-node.hop-private {
-      border-left: 3px dashed #64748b;
+      border: 1px dashed #64748b;
+      background: transparent;
+    }
+    .hop-empty {
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #475569;
     }
     /* Inline status dot */
     .hop-dot {
@@ -10726,7 +10734,7 @@ def _trace_html() -> str:
     function renderFlag(code) { return code ? `<img src="/flags/${code}" alt="${code}" class="inline-block w-4 h-3 rounded-sm">` : ''; }
 
     function renderHopCell(hop, hopNum) {
-      if (!hop) return '<div class="hop-node hop-private" style="opacity:0.4"><span class="text-slate-600">-</span></div>';
+      if (!hop) return '<div class="hop-empty">-</div>';
       const geo = hop.geo || {}, badge = detectIspBadge(geo.isp, geo.asn), flag = renderFlag(geo.country_code);
       const latencyCapsule = renderLatencyCapsule(hop.rtt_avg);
       const loss = hop.loss_pct > 0 ? `<span class="text-rose-400 text-xs ml-1">${hop.loss_pct}%</span>` : '';
