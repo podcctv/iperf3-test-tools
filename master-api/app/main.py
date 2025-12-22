@@ -10729,14 +10729,23 @@ def _trace_html() -> str:
 
     function renderFlag(code) { return code ? `<img src="/flags/${code}" alt="${code}" class="inline-block w-4 h-3 rounded-sm">` : ''; }
 
-    function renderHopCell(hop) {
-      if (!hop) return '<div class="hop-cell text-slate-600">-</div>';
+    function renderHopCell(hop, hopNum) {
+      if (!hop) return '<div class="hop-node hop-private" style="opacity:0.4"><span class="text-slate-600">-</span></div>';
       const geo = hop.geo || {}, badge = detectIspBadge(geo.isp, geo.asn), flag = renderFlag(geo.country_code);
-      const rtt = hop.rtt_avg ? `${hop.rtt_avg.toFixed(0)}ms` : '-';
-      const rttClass = getLatencyClass(hop.rtt_avg) || 'text-slate-400';
-      const loss = hop.loss_pct > 0 ? `<span class="text-rose-400 text-xs">${hop.loss_pct}%</span>` : '';
+      const latencyCapsule = renderLatencyCapsule(hop.rtt_avg);
+      const loss = hop.loss_pct > 0 ? `<span class="text-rose-400 text-xs ml-1">${hop.loss_pct}%</span>` : '';
       const isp = geo.isp || '';
-      return `<div class="hop-cell"><div class="flex items-center gap-1">${renderBadge(badge)}<span class="hop-ip ${hop.ip === '*' ? 'text-slate-500' : ''}">${hop.ip}</span><span class="${rttClass} text-xs">${rtt}</span>${loss}</div><div class="hop-isp flex items-center gap-1">${flag} ${isp}</div></div>`;
+      const isTimeout = hop.ip === '*';
+      const isPrivate = isPrivateIP(hop.ip);
+      const nodeClass = isTimeout ? 'hop-node hop-timeout' : isPrivate ? 'hop-node hop-private' : 'hop-node';
+      return `<div class="${nodeClass}">
+        <div class="flex items-center gap-2 mb-1">
+          ${renderBadge(badge)}
+          <span class="font-mono text-xs ${isTimeout ? 'text-slate-500' : ''}">${hop.ip}</span>
+          ${latencyCapsule}${loss}
+        </div>
+        <div class="text-xs text-slate-500 flex items-center gap-1 truncate">${flag} ${isp}</div>
+      </div>`;
     }
 
     function renderComparisonTable(fwdHops, revHops, srcIp, srcName, dstIp, dstName) {
