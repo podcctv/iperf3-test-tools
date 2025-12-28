@@ -4266,10 +4266,6 @@ def _login_html() -> str:
       { key: 'sora', label: 'Sora', color: 'text-violet-300', bg: 'border-violet-500/40 bg-violet-500/10', indicator: 'bg-violet-400' },
       { key: 'claude', label: 'Claude', color: 'text-orange-300', bg: 'border-orange-500/40 bg-orange-500/10', indicator: 'bg-orange-400' },
       { key: 'copilot', label: 'Copilot', color: 'text-blue-300', bg: 'border-blue-500/40 bg-blue-500/10', indicator: 'bg-blue-400' },
-      { key: 'bilibili', label: 'Bilibili', color: 'text-pink-200', bg: 'border-pink-400/40 bg-pink-400/10', indicator: 'bg-pink-300' },
-      { key: 'apple_music', label: 'Apple Music', color: 'text-red-200', bg: 'border-red-400/40 bg-red-400/10', indicator: 'bg-red-300' },
-      { key: 'telegram', label: 'Telegram', color: 'text-cyan-300', bg: 'border-cyan-500/40 bg-cyan-500/10', indicator: 'bg-cyan-400' },
-      { key: 'whatsapp', label: 'WhatsApp', color: 'text-green-300', bg: 'border-green-500/40 bg-green-500/10', indicator: 'bg-green-400' },
     ];
     let streamingStatusCache = {};
     let isStreamingTestRunning = false;

@@ -1178,10 +1178,6 @@ def _run_streaming_suite() -> tuple[list[dict[str, Any]], int]:
         _probe_sora,
         _probe_claude,
         _probe_copilot,
-        _probe_bilibili,
-        _probe_apple_music,
-        _probe_telegram,
-        _probe_whatsapp,
     ]
 
     results: list[dict[str, Any]] = []
