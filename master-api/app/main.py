@@ -4257,18 +4257,19 @@ def _login_html() -> str:
     let nodeRefreshInterval = null;
     let isRefreshingNodes = false;
     const streamingServices = [
-      { key: 'youtube', label: 'YouTube Premium', color: 'text-rose-300', bg: 'border-rose-500/30 bg-rose-500/10', indicator: 'bg-rose-400' },
-      { key: 'prime_video', label: 'Prime Video', color: 'text-amber-300', bg: 'border-amber-400/40 bg-amber-500/10', indicator: 'bg-amber-400' },
+      { key: 'youtube', label: 'YouTube', color: 'text-rose-300', bg: 'border-rose-500/30 bg-rose-500/10', indicator: 'bg-rose-400' },
       { key: 'netflix', label: 'Netflix', color: 'text-red-400', bg: 'border-red-500/40 bg-red-500/10', indicator: 'bg-red-400' },
       { key: 'disney_plus', label: 'Disney+', color: 'text-sky-300', bg: 'border-sky-500/40 bg-sky-500/10', indicator: 'bg-sky-400' },
-      { key: 'hbo', label: 'HBO', color: 'text-purple-300', bg: 'border-purple-500/40 bg-purple-500/10', indicator: 'bg-purple-400' },
-      { key: 'openai', label: 'OpenAI', color: 'text-emerald-300', bg: 'border-emerald-500/40 bg-emerald-500/10', indicator: 'bg-emerald-400' },
-      { key: 'gemini', label: 'Gemini', color: 'text-sky-200', bg: 'border-sky-400/40 bg-sky-400/10', indicator: 'bg-sky-300' },
-      // New services
       { key: 'tiktok', label: 'TikTok', color: 'text-pink-300', bg: 'border-pink-500/40 bg-pink-500/10', indicator: 'bg-pink-400' },
-      { key: 'twitch', label: 'Twitch', color: 'text-violet-300', bg: 'border-violet-500/40 bg-violet-500/10', indicator: 'bg-violet-400' },
-      { key: 'paramount_plus', label: 'Paramount+', color: 'text-blue-300', bg: 'border-blue-500/40 bg-blue-500/10', indicator: 'bg-blue-400' },
-      { key: 'spotify', label: 'Spotify', color: 'text-green-300', bg: 'border-green-500/40 bg-green-500/10', indicator: 'bg-green-400' },
+      { key: 'openai', label: 'ChatGPT', color: 'text-emerald-300', bg: 'border-emerald-500/40 bg-emerald-500/10', indicator: 'bg-emerald-400' },
+      { key: 'gemini', label: 'Gemini', color: 'text-sky-200', bg: 'border-sky-400/40 bg-sky-400/10', indicator: 'bg-sky-300' },
+      { key: 'sora', label: 'Sora', color: 'text-violet-300', bg: 'border-violet-500/40 bg-violet-500/10', indicator: 'bg-violet-400' },
+      { key: 'claude', label: 'Claude', color: 'text-orange-300', bg: 'border-orange-500/40 bg-orange-500/10', indicator: 'bg-orange-400' },
+      { key: 'copilot', label: 'Copilot', color: 'text-blue-300', bg: 'border-blue-500/40 bg-blue-500/10', indicator: 'bg-blue-400' },
+      { key: 'bilibili', label: 'Bilibili', color: 'text-pink-200', bg: 'border-pink-400/40 bg-pink-400/10', indicator: 'bg-pink-300' },
+      { key: 'apple_music', label: 'Apple Music', color: 'text-red-200', bg: 'border-red-400/40 bg-red-400/10', indicator: 'bg-red-300' },
+      { key: 'telegram', label: 'Telegram', color: 'text-cyan-300', bg: 'border-cyan-500/40 bg-cyan-500/10', indicator: 'bg-cyan-400' },
+      { key: 'whatsapp', label: 'WhatsApp', color: 'text-green-300', bg: 'border-green-500/40 bg-green-500/10', indicator: 'bg-green-400' },
     ];
     let streamingStatusCache = {};
     let isStreamingTestRunning = false;
