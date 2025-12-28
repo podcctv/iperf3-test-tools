@@ -9,6 +9,9 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+# GMT+8 Beijing timezone
+TZ_BEIJING = timezone(timedelta(hours=8))
+
 import httpx
 
 logger = logging.getLogger(__name__)
@@ -175,7 +178,7 @@ def format_offline_card(node_name: str, node_ip: str, offline_since: datetime) -
     Returns:
         HTML formatted message for Telegram
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(TZ_BEIJING)
     duration_seconds = (now - offline_since).total_seconds()
     duration_str = _format_duration(duration_seconds)
     
@@ -191,10 +194,10 @@ def format_offline_card(node_name: str, node_ip: str, offline_since: datetime) -
     text += f"📍 节点: <code>{node_name}</code>\n"
     text += f"📡 IP: <code>{masked_ip}</code>\n"
     text += f"⏱️ 离线时长: <b>{duration_str}</b>\n"
-    text += f"🕐 开始时间: {offline_since.strftime('%Y-%m-%d %H:%M:%S')} UTC\n"
+    text += f"🕐 开始时间: {offline_since.astimezone(TZ_BEIJING).strftime('%Y-%m-%d %H:%M:%S')}\n"
     text += f"\n<i>节点无法连接，请检查网络状况</i>\n"
     text += f"━━━━━━━━━━━━━━\n"
-    text += f"<i>最后更新: {now.strftime('%H:%M:%S')} UTC</i>"
+    text += f"<i>最后更新: {now.strftime('%H:%M:%S')}</i>"
     
     return text
 
@@ -333,4 +336,151 @@ async def delete_telegram_message(bot_token: str, chat_id: str, message_id: int)
     except Exception as e:
         logger.error(f"Failed to delete Telegram message: {e}")
         return False
+
+
+# ============================================================================
+# Daily Offline Statistics Card
+# ============================================================================
+
+def format_daily_stats_card(date_str: str, node_stats: list, current_offline: dict) -> str:
+    """Format daily offline statistics card for Telegram (HTML).
+    
+    Args:
+        date_str: Date string like "2025-12-28"
+        node_stats: List of dicts with node offline stats: 
+                   [{"node_name": str, "offline_count": int, "total_duration": int}]
+        current_offline: Dict of currently offline nodes: {node_id: seconds_offline}
+    
+    Returns:
+        HTML formatted message for Telegram
+    """
+    now = datetime.now(TZ_BEIJING)
+    
+    text = f"📊 <b>每日离线统计</b>\n"
+    text += f"━━━━━━━━━━━━━━━━━━━━\n"
+    text += f"📅 {date_str}\n\n"
+    
+    # Filter nodes that have offline events today
+    nodes_with_events = [s for s in node_stats if s["offline_count"] > 0]
+    
+    if not nodes_with_events:
+        text += "✅ <i>今日所有节点均正常，无离线记录</i>\n\n"
+    else:
+        for stat in nodes_with_events:
+            node_name = stat["node_name"]
+            node_id = stat.get("node_id")
+            offline_count = stat["offline_count"]
+            total_duration = stat["total_duration"]  # seconds
+            
+            # Check if currently offline
+            is_offline = node_id in current_offline if node_id else False
+            current_offline_duration = current_offline.get(node_id, 0) if node_id else 0
+            
+            text += f"🔴 <b>{node_name}</b>\n"
+            text += f"   离线次数: {offline_count}次\n"
+            text += f"   累计时长: {_format_duration(total_duration)}\n"
+            
+            if is_offline:
+                text += f"   当前状态: 🔴 <b>离线中</b> ({_format_duration(current_offline_duration)})\n"
+            else:
+                text += f"   当前状态: 🟢 在线\n"
+            text += "\n"
+    
+    # Summary
+    text += f"━━━━━━━━━━━━━━━━━━━━\n"
+    
+    total_nodes = len(node_stats)
+    nodes_with_offline = len(nodes_with_events)
+    nodes_normal = total_nodes - nodes_with_offline
+    current_offline_count = len(current_offline)
+    
+    text += f"✅ 今日正常: {nodes_normal} 个\n"
+    if nodes_with_offline > 0:
+        text += f"⚠️ 有离线记录: {nodes_with_offline} 个\n"
+    if current_offline_count > 0:
+        text += f"🔴 当前离线: {current_offline_count} 个\n"
+    
+    text += f"━━━━━━━━━━━━━━━━━━━━\n"
+    text += f"<i>🕐 更新时间: {now.strftime('%H:%M:%S')}</i>"
+    
+    return text
+
+
+async def send_daily_stats_card(bot_token: str, chat_id: str, date_str: str, 
+                                 node_stats: list, current_offline: dict) -> Optional[int]:
+    """Send daily statistics card via Telegram and return message_id.
+    
+    Returns:
+        message_id if successful, None otherwise
+    """
+    if not bot_token or not chat_id:
+        logger.warning("Telegram not configured for daily stats card")
+        return None
+    
+    message = format_daily_stats_card(date_str, node_stats, current_offline)
+    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": message,
+        "parse_mode": "HTML",
+        "disable_web_page_preview": True
+    }
+    
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload)
+            if response.status_code == 200:
+                data = response.json()
+                message_id = data.get("result", {}).get("message_id")
+                logger.info(f"Daily stats card sent for {date_str}, message_id={message_id}")
+                return message_id
+            else:
+                logger.error(f"Telegram API error sending daily stats: {response.status_code} - {response.text}")
+                return None
+    except Exception as e:
+        logger.error(f"Failed to send daily stats card: {e}")
+        return None
+
+
+async def edit_daily_stats_card(bot_token: str, chat_id: str, message_id: int,
+                                 date_str: str, node_stats: list, current_offline: dict) -> bool:
+    """Update existing daily statistics card.
+    
+    Returns:
+        True if successful, False otherwise
+    """
+    if not bot_token or not chat_id or not message_id:
+        logger.warning("Cannot edit daily stats: missing parameters")
+        return False
+    
+    message = format_daily_stats_card(date_str, node_stats, current_offline)
+    url = f"https://api.telegram.org/bot{bot_token}/editMessageText"
+    payload = {
+        "chat_id": chat_id,
+        "message_id": message_id,
+        "text": message,
+        "parse_mode": "HTML",
+        "disable_web_page_preview": True
+    }
+    
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload)
+            if response.status_code == 200:
+                logger.debug(f"Daily stats card updated for {date_str}")
+                return True
+            elif response.status_code == 400:
+                error_data = response.json()
+                if "message is not modified" in error_data.get("description", "").lower():
+                    logger.debug(f"Daily stats card not modified (same content)")
+                    return True
+                logger.error(f"Telegram API error editing daily stats: {response.status_code} - {response.text}")
+                return False
+            else:
+                logger.error(f"Telegram API error editing daily stats: {response.status_code} - {response.text}")
+                return False
+    except Exception as e:
+        logger.error(f"Failed to edit daily stats card: {e}")
+        return False
+
 

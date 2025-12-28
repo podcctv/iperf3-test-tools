@@ -256,3 +256,30 @@ class OfflineMessage(Base):
     
     node = relationship("Node", foreign_keys=[node_id])
 
+
+class OfflineEvent(Base):
+    """Record individual offline events for statistics."""
+    __tablename__ = "offline_events"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    node_id = Column(Integer, ForeignKey("nodes.id"), nullable=False, index=True)
+    node_name = Column(String, nullable=False)  # Cache for display
+    started_at = Column(DateTime(timezone=True), nullable=False)
+    ended_at = Column(DateTime(timezone=True), nullable=True)  # None = still offline
+    duration_seconds = Column(Integer, nullable=True)  # Calculated on end
+    date = Column(String, nullable=False, index=True)  # "2025-12-28" for daily grouping
+    
+    node = relationship("Node", foreign_keys=[node_id])
+
+
+class DailyStatsMessage(Base):
+    """Track the persistent daily stats Telegram message."""
+    __tablename__ = "daily_stats_messages"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    date = Column(String, unique=True, nullable=False, index=True)  # "2025-12-28"
+    message_id = Column(Integer, nullable=False)  # Telegram message ID
+    chat_id = Column(String, nullable=False)  # Telegram chat ID
+    last_updated = Column(DateTime(timezone=True), server_default=func.now())
+
+

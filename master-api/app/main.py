@@ -1537,11 +1537,18 @@ class NodeHealthMonitor:
         """Check for alert conditions and trigger notifications.
         
         For offline nodes:
-        - If node is offline and no OfflineMessage exists: send new card
+        - If node is offline and no OfflineMessage exists: send new card, create OfflineEvent
         - If node is offline and OfflineMessage exists: update card with new duration
-        - If node is online and OfflineMessage exists: delete card
+        - If node is online and OfflineMessage exists: delete card, close OfflineEvent
+        
+        Daily statistics:
+        - Track all offline events per day
+        - Maintain a persistent daily stats card in Telegram
         """
-        from .models import AlertConfig, OfflineMessage
+        from .models import AlertConfig, OfflineMessage, OfflineEvent, DailyStatsMessage
+        
+        # GMT+8 Beijing timezone
+        TZ_BEIJING = timezone(timedelta(hours=8))
         
         db = SessionLocal()
         try:
@@ -1573,8 +1580,12 @@ class NodeHealthMonitor:
                 node_scope = thresholds_config.value.get("node_scope", "all")
                 selected_nodes = set(thresholds_config.value.get("selected_nodes", []))
             
-            # Track current offline node IDs for cleanup
-            current_offline_ids = set()
+            # Today's date in Beijing timezone
+            now_beijing = datetime.now(TZ_BEIJING)
+            today_str = now_beijing.strftime("%Y-%m-%d")
+            
+            # Track current offline nodes for stats card
+            current_offline_durations = {}  # {node_id: seconds_offline}
             
             for status in statuses:
                 # Skip nodes not in selection (if using selected mode)
@@ -1583,15 +1594,17 @@ class NodeHealthMonitor:
                 
                 # Handle offline nodes with card system
                 if status.status == "offline":
-                    current_offline_ids.add(status.id)
+                    # Check if we already have an offline message for this node
+                    existing_msg = db.query(OfflineMessage).filter(
+                        OfflineMessage.node_id == status.id
+                    ).first()
                     
-                    if notify_node_offline and bot_token and chat_id:
-                        # Check if we already have an offline message for this node
-                        existing_msg = db.query(OfflineMessage).filter(
-                            OfflineMessage.node_id == status.id
-                        ).first()
+                    if existing_msg:
+                        # Calculate current offline duration
+                        duration = (datetime.now(timezone.utc) - existing_msg.offline_since).total_seconds()
+                        current_offline_durations[status.id] = duration
                         
-                        if existing_msg:
+                        if notify_node_offline and bot_token and chat_id:
                             # Update existing card with new duration
                             await alert_service.edit_offline_card(
                                 bot_token=bot_token,
@@ -1604,9 +1617,24 @@ class NodeHealthMonitor:
                             # Update last_updated timestamp
                             existing_msg.last_updated = datetime.now(timezone.utc)
                             db.commit()
-                        else:
+                    else:
+                        # New offline event - create records
+                        offline_since = datetime.now(timezone.utc)
+                        current_offline_durations[status.id] = 0
+                        
+                        # Create OfflineEvent record
+                        offline_event = OfflineEvent(
+                            node_id=status.id,
+                            node_name=status.name,
+                            started_at=offline_since,
+                            date=today_str
+                        )
+                        db.add(offline_event)
+                        db.commit()
+                        logger.info(f"Created offline event for node {status.name}")
+                        
+                        if notify_node_offline and bot_token and chat_id:
                             # Send new offline card
-                            offline_since = datetime.now(timezone.utc)
                             message_id = await alert_service.send_offline_card(
                                 bot_token=bot_token,
                                 chat_id=chat_id,
@@ -1627,19 +1655,35 @@ class NodeHealthMonitor:
                                 db.commit()
                                 logger.info(f"Created offline message record for node {status.name}")
                 
-                # Handle online nodes - delete any existing offline card
+                # Handle online nodes - delete any existing offline card and close event
                 elif status.status == "online":
                     existing_msg = db.query(OfflineMessage).filter(
                         OfflineMessage.node_id == status.id
                     ).first()
                     
-                    if existing_msg and bot_token:
-                        # Delete the offline card from Telegram
-                        await alert_service.delete_telegram_message(
-                            bot_token=bot_token,
-                            chat_id=existing_msg.chat_id,
-                            message_id=existing_msg.message_id
-                        )
+                    if existing_msg:
+                        # Close the OfflineEvent
+                        open_event = db.query(OfflineEvent).filter(
+                            OfflineEvent.node_id == status.id,
+                            OfflineEvent.ended_at == None
+                        ).first()
+                        
+                        if open_event:
+                            open_event.ended_at = datetime.now(timezone.utc)
+                            open_event.duration_seconds = int(
+                                (open_event.ended_at - open_event.started_at).total_seconds()
+                            )
+                            db.commit()
+                            logger.info(f"Closed offline event for node {status.name}, duration={open_event.duration_seconds}s")
+                        
+                        if bot_token:
+                            # Delete the offline card from Telegram
+                            await alert_service.delete_telegram_message(
+                                bot_token=bot_token,
+                                chat_id=existing_msg.chat_id,
+                                message_id=existing_msg.message_id
+                            )
+                        
                         # Remove from database
                         db.delete(existing_msg)
                         db.commit()
@@ -1662,6 +1706,79 @@ class NodeHealthMonitor:
                                     "threshold": f"{ping_threshold_ms}ms"
                                 }
                             )
+            
+            # ========== Daily Statistics Card ==========
+            if notify_node_offline and bot_token and chat_id:
+                # Get all nodes for stats
+                all_nodes = db.query(Node).all()
+                
+                # Calculate daily stats for each node
+                node_stats = []
+                for node in all_nodes:
+                    # Skip if using selected mode and node not selected
+                    if node_scope == "selected" and node.id not in selected_nodes:
+                        continue
+                    
+                    # Query offline events for today
+                    events = db.query(OfflineEvent).filter(
+                        OfflineEvent.node_id == node.id,
+                        OfflineEvent.date == today_str
+                    ).all()
+                    
+                    offline_count = len(events)
+                    total_duration = 0
+                    
+                    for event in events:
+                        if event.duration_seconds:
+                            total_duration += event.duration_seconds
+                        elif event.ended_at is None:
+                            # Still offline - calculate current duration
+                            total_duration += int((datetime.now(timezone.utc) - event.started_at).total_seconds())
+                    
+                    node_stats.append({
+                        "node_id": node.id,
+                        "node_name": node.name,
+                        "offline_count": offline_count,
+                        "total_duration": total_duration
+                    })
+                
+                # Check for existing daily stats message
+                stats_msg = db.query(DailyStatsMessage).filter(
+                    DailyStatsMessage.date == today_str
+                ).first()
+                
+                if stats_msg:
+                    # Update existing card
+                    await alert_service.edit_daily_stats_card(
+                        bot_token=bot_token,
+                        chat_id=stats_msg.chat_id,
+                        message_id=stats_msg.message_id,
+                        date_str=today_str,
+                        node_stats=node_stats,
+                        current_offline=current_offline_durations
+                    )
+                    stats_msg.last_updated = datetime.now(timezone.utc)
+                    db.commit()
+                else:
+                    # Send new daily stats card
+                    message_id = await alert_service.send_daily_stats_card(
+                        bot_token=bot_token,
+                        chat_id=chat_id,
+                        date_str=today_str,
+                        node_stats=node_stats,
+                        current_offline=current_offline_durations
+                    )
+                    
+                    if message_id:
+                        stats_msg = DailyStatsMessage(
+                            date=today_str,
+                            message_id=message_id,
+                            chat_id=chat_id
+                        )
+                        db.add(stats_msg)
+                        db.commit()
+                        logger.info(f"Created daily stats message for {today_str}")
+                        
         except Exception as e:
             logger.error(f"Failed to check alerts: {e}")
             import traceback
