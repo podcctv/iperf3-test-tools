@@ -698,107 +698,282 @@ def _probe_spotify() -> dict[str, Any]:
 
 
 def _probe_openai() -> dict[str, Any]:
-    dns_info = _dns_detail("api.openai.com")
-    compliance_url = "https://api.openai.com/compliance/cookie_requirements"
-    trace_url = "https://chat.openai.com/cdn-cgi/trace"
-    headers = {"User-Agent": STREAMING_UA}
-
-    unsupported_country = None
-    api_status: int | None = None
-    trace_loc: str | None = None
-    api_error: str | None = None
-
+    """
+    ChatGPT unlock detection based on nfdns.top script.
+    Uses iOS API for status and trace endpoint for region.
+    """
+    dns_info = _dns_detail("chat.openai.com")
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+    
+    ios_result = None
+    trace_loc = None
+    cf_details = None
+    
+    # Check iOS API for status
     try:
-        resp = requests.get(compliance_url, headers=headers, timeout=10)
-        api_status = resp.status_code
-        if resp.headers.get("content-type", "").startswith("application/json"):
-            payload = resp.json()
-            unsupported_country = payload.get("unsupported_country")
-    except requests.RequestException as exc:
-        api_error = f"API 请求失败: {exc}"[:150]
-
-    try:
-        trace_resp = requests.get(trace_url, headers=headers, timeout=10)
-        if trace_resp.status_code == 200:
-            for line in trace_resp.text.splitlines():
-                if line.startswith("loc="):
-                    trace_loc = line.split("=", 1)[1].strip()
-                    break
+        ios_resp = requests.get(
+            "https://ios.chat.openai.com/public-api/mobile/server_status/v1",
+            headers=headers,
+            timeout=10,
+        )
+        ios_result = ios_resp.text
+        # Extract cf_details
+        cf_match = re.search(r'"cf_details"\s*:\s*"([^"]*)"', ios_result)
+        if cf_match:
+            cf_details = cf_match.group(1)
     except requests.RequestException:
         pass
-
-    unlocked = api_status == 200 and not unsupported_country
-    detail_parts = [
-        dns_info,
-        f"API HTTP {api_status}" if api_status else api_error,
-        f"Unsupported: {unsupported_country}" if unsupported_country else None,
-        f"loc={trace_loc}" if trace_loc else None,
-    ]
+    
+    # Get region from trace
+    try:
+        trace_resp = requests.get(
+            "https://chatgpt.com/cdn-cgi/trace",
+            headers=headers,
+            timeout=10,
+        )
+        for line in trace_resp.text.splitlines():
+            if line.startswith("loc="):
+                trace_loc = line.split("=", 1)[1].strip()
+                break
+    except requests.RequestException:
+        pass
+    
+    # Determine status
+    if ios_result and ("unsupported_country" in ios_result or "vpn_detected" in ios_result):
+        return _service_result(
+            "openai", "ChatGPT", False, None,
+            [dns_info, "不支持 (地区/VPN封锁)"],
+            region=trace_loc
+        )
+    
+    if cf_details and ("(1)" in cf_details or "(2)" in cf_details):
+        return _service_result(
+            "openai", "ChatGPT", True, 200,
+            [dns_info, "仅Web (ISP封锁)", f"Region: {trace_loc}" if trace_loc else None],
+            tier="web_only",
+            region=trace_loc
+        )
+    
+    if trace_loc:
+        return _service_result(
+            "openai", "ChatGPT", True, 200,
+            [dns_info, f"全功能 (Region: {trace_loc})"],
+            tier="full",
+            region=trace_loc
+        )
+    
+    if ios_result and "status" in ios_result:
+        return _service_result(
+            "openai", "ChatGPT", True, 200,
+            [dns_info, "已解锁"],
+            tier="full"
+        )
+    
     return _service_result(
-        "openai",
-        "OpenAI/ChatGPT",
-        unlocked,
-        api_status,
-        detail_parts,
-        region=trace_loc,
+        "openai", "ChatGPT", False, None,
+        [dns_info, "不支持"]
     )
 
 
 def _probe_gemini() -> dict[str, Any]:
-    headers = {"User-Agent": STREAMING_UA}
+    """
+    Gemini unlock detection based on nfdns.top script.
+    Checks for '45631641,null,true' marker and extracts region code.
+    """
     dns_info = _dns_detail("gemini.google.com")
-    url = "https://gemini.google.com/app"
-    api_probe_status: int | None = None
-    api_probe_error: str | None = None
-    api_geo_hint: str | None = None
-    trace_loc: str | None = None
-
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+    
     try:
-        resp = requests.get(url, headers=headers, timeout=10, allow_redirects=True)
+        resp = requests.get(
+            "https://gemini.google.com",
+            headers=headers,
+            timeout=10,
+            allow_redirects=True,
+        )
+        body = resp.text
         status = resp.status_code
-        blocked = "not available in your country" in resp.text.lower()
-        blocked = blocked or "not available in your location" in resp.text.lower()
-        unlocked = status and status < 400 and not blocked
-        detail_parts = [
-            dns_info,
-            f"HTTP {status}",
-            resp.url if resp.url and resp.url != url else None,
-        ]
     except requests.RequestException as exc:
-        status = None
-        unlocked = False
-        detail_parts = [dns_info, f"请求失败: {exc}"[:150]]
-
-    # Attempt an unauthenticated API reachability check for a stronger signal.
-    if status is None or not unlocked:
-        api_url = "https://generativelanguage.googleapis.com/v1beta/models"
-        try:
-            api_resp = requests.get(api_url, headers=headers, timeout=10)
-            api_probe_status = api_resp.status_code
-            if api_resp.headers.get("content-type", "").startswith("application/json"):
-                payload = api_resp.json()
-                api_geo_hint = (
-                    payload.get("error", {})
-                    .get("message", "")
-                    .split(".")[0]
-                    if isinstance(payload, dict)
-                    else None
-                )
-            unlocked = unlocked or (api_probe_status in {400, 401, 403})
-        except requests.RequestException as exc:
-            api_probe_error = f"API 请求失败: {exc}"[:120]
-
-    detail_parts.extend(
-        part
-        for part in [
-            f"API HTTP {api_probe_status}" if api_probe_status else api_probe_error,
-            api_geo_hint,
-        ]
-        if part
+        return _service_result(
+            "gemini", "Google Gemini", False, None,
+            [dns_info, f"请求失败: {exc}"[:100]]
+        )
+    
+    # Extract country code: ,2,1,200,"XX"
+    region_match = re.search(r',2,1,200,"([A-Z]{2,3})"', body)
+    region = region_match.group(1) if region_match else None
+    
+    # Check for unlock marker
+    if '45631641,null,true' in body:
+        return _service_result(
+            "gemini", "Google Gemini", True, status,
+            [dns_info, f"已解锁 (Region: {region or 'Unknown'})"],
+            region=region
+        )
+    
+    if region and region != "CN":
+        return _service_result(
+            "gemini", "Google Gemini", True, status,
+            [dns_info, f"已解锁 (Region: {region})"],
+            region=region
+        )
+    
+    return _service_result(
+        "gemini", "Google Gemini", False, status,
+        [dns_info, "不支持"]
     )
 
+
+def _probe_sora() -> dict[str, Any]:
+    """
+    Sora unlock detection based on nfdns.top script.
+    Uses trace endpoint with retry, falls back to HTTP status check.
+    """
+    dns_info = _dns_detail("sora.com")
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+    }
+    
+    region = None
+    
+    # Method 1: Trace endpoint with retry (up to 3 times)
+    for _ in range(3):
+        try:
+            trace_resp = requests.get(
+                "https://sora.com/cdn-cgi/trace",
+                headers=headers,
+                timeout=10,
+            )
+            for line in trace_resp.text.splitlines():
+                if line.startswith("loc="):
+                    region = line.split("=", 1)[1].strip()
+                    break
+            if region:
+                break
+        except requests.RequestException:
+            pass
+        time.sleep(0.5)
+    
+    if region:
+        return _service_result(
+            "sora", "Sora", True, 200,
+            [dns_info, f"已解锁 (Region: {region})"],
+            region=region
+        )
+    
+    # Method 2: Fallback - check homepage HTTP status
+    try:
+        home_resp = requests.get(
+            "https://sora.com/",
+            headers=headers,
+            timeout=10,
+            allow_redirects=False,
+        )
+        if home_resp.status_code in [200, 302]:
+            return _service_result(
+                "sora", "Sora", True, home_resp.status_code,
+                [dns_info, "已解锁"]
+            )
+    except requests.RequestException:
+        pass
+    
     return _service_result(
-        "gemini", "Google Gemini", unlocked, status or api_probe_status, detail_parts, region=trace_loc
+        "sora", "Sora", False, None,
+        [dns_info, "不支持"]
+    )
+
+
+def _probe_claude() -> dict[str, Any]:
+    """
+    Claude AI unlock detection based on nfdns.top script.
+    Checks login page redirect behavior.
+    """
+    dns_info = _dns_detail("claude.ai")
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+    }
+    
+    try:
+        resp = requests.get(
+            "https://claude.ai/login",
+            headers=headers,
+            timeout=10,
+            allow_redirects=True,
+        )
+        final_url = resp.url
+        
+        if "claude.ai/login" in final_url or final_url == "https://claude.ai/":
+            return _service_result(
+                "claude", "Claude AI", True, resp.status_code,
+                [dns_info, "已解锁"]
+            )
+        elif "unavailable" in final_url:
+            return _service_result(
+                "claude", "Claude AI", False, resp.status_code,
+                [dns_info, "不可用"]
+            )
+    except requests.RequestException as exc:
+        return _service_result(
+            "claude", "Claude AI", False, None,
+            [dns_info, f"请求失败: {exc}"[:100]]
+        )
+    
+    return _service_result(
+        "claude", "Claude AI", False, None,
+        [dns_info, "不支持"]
+    )
+
+
+def _probe_copilot() -> dict[str, Any]:
+    """
+    Microsoft Copilot unlock detection based on nfdns.top script.
+    Checks API and web endpoints for availability markers.
+    """
+    dns_info = _dns_detail("copilot.microsoft.com")
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+    }
+    
+    # Check API
+    try:
+        api_resp = requests.get(
+            "https://copilot.microsoft.com/turing/conversation/chats?bundleVersion=1.1342.3-cplt.12",
+            headers=headers,
+            timeout=10,
+        )
+        if '"value":"Success"' in api_resp.text:
+            return _service_result(
+                "copilot", "Microsoft Copilot", True, api_resp.status_code,
+                [dns_info, "已解锁"]
+            )
+    except requests.RequestException:
+        pass
+    
+    # Check web
+    try:
+        web_resp = requests.get(
+            "https://copilot.microsoft.com/",
+            headers=headers,
+            timeout=10,
+        )
+        if re.search(r'Edge_C_Chat|Copilot', web_resp.text, re.IGNORECASE):
+            return _service_result(
+                "copilot", "Microsoft Copilot", True, web_resp.status_code,
+                [dns_info, "已解锁"]
+            )
+    except requests.RequestException:
+        pass
+    
+    return _service_result(
+        "copilot", "Microsoft Copilot", False, None,
+        [dns_info, "不支持"]
     )
 
 
@@ -1002,6 +1177,9 @@ def _run_streaming_suite() -> tuple[list[dict[str, Any]], int]:
         _probe_spotify,
         _probe_openai,
         _probe_gemini,
+        _probe_sora,
+        _probe_claude,
+        _probe_copilot,
         _probe_hbo,
         _probe_twitch,
         _probe_paramount_plus,
