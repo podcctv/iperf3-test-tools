@@ -437,7 +437,7 @@ async def delete_telegram_message(bot_token: str, chat_id: str, message_id: int)
 
 def format_daily_stats_card(date_str: str, node_stats: list, current_offline: dict) -> str:
     """Format daily offline statistics card for Telegram (HTML).
-    Terminal-style design with dynamic width alignment.
+    Hybrid design with bold headers and code blocks for alignment.
     """
     now = datetime.now(TZ_BEIJING)
     total_nodes = len(node_stats)
@@ -445,18 +445,18 @@ def format_daily_stats_card(date_str: str, node_stats: list, current_offline: di
     current_offline_count = len(current_offline)
     online_count = total_nodes - current_offline_count
     
-    box = TerminalBox()
-    box.header("NODE STATUS")
-    box.empty()
-    box.content(f"{date_str}   ● LIVE")
-    box.empty()
+    lines = []
+    
+    # Header with bold
+    lines.append("<b>◆ NODE STATUS</b>")
+    lines.append(f"<code>  {date_str}  </code>  <i>● LIVE</i>")
+    lines.append("")
     
     if not nodes_with_events:
-        box.content("✓ ALL SYSTEMS ONLINE")
-        box.empty()
+        lines.append("<code>  ✓ ALL SYSTEMS ONLINE</code>")
     else:
-        box.separator("INCIDENTS")
-        box.empty()
+        lines.append("<b>▸ INCIDENTS</b>")
+        lines.append("")
         
         for stat in nodes_with_events:
             node_name = stat["node_name"]
@@ -465,24 +465,23 @@ def format_daily_stats_card(date_str: str, node_stats: list, current_offline: di
             total_duration = stat["total_duration"]
             is_offline = node_id in current_offline if node_id else False
             
-            box.content(f"▲ {node_name}")
-            box.content(f"  OUTAGE  {offline_count}x")
-            box.content(f"  TOTAL   {_format_duration(total_duration)}")
+            lines.append(f"<b>  ▲ {node_name}</b>")
+            lines.append(f"<code>    OUTAGE  {offline_count}x</code>")
+            lines.append(f"<code>    TOTAL   {_format_duration(total_duration)}</code>")
             if is_offline:
-                box.content(f"  STATE   ■ OFFLINE")
+                lines.append(f"<code>    STATE   </code><b>■ OFFLINE</b>")
             else:
-                box.content(f"  STATE   RECOVERED")
-            box.empty()
+                lines.append(f"<code>    STATE   </code><i>RECOVERED</i>")
+            lines.append("")
     
-    box.separator()
-    box.content(f"ONLINE {online_count}/{total_nodes}")
+    lines.append("─────────────────────")
+    lines.append(f"<code>  ONLINE  {online_count}/{total_nodes}</code>")
     if len(nodes_with_events) > 0:
-        box.content(f"ERR    {len(nodes_with_events)}")
-    box.separator()
-    box.content(f"UPD {now.strftime('%H:%M:%S')}")
-    box.footer()
+        lines.append(f"<code>  ERR     {len(nodes_with_events)}</code>")
+    lines.append("─────────────────────")
+    lines.append(f"<i>  ◷ {now.strftime('%H:%M:%S')}</i>")
     
-    return box.build()
+    return "\n".join(lines)
 
 
 def format_daily_archive_card(date_str: str, node_stats: list) -> str:
