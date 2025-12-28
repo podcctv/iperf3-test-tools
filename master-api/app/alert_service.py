@@ -170,9 +170,10 @@ def _format_duration(seconds: float) -> str:
 class TerminalBox:
     """Helper class to build dynamically aligned terminal-style boxes."""
     
-    def __init__(self, min_width: int = 26):
+    def __init__(self, min_width: int = 22, max_width: int = 24):
         self.lines = []  # List of (type, content) where type is 'header', 'separator', 'content', 'empty'
         self.min_width = min_width
+        self.max_width = max_width  # Limit for mobile display
     
     def header(self, title: str):
         """Add header line: ┌─ TITLE ─────┐"""
@@ -218,7 +219,7 @@ class TerminalBox:
     
     def build(self) -> str:
         """Build the final box string with dynamic width."""
-        # Calculate max content width
+        # Calculate max content width, but limit to max_width
         max_content_width = 0
         for line_type, content in self.lines:
             if line_type == 'content' and content:
@@ -226,21 +227,24 @@ class TerminalBox:
             elif line_type in ('header', 'separator') and content:
                 max_content_width = max(max_content_width, self._get_display_width(content) + 4)
         
-        # Add padding (2 spaces each side) + borders
+        # Add padding (2 spaces each side) + apply limits
         inner_width = max(max_content_width + 4, self.min_width)
+        inner_width = min(inner_width, self.max_width)  # Apply max limit for mobile
         
         result = []
         for line_type, content in self.lines:
             if line_type == 'header':
                 # ┌─ TITLE ─────────────┐
                 title_part = f"─ {content} "
-                remaining = inner_width - len(title_part)
+                title_display_width = self._get_display_width(title_part)
+                remaining = max(0, inner_width - title_display_width)
                 line = f"┌{title_part}{'─' * remaining}┐"
             elif line_type == 'separator':
                 if content:
                     # ├─ TITLE ─────────────┤
                     title_part = f"─ {content} "
-                    remaining = inner_width - len(title_part)
+                    title_display_width = self._get_display_width(title_part)
+                    remaining = max(0, inner_width - title_display_width)
                     line = f"├{title_part}{'─' * remaining}┤"
                 else:
                     # ├──────────────────────┤
