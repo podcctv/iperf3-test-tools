@@ -480,151 +480,117 @@ def _probe_disney_plus() -> dict[str, Any]:
 
 def _probe_netflix() -> dict[str, Any]:
     """
-    Enhanced Netflix unlock detection using netflix.reactContext JSON parsing.
-    Based on RegionRestrictionCheck script methodology.
+    Netflix unlock detection based on nfdns.top script methodology.
     
     Detection logic:
-    - 81280792: Netflix Original content (should be globally available for Netflix users)
-    - 70143836: Licensed content (region-restricted)
-    
-    Results:
-    - Full Unlock: Both originals and licensed content available
-    - Originals Only: Only Netflix Originals available (common for residential proxies)
-    - Not Unlocked: Cannot access Netflix content
+    - HTTP 000/timeout: Network error
+    - HTTP 404: Originals only
+    - HTTP 403: Banned/blocked
+    - HTTP 200 + "Oh no!": Originals only (fake 200)
+    - HTTP 200 + video markers: Full unlock, then detect region via /login redirect
     """
     dns_info = _dns_detail("www.netflix.com")
     
-    # Test titles from RegionRestrictionCheck script
-    # 81280792: Netflix Original - tests if Netflix is accessible at all
-    # 70143836: Licensed content - tests if full library is accessible
-    title_tests = [
-        ("81280792", "originals"),  # Netflix Original
-        ("70143836", "licensed"),   # Licensed content (Breaking Bad)
-    ]
-
-    results = {}
-    region = None
-    network_error = False
+    # Test Breaking Bad (70143836) - licensed content
+    test_url = "https://www.netflix.com/title/70143836"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
     
-    for title_id, kind in title_tests:
-        url = f"https://www.netflix.com/title/{title_id}"
-        try:
-            resp = requests.get(
-                url,
-                headers={"User-Agent": STREAMING_UA},
-                timeout=10,
-                allow_redirects=True,
-            )
-        except requests.RequestException:
-            results[kind] = None  # Network error, distinguish from blocked
-            network_error = True
-            continue
-
-        # Parse netflix.reactContext for accurate availability detection
-        # This matches the RegionRestrictionCheck script approach
-        is_available = None
-        
-        # Extract reactContext JSON blob
-        react_context_match = re.search(
-            r'netflix\.reactContext\s*=\s*({.+?});',
-            resp.text,
-            re.DOTALL
+    try:
+        resp = requests.get(
+            test_url,
+            headers=headers,
+            timeout=3,
+            allow_redirects=True,
         )
-        
-        if react_context_match:
-            try:
-                # Clean up the JSON - remove control characters
-                json_str = react_context_match.group(1)
-                # Remove unicode escape sequences that might break parsing
-                json_str = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', json_str)
-                
-                react_data = json.loads(json_str)
-                
-                # Extract isAvailable from nmTitleGQL model
-                # Path: .models.nmTitleGQL.data.metaData.isAvailable
-                nm_title = react_data.get("models", {}).get("nmTitleGQL", {})
-                if nm_title:
-                    is_available = nm_title.get("data", {}).get("metaData", {}).get("isAvailable")
-                
-                # Extract region from geo model
-                # Path: .models.geo.data.requestCountry.id
-                if not region:
-                    geo_data = react_data.get("models", {}).get("geo", {})
-                    if geo_data:
-                        region = geo_data.get("data", {}).get("requestCountry", {}).get("id")
-                        
-            except (json.JSONDecodeError, AttributeError, TypeError):
-                # Fall back to simpler detection if JSON parsing fails
-                pass
-        
-        # Fallback: Try simpler regex for region if not found
-        if not region:
-            region_match = re.search(r'"requestCountry"\s*:\s*\{[^}]*"id"\s*:\s*"([A-Z]{2})"', resp.text)
-            if region_match:
-                region = region_match.group(1)
-            else:
-                # Even simpler fallback
-                region_match = re.search(r'"requestCountry"\s*:\s*"([A-Z]{2})"', resp.text)
-                if region_match:
-                    region = region_match.group(1)
-        
-        # Fallback availability check if reactContext parsing didn't work
-        if is_available is None:
-            if resp.status_code == 404:
-                is_available = False
-            elif "/browse" in resp.url or "/signup" in resp.url:
-                is_available = False
-            elif "Not Available" in resp.text or "title-not-found" in resp.text.lower():
-                is_available = False
-            elif resp.status_code == 200:
-                is_available = True
-            else:
-                is_available = False
-        
-        results[kind] = is_available
-
-    # Determine unlock tier based on results
-    originals = results.get("originals")
-    licensed = results.get("licensed")
+        status_code = resp.status_code
+        body = resp.text[:15000]  # Only check first 15KB like the script
+    except requests.RequestException as exc:
+        # Network error (equivalent to HTTP 000)
+        return _service_result(
+            "netflix", "Netflix", False, None,
+            [dns_info, "网络连接错误"],
+            tier="error"
+        )
     
-    # Handle network errors
-    if originals is None and licensed is None:
-        tier = "error"
-        unlocked = False
-        detail = "网络连接失败"
-        status_code = None
-    elif originals is True and licensed is True:
-        # Both available = Full unlock
-        tier = "full"
-        unlocked = True
-        detail = "全解锁"
-        status_code = 200
-    elif originals is True or licensed is True:
-        # At least one available = Originals only (partial unlock)
-        # This is the "Originals Only" state from RegionRestrictionCheck
-        tier = "originals"
-        unlocked = True  # Consider partial unlock as unlocked for usability
-        detail = "仅解锁自制剧"
-        status_code = 200
-    else:
-        # Nothing available = Not unlocked
-        tier = "none"
-        unlocked = False
-        detail = "未解锁"
-        status_code = 403
-
-    detail_parts = [dns_info, detail]
-    if region:
-        detail_parts.append(f"Region: {region}")
-
+    # --- Logic based on HTTP status codes ---
+    
+    if status_code == 404:
+        # 404 = Originals Only
+        return _service_result(
+            "netflix", "Netflix", True, 404,
+            [dns_info, "仅自制剧 (Originals Only)"],
+            tier="originals"
+        )
+    
+    if status_code == 403:
+        # 403 = Banned
+        return _service_result(
+            "netflix", "Netflix", False, 403,
+            [dns_info, "不支持 (Banned)"],
+            tier="none"
+        )
+    
+    if status_code == 200:
+        # Check for fake 200 ("Oh no!")
+        if "Oh no!" in body:
+            return _service_result(
+                "netflix", "Netflix", True, 200,
+                [dns_info, "仅自制剧 (Originals Only)"],
+                tier="originals"
+            )
+        
+        # Check for full unlock markers
+        unlock_markers = [
+            'property="og:video"',
+            'data-uia="episodes"',
+            'playableVideo'
+        ]
+        
+        if any(marker in body for marker in unlock_markers):
+            # Full unlock confirmed - now detect region via login redirect
+            region = None
+            try:
+                login_resp = requests.get(
+                    "https://www.netflix.com/login",
+                    headers=headers,
+                    timeout=2,
+                    allow_redirects=False,  # Don't follow, just get Location header
+                )
+                # Get redirect URL
+                redirect_url = login_resp.headers.get("Location", "")
+                # Extract region: from https://www.netflix.com/jp-en/login get 'jp'
+                if redirect_url:
+                    match = re.search(r'netflix\.com/([a-z]{2})(?:-[a-z]{2})?/', redirect_url)
+                    if match:
+                        region = match.group(1).upper()
+            except requests.RequestException:
+                pass
+            
+            # Default to US if no region detected
+            if not region:
+                region = "US"
+            
+            return _service_result(
+                "netflix", "Netflix", True, 200,
+                [dns_info, f"全解锁 (Region: {region})"],
+                tier="full",
+                region=region
+            )
+        else:
+            # 200 OK but no unlock markers
+            return _service_result(
+                "netflix", "Netflix", False, 200,
+                [dns_info, "不支持或仅自制"],
+                tier="none"
+            )
+    
+    # Other status codes
     return _service_result(
-        "netflix",
-        "Netflix",
-        unlocked,
-        status_code,
-        detail_parts,
-        tier=tier,
-        region=region,
+        "netflix", "Netflix", False, status_code,
+        [dns_info, f"检测异常 (HTTP {status_code})"],
+        tier="error"
     )
 
 
