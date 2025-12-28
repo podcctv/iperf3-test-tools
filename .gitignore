@@ -7,3 +7,4 @@ __pycache__/
 .env
 /.venv
 /data/master_state.json
+/data/dashboard_password.txt
