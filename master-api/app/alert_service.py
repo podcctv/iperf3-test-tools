@@ -154,17 +154,17 @@ def format_webhook_payload(alert_type: str, severity: str, node_id: int, node_na
 # ============================================================================
 
 def _format_duration(seconds: float) -> str:
-    """Format duration in human-readable Chinese format."""
+    """Format duration in short English format for terminal alignment."""
     if seconds < 60:
-        return f"{int(seconds)}秒"
+        return f"{int(seconds)}s"
     elif seconds < 3600:
         minutes = int(seconds // 60)
         secs = int(seconds % 60)
-        return f"{minutes}分{secs}秒"
+        return f"{minutes}m {secs}s"
     else:
         hours = int(seconds // 3600)
         minutes = int((seconds % 3600) // 60)
-        return f"{hours}小时{minutes}分"
+        return f"{hours}h {minutes}m"
 
 
 class TerminalBox:
