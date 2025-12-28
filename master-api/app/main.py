@@ -1747,6 +1747,54 @@ class NodeHealthMonitor:
                     DailyStatsMessage.date == today_str
                 ).first()
                 
+                # Check if there's a message from a previous day (date changed)
+                old_stats_msg = db.query(DailyStatsMessage).filter(
+                    DailyStatsMessage.date != today_str
+                ).first()
+                
+                if old_stats_msg:
+                    # Date has changed - archive the old day
+                    old_date = old_stats_msg.date
+                    
+                    # Calculate stats for the old day (for archive)
+                    old_node_stats = []
+                    for node in all_nodes:
+                        if node_scope == "selected" and node.id not in selected_nodes:
+                            continue
+                        events = db.query(OfflineEvent).filter(
+                            OfflineEvent.node_id == node.id,
+                            OfflineEvent.date == old_date
+                        ).all()
+                        offline_count = len(events)
+                        total_duration = sum(e.duration_seconds or 0 for e in events)
+                        old_node_stats.append({
+                            "node_id": node.id,
+                            "node_name": node.name,
+                            "offline_count": offline_count,
+                            "total_duration": total_duration
+                        })
+                    
+                    # Send archive card (this persists in chat)
+                    await alert_service.send_daily_archive_card(
+                        bot_token=bot_token,
+                        chat_id=old_stats_msg.chat_id,
+                        date_str=old_date,
+                        node_stats=old_node_stats
+                    )
+                    logger.info(f"Sent daily archive for {old_date}")
+                    
+                    # Delete the old live stats message from Telegram
+                    await alert_service.delete_telegram_message(
+                        bot_token=bot_token,
+                        chat_id=old_stats_msg.chat_id,
+                        message_id=old_stats_msg.message_id
+                    )
+                    
+                    # Remove old record from database
+                    db.delete(old_stats_msg)
+                    db.commit()
+                    logger.info(f"Deleted old live stats card for {old_date}")
+                
                 if stats_msg:
                     # Update existing card
                     await alert_service.edit_daily_stats_card(

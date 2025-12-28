@@ -169,6 +169,7 @@ def _format_duration(seconds: float) -> str:
 
 def format_offline_card(node_name: str, node_ip: str, offline_since: datetime) -> str:
     """Format offline node card message for Telegram (HTML).
+    Modern tech aesthetic with clean visual design.
     
     Args:
         node_name: Name of the offline node
@@ -185,19 +186,18 @@ def format_offline_card(node_name: str, node_ip: str, offline_since: datetime) -
     # Mask IP for privacy (show first two octets only)
     ip_parts = node_ip.split(".")
     if len(ip_parts) == 4:
-        masked_ip = f"{ip_parts[0]}.{ip_parts[1]}.xxx.xxx"
+        masked_ip = f"{ip_parts[0]}.{ip_parts[1]}.*.*"
     else:
         masked_ip = node_ip
     
-    text = f"🔴 <b>节点离线告警</b>\n"
-    text += f"━━━━━━━━━━━━━━\n"
-    text += f"📍 节点: <code>{node_name}</code>\n"
-    text += f"📡 IP: <code>{masked_ip}</code>\n"
-    text += f"⏱️ 离线时长: <b>{duration_str}</b>\n"
-    text += f"🕐 开始时间: {offline_since.astimezone(TZ_BEIJING).strftime('%Y-%m-%d %H:%M:%S')}\n"
-    text += f"\n<i>节点无法连接，请检查网络状况</i>\n"
-    text += f"━━━━━━━━━━━━━━\n"
-    text += f"<i>最后更新: {now.strftime('%H:%M:%S')}</i>"
+    text = f"<b>⬤ 节点离线</b>\n"
+    text += f"▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n"
+    text += f"▸ 节点: <code>{node_name}</code>\n"
+    text += f"▸ 地址: <code>{masked_ip}</code>\n"
+    text += f"▸ 时长: <b>{duration_str}</b>\n"
+    text += f"▸ 开始: {offline_since.astimezone(TZ_BEIJING).strftime('%H:%M:%S')}\n"
+    text += f"▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n"
+    text += f"<i>◷ {now.strftime('%H:%M:%S')}</i>"
     
     return text
 
@@ -344,11 +344,11 @@ async def delete_telegram_message(bot_token: str, chat_id: str, message_id: int)
 
 def format_daily_stats_card(date_str: str, node_stats: list, current_offline: dict) -> str:
     """Format daily offline statistics card for Telegram (HTML).
+    Modern tech aesthetic with clean visual design.
     
     Args:
         date_str: Date string like "2025-12-28"
-        node_stats: List of dicts with node offline stats: 
-                   [{"node_name": str, "offline_count": int, "total_duration": int}]
+        node_stats: List of dicts with node offline stats
         current_offline: Dict of currently offline nodes: {node_id: seconds_offline}
     
     Returns:
@@ -356,16 +356,18 @@ def format_daily_stats_card(date_str: str, node_stats: list, current_offline: di
     """
     now = datetime.now(TZ_BEIJING)
     
-    text = f"📊 <b>每日离线统计</b>\n"
-    text += f"━━━━━━━━━━━━━━━━━━━━\n"
-    text += f"📅 {date_str}\n\n"
+    # Header with tech aesthetic
+    text = f"<b>◈ 节点监控面板</b>\n"
+    text += f"▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n"
+    text += f"◷ {date_str}  ·  实时监控中\n\n"
     
     # Filter nodes that have offline events today
     nodes_with_events = [s for s in node_stats if s["offline_count"] > 0]
     
     if not nodes_with_events:
-        text += "✅ <i>今日所有节点均正常，无离线记录</i>\n\n"
+        text += "◉ <i>全部节点运行正常</i>\n\n"
     else:
+        text += "<b>▸ 异常节点</b>\n\n"
         for stat in nodes_with_events:
             node_name = stat["node_name"]
             node_id = stat.get("node_id")
@@ -376,34 +378,132 @@ def format_daily_stats_card(date_str: str, node_stats: list, current_offline: di
             is_offline = node_id in current_offline if node_id else False
             current_offline_duration = current_offline.get(node_id, 0) if node_id else 0
             
-            text += f"🔴 <b>{node_name}</b>\n"
-            text += f"   离线次数: {offline_count}次\n"
-            text += f"   累计时长: {_format_duration(total_duration)}\n"
+            if is_offline:
+                text += f"▣ <b>{node_name}</b>  ⬤ 离线\n"
+            else:
+                text += f"▢ <b>{node_name}</b>  ○ 已恢复\n"
+            
+            text += f"   ├ 中断: {offline_count}次\n"
+            text += f"   └ 累计: {_format_duration(total_duration)}"
             
             if is_offline:
-                text += f"   当前状态: 🔴 <b>离线中</b> ({_format_duration(current_offline_duration)})\n"
-            else:
-                text += f"   当前状态: 🟢 在线\n"
-            text += "\n"
+                text += f" (+{_format_duration(current_offline_duration)})"
+            text += "\n\n"
     
-    # Summary
-    text += f"━━━━━━━━━━━━━━━━━━━━\n"
+    # Summary section
+    text += f"▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n"
     
     total_nodes = len(node_stats)
     nodes_with_offline = len(nodes_with_events)
     nodes_normal = total_nodes - nodes_with_offline
     current_offline_count = len(current_offline)
     
-    text += f"✅ 今日正常: {nodes_normal} 个\n"
+    text += f"<b>▸ 状态汇总</b>\n"
+    text += f"   正常运行: {nodes_normal}/{total_nodes}\n"
     if nodes_with_offline > 0:
-        text += f"⚠️ 有离线记录: {nodes_with_offline} 个\n"
+        text += f"   今日异常: {nodes_with_offline}\n"
     if current_offline_count > 0:
-        text += f"🔴 当前离线: {current_offline_count} 个\n"
+        text += f"   当前离线: {current_offline_count}\n"
     
-    text += f"━━━━━━━━━━━━━━━━━━━━\n"
-    text += f"<i>🕐 更新时间: {now.strftime('%H:%M:%S')}</i>"
+    text += f"\n<i>◷ {now.strftime('%H:%M:%S')}</i>"
     
     return text
+
+
+def format_daily_archive_card(date_str: str, node_stats: list) -> str:
+    """Format end-of-day archive card for Telegram (HTML).
+    This card is sent at the end of day and persists in chat history.
+    
+    Args:
+        date_str: Date string like "2025-12-28"
+        node_stats: List of dicts with node offline stats
+    
+    Returns:
+        HTML formatted message for Telegram
+    """
+    # Header
+    text = f"<b>◈ 每日运维报告</b>\n"
+    text += f"▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n"
+    text += f"◷ {date_str}\n\n"
+    
+    # Filter nodes that have offline events today
+    nodes_with_events = [s for s in node_stats if s["offline_count"] > 0]
+    total_nodes = len(node_stats)
+    nodes_with_offline = len(nodes_with_events)
+    nodes_normal = total_nodes - nodes_with_offline
+    
+    # Calculate total offline time across all nodes
+    total_offline_seconds = sum(s["total_duration"] for s in nodes_with_events)
+    total_offline_count = sum(s["offline_count"] for s in nodes_with_events)
+    
+    if not nodes_with_events:
+        text += "◉ <b>全天无故障</b>\n\n"
+        text += f"   所有 {total_nodes} 个节点运行正常\n"
+        text += f"   可用率: 100%\n\n"
+    else:
+        text += "<b>▸ 故障统计</b>\n\n"
+        
+        # Sort by total duration (worst first)
+        sorted_stats = sorted(nodes_with_events, key=lambda x: x["total_duration"], reverse=True)
+        
+        for stat in sorted_stats:
+            node_name = stat["node_name"]
+            offline_count = stat["offline_count"]
+            total_duration = stat["total_duration"]
+            
+            # Calculate uptime percentage (assuming 24h day)
+            uptime_pct = max(0, 100 - (total_duration / 864) * 100)  # 86400s = 24h
+            
+            text += f"▢ <b>{node_name}</b>\n"
+            text += f"   ├ 中断: {offline_count}次\n"
+            text += f"   ├ 时长: {_format_duration(total_duration)}\n"
+            text += f"   └ 可用率: {uptime_pct:.1f}%\n\n"
+        
+        text += f"▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n"
+        text += f"<b>▸ 日总结</b>\n"
+        text += f"   正常节点: {nodes_normal}/{total_nodes}\n"
+        text += f"   异常节点: {nodes_with_offline}\n"
+        text += f"   总中断: {total_offline_count}次\n"
+        text += f"   总时长: {_format_duration(total_offline_seconds)}\n"
+    
+    text += f"\n<i>— 报告生成于 {datetime.now(TZ_BEIJING).strftime('%Y-%m-%d %H:%M')} —</i>"
+    
+    return text
+
+
+async def send_daily_archive_card(bot_token: str, chat_id: str, date_str: str, node_stats: list) -> Optional[int]:
+    """Send end-of-day archive card via Telegram.
+    
+    Returns:
+        message_id if successful, None otherwise
+    """
+    if not bot_token or not chat_id:
+        logger.warning("Telegram not configured for daily archive")
+        return None
+    
+    message = format_daily_archive_card(date_str, node_stats)
+    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": message,
+        "parse_mode": "HTML",
+        "disable_web_page_preview": True
+    }
+    
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload)
+            if response.status_code == 200:
+                data = response.json()
+                message_id = data.get("result", {}).get("message_id")
+                logger.info(f"Daily archive card sent for {date_str}, message_id={message_id}")
+                return message_id
+            else:
+                logger.error(f"Telegram API error sending archive: {response.status_code} - {response.text}")
+                return None
+    except Exception as e:
+        logger.error(f"Failed to send daily archive card: {e}")
+        return None
 
 
 async def send_daily_stats_card(bot_token: str, chat_id: str, date_str: str, 
