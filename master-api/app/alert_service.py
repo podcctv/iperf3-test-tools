@@ -170,7 +170,7 @@ def _format_duration(seconds: float) -> str:
 class TerminalBox:
     """Helper class to build dynamically aligned terminal-style boxes."""
     
-    def __init__(self, min_width: int = 22, max_width: int = 24):
+    def __init__(self, min_width: int = 22, max_width: int = 28):
         self.lines = []  # List of (type, content) where type is 'header', 'separator', 'content', 'empty'
         self.min_width = min_width
         self.max_width = max_width  # Limit for mobile display
@@ -501,8 +501,9 @@ def format_daily_archive_card(date_str: str, node_stats: list) -> str:
     total_offline_count = sum(s["offline_count"] for s in nodes_with_events)
     
     # Calculate average uptime
+    # 86400 = seconds per day
     if total_offline_seconds > 0 and total_nodes > 0:
-        avg_uptime = max(0, 100 - (total_offline_seconds / (total_nodes * 864)) * 100)
+        avg_uptime = max(0, 100 - (total_offline_seconds / (total_nodes * 86400)) * 100)
     else:
         avg_uptime = 100.0
     
@@ -530,7 +531,7 @@ def format_daily_archive_card(date_str: str, node_stats: list) -> str:
             node_name = stat["node_name"]
             offline_count = stat["offline_count"]
             total_duration = stat["total_duration"]
-            uptime_pct = max(0, 100 - (total_duration / 864) * 100)
+            uptime_pct = max(0, 100 - (total_duration / 86400) * 100)
             
             box.content(f"▸ {node_name}")
             box.content(f"  {offline_count}x / {_format_duration(total_duration)} / {uptime_pct:.1f}%")
