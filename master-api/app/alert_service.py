@@ -167,44 +167,132 @@ def _format_duration(seconds: float) -> str:
         return f"{hours}小时{minutes}分"
 
 
+class TerminalBox:
+    """Helper class to build dynamically aligned terminal-style boxes."""
+    
+    def __init__(self, min_width: int = 26):
+        self.lines = []  # List of (type, content) where type is 'header', 'separator', 'content', 'empty'
+        self.min_width = min_width
+    
+    def header(self, title: str):
+        """Add header line: ┌─ TITLE ─────┐"""
+        self.lines.append(('header', title))
+        return self
+    
+    def separator(self, title: str = None):
+        """Add separator line: ├─ TITLE ─────┤ or ├─────────────┤"""
+        self.lines.append(('separator', title))
+        return self
+    
+    def content(self, text: str):
+        """Add content line: │  text       │"""
+        self.lines.append(('content', text))
+        return self
+    
+    def empty(self):
+        """Add empty line: │             │"""
+        self.lines.append(('empty', None))
+        return self
+    
+    def footer(self):
+        """Add footer line: └─────────────┘"""
+        self.lines.append(('footer', None))
+        return self
+    
+    def _get_display_width(self, text: str) -> int:
+        """Calculate display width (Chinese chars count as 2)."""
+        width = 0
+        for char in text:
+            if '\u4e00' <= char <= '\u9fff' or '\u3000' <= char <= '\u303f':
+                width += 2  # Chinese characters
+            else:
+                width += 1
+        return width
+    
+    def _pad_to_width(self, text: str, target_width: int) -> str:
+        """Pad text to target width, accounting for Chinese characters."""
+        current_width = self._get_display_width(text)
+        if current_width >= target_width:
+            return text
+        return text + ' ' * (target_width - current_width)
+    
+    def build(self) -> str:
+        """Build the final box string with dynamic width."""
+        # Calculate max content width
+        max_content_width = 0
+        for line_type, content in self.lines:
+            if line_type == 'content' and content:
+                max_content_width = max(max_content_width, self._get_display_width(content))
+            elif line_type in ('header', 'separator') and content:
+                max_content_width = max(max_content_width, self._get_display_width(content) + 4)
+        
+        # Add padding (2 spaces each side) + borders
+        inner_width = max(max_content_width + 4, self.min_width)
+        
+        result = []
+        for line_type, content in self.lines:
+            if line_type == 'header':
+                # ┌─ TITLE ─────────────┐
+                title_part = f"─ {content} "
+                remaining = inner_width - len(title_part)
+                line = f"┌{title_part}{'─' * remaining}┐"
+            elif line_type == 'separator':
+                if content:
+                    # ├─ TITLE ─────────────┤
+                    title_part = f"─ {content} "
+                    remaining = inner_width - len(title_part)
+                    line = f"├{title_part}{'─' * remaining}┤"
+                else:
+                    # ├──────────────────────┤
+                    line = f"├{'─' * inner_width}┤"
+            elif line_type == 'content':
+                # │  content             │
+                padded = self._pad_to_width(f"  {content}", inner_width)
+                line = f"│{padded}│"
+            elif line_type == 'empty':
+                # │                      │
+                line = f"│{' ' * inner_width}│"
+            elif line_type == 'footer':
+                # └──────────────────────┘
+                line = f"└{'─' * inner_width}┘"
+            else:
+                continue
+            result.append(f"<code>{line}</code>")
+        
+        return "\n".join(result)
+
+
 def format_offline_card(node_name: str, node_ip: str, offline_since: datetime) -> str:
     """Format offline node card message for Telegram (HTML).
-    Terminal-style design with box-drawing characters.
-    
-    Args:
-        node_name: Name of the offline node
-        node_ip: IP address of the node (will be partially masked if public)
-        offline_since: When the node went offline
-    
-    Returns:
-        HTML formatted message for Telegram
+    Terminal-style design with dynamic width alignment.
     """
     now = datetime.now(TZ_BEIJING)
     duration_seconds = (now - offline_since).total_seconds()
     duration_str = _format_duration(duration_seconds)
     since_str = offline_since.astimezone(TZ_BEIJING).strftime('%H:%M:%S')
     
-    # Mask IP for privacy (show first two octets only)
+    # Mask IP for privacy
     ip_parts = node_ip.split(".")
     if len(ip_parts) == 4:
         masked_ip = f"{ip_parts[0]}.{ip_parts[1]}.*.*"
     else:
         masked_ip = node_ip
     
-    text = f"<code>┌─ ALERT ────────────────┐</code>\n"
-    text += f"<code>│                        │</code>\n"
-    text += f"<code>│  ■ NODE OFFLINE        │</code>\n"
-    text += f"<code>│                        │</code>\n"
-    text += f"<code>├────────────────────────┤</code>\n"
-    text += f"<code>│  NAME   {node_name[:14]:<14} │</code>\n"
-    text += f"<code>│  ADDR   {masked_ip[:14]:<14} │</code>\n"
-    text += f"<code>│  DOWN   {duration_str[:14]:<14} │</code>\n"
-    text += f"<code>│  SINCE  {since_str:<14} │</code>\n"
-    text += f"<code>├────────────────────────┤</code>\n"
-    text += f"<code>│  UPD {now.strftime('%H:%M:%S'):<17} │</code>\n"
-    text += f"<code>└────────────────────────┘</code>"
+    box = TerminalBox()
+    box.header("ALERT")
+    box.empty()
+    box.content("■ NODE OFFLINE")
+    box.empty()
+    box.separator()
+    box.content(f"NAME   {node_name}")
+    box.content(f"ADDR   {masked_ip}")
+    box.content(f"DOWN   {duration_str}")
+    box.content(f"SINCE  {since_str}")
+    box.separator()
+    box.content(f"UPD {now.strftime('%H:%M:%S')}")
+    box.footer()
     
-    return text
+    return box.build()
 
 
 async def send_offline_card(bot_token: str, chat_id: str, node_name: str, node_ip: str, offline_since: datetime) -> Optional[int]:
@@ -349,95 +437,61 @@ async def delete_telegram_message(bot_token: str, chat_id: str, message_id: int)
 
 def format_daily_stats_card(date_str: str, node_stats: list, current_offline: dict) -> str:
     """Format daily offline statistics card for Telegram (HTML).
-    Terminal-style design with box-drawing characters.
-    
-    Args:
-        date_str: Date string like "2025-12-28"
-        node_stats: List of dicts with node offline stats
-        current_offline: Dict of currently offline nodes: {node_id: seconds_offline}
-    
-    Returns:
-        HTML formatted message for Telegram
+    Terminal-style design with dynamic width alignment.
     """
     now = datetime.now(TZ_BEIJING)
     total_nodes = len(node_stats)
     nodes_with_events = [s for s in node_stats if s["offline_count"] > 0]
-    nodes_with_offline = len(nodes_with_events)
     current_offline_count = len(current_offline)
+    online_count = total_nodes - current_offline_count
     
-    # Calculate uptime percentage
-    if nodes_with_events:
-        total_offline_seconds = sum(s["total_duration"] for s in nodes_with_events)
-        # Add current offline durations
-        for node_id, duration in current_offline.items():
-            total_offline_seconds += duration
-        # Rough uptime (based on nodes * seconds since midnight)
-        uptime_pct = 99.9  # Default high if minimal issues
-    else:
-        uptime_pct = 100.0
-    
-    lines = []
-    lines.append("<code>┌─ NODE STATUS ──────────┐</code>")
-    lines.append("<code>│                        │</code>")
-    lines.append(f"<code>│  {date_str}   ● LIVE   │</code>")
-    lines.append("<code>│                        │</code>")
+    box = TerminalBox()
+    box.header("NODE STATUS")
+    box.empty()
+    box.content(f"{date_str}   ● LIVE")
+    box.empty()
     
     if not nodes_with_events:
-        lines.append("<code>│  ✓ ALL SYSTEMS ONLINE  │</code>")
-        lines.append("<code>│                        │</code>")
+        box.content("✓ ALL SYSTEMS ONLINE")
+        box.empty()
     else:
-        lines.append("<code>├─ INCIDENTS ────────────┤</code>")
-        lines.append("<code>│                        │</code>")
+        box.separator("INCIDENTS")
+        box.empty()
         
         for stat in nodes_with_events:
-            node_name = stat["node_name"][:14]
+            node_name = stat["node_name"]
             node_id = stat.get("node_id")
             offline_count = stat["offline_count"]
             total_duration = stat["total_duration"]
-            
             is_offline = node_id in current_offline if node_id else False
             
-            lines.append(f"<code>│  ▲ {node_name:<18} │</code>")
-            lines.append(f"<code>│    OUTAGE  {offline_count}x{'':<11} │</code>")
-            lines.append(f"<code>│    TOTAL   {_format_duration(total_duration)[:11]:<11} │</code>")
-            
+            box.content(f"▲ {node_name}")
+            box.content(f"  OUTAGE  {offline_count}x")
+            box.content(f"  TOTAL   {_format_duration(total_duration)}")
             if is_offline:
-                lines.append(f"<code>│    STATE   ■ OFFLINE   │</code>")
+                box.content(f"  STATE   ■ OFFLINE")
             else:
-                lines.append(f"<code>│    STATE   RECOVERED   │</code>")
-            lines.append("<code>│                        │</code>")
+                box.content(f"  STATE   RECOVERED")
+            box.empty()
     
-    lines.append("<code>├────────────────────────┤</code>")
+    box.separator()
+    box.content(f"ONLINE {online_count}/{total_nodes}")
+    if len(nodes_with_events) > 0:
+        box.content(f"ERR    {len(nodes_with_events)}")
+    box.separator()
+    box.content(f"UPD {now.strftime('%H:%M:%S')}")
+    box.footer()
     
-    online_count = total_nodes - current_offline_count
-    if nodes_with_offline > 0:
-        lines.append(f"<code>│  ONLINE {online_count}/{total_nodes}  ERR  {nodes_with_offline:<5} │</code>")
-    else:
-        lines.append(f"<code>│  NODES    {total_nodes}/{total_nodes} ACTIVE   │</code>")
-        lines.append(f"<code>│  UPTIME   {uptime_pct:.0f}%{'':<10} │</code>")
-    
-    lines.append("<code>├────────────────────────┤</code>")
-    lines.append(f"<code>│  UPD {now.strftime('%H:%M:%S'):<17} │</code>")
-    lines.append("<code>└────────────────────────┘</code>")
-    
-    return "\n".join(lines)
+    return box.build()
 
 
 def format_daily_archive_card(date_str: str, node_stats: list) -> str:
     """Format end-of-day archive card for Telegram (HTML).
-    Terminal-style design. Persists in chat history.
-    
-    Args:
-        date_str: Date string like "2025-12-28"
-        node_stats: List of dicts with node offline stats
-    
-    Returns:
-        HTML formatted message for Telegram
+    Terminal-style design with dynamic width alignment.
     """
     now = datetime.now(TZ_BEIJING)
     nodes_with_events = [s for s in node_stats if s["offline_count"] > 0]
     total_nodes = len(node_stats)
-    nodes_with_offline = len(nodes_with_events)
     
     total_offline_seconds = sum(s["total_duration"] for s in nodes_with_events)
     total_offline_count = sum(s["offline_count"] for s in nodes_with_events)
@@ -448,41 +502,42 @@ def format_daily_archive_card(date_str: str, node_stats: list) -> str:
     else:
         avg_uptime = 100.0
     
-    lines = []
-    lines.append("<code>┌─ DAILY REPORT ─────────┐</code>")
-    lines.append("<code>│                        │</code>")
-    lines.append(f"<code>│  {date_str}  ARCHIVED  │</code>")
-    lines.append("<code>│                        │</code>")
-    lines.append("<code>├─ SUMMARY ──────────────┤</code>")
-    lines.append("<code>│                        │</code>")
-    lines.append(f"<code>│  TOTAL NODES     {total_nodes:<5} │</code>")
-    lines.append(f"<code>│  INCIDENTS       {total_offline_count:<5} │</code>")
-    lines.append(f"<code>│  DOWNTIME     {_format_duration(total_offline_seconds)[:8]:<8} │</code>")
-    lines.append(f"<code>│  AVG UPTIME   {avg_uptime:.1f}%{'':<5} │</code>")
-    lines.append("<code>│                        │</code>")
+    box = TerminalBox()
+    box.header("DAILY REPORT")
+    box.empty()
+    box.content(f"{date_str}  ARCHIVED")
+    box.empty()
+    box.separator("SUMMARY")
+    box.empty()
+    box.content(f"TOTAL NODES  {total_nodes}")
+    box.content(f"INCIDENTS    {total_offline_count}")
+    box.content(f"DOWNTIME     {_format_duration(total_offline_seconds)}")
+    box.content(f"AVG UPTIME   {avg_uptime:.1f}%")
+    box.empty()
     
     if nodes_with_events:
-        lines.append("<code>├─ DETAILS ──────────────┤</code>")
-        lines.append("<code>│                        │</code>")
+        box.separator("DETAILS")
+        box.empty()
         
         # Sort by total duration (worst first)
         sorted_stats = sorted(nodes_with_events, key=lambda x: x["total_duration"], reverse=True)
         
         for stat in sorted_stats:
-            node_name = stat["node_name"][:14]
+            node_name = stat["node_name"]
             offline_count = stat["offline_count"]
             total_duration = stat["total_duration"]
             uptime_pct = max(0, 100 - (total_duration / 864) * 100)
             
-            lines.append(f"<code>│  ▸ {node_name:<18} │</code>")
-            lines.append(f"<code>│    {offline_count}x / {_format_duration(total_duration)[:6]} / {uptime_pct:.1f}% │</code>")
-            lines.append("<code>│                        │</code>")
+            box.content(f"▸ {node_name}")
+            box.content(f"  {offline_count}x / {_format_duration(total_duration)} / {uptime_pct:.1f}%")
+            box.empty()
     
-    lines.append("<code>├────────────────────────┤</code>")
-    lines.append(f"<code>│  GENERATED {now.strftime('%H:%M:%S'):<11} │</code>")
-    lines.append("<code>└────────────────────────┘</code>")
+    box.separator()
+    box.content(f"GENERATED {now.strftime('%H:%M:%S')}")
+    box.footer()
     
-    return "\n".join(lines)
+    return box.build()
+
 
 
 async def send_daily_archive_card(bot_token: str, chat_id: str, date_str: str, node_stats: list) -> Optional[int]:
