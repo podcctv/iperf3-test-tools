@@ -242,3 +242,17 @@ class AlertHistory(Base):
     
     node = relationship("Node", foreign_keys=[node_id])
 
+
+class OfflineMessage(Base):
+    """Track sent Telegram messages for offline nodes to enable updates and deletion."""
+    __tablename__ = "offline_messages"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    node_id = Column(Integer, ForeignKey("nodes.id"), nullable=False, unique=True, index=True)
+    message_id = Column(Integer, nullable=False)  # Telegram message ID
+    chat_id = Column(String, nullable=False)      # Telegram chat ID
+    offline_since = Column(DateTime(timezone=True), server_default=func.now())
+    last_updated = Column(DateTime(timezone=True), server_default=func.now())
+    
+    node = relationship("Node", foreign_keys=[node_id])
+

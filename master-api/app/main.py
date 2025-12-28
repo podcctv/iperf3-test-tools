@@ -1534,8 +1534,15 @@ class NodeHealthMonitor:
             await asyncio.sleep(self.interval_seconds)
 
     async def _check_alerts(self, statuses: List[NodeWithStatus]) -> None:
-        """Check for alert conditions and trigger notifications."""
-        # Get alert thresholds from config
+        """Check for alert conditions and trigger notifications.
+        
+        For offline nodes:
+        - If node is offline and no OfflineMessage exists: send new card
+        - If node is offline and OfflineMessage exists: update card with new duration
+        - If node is online and OfflineMessage exists: delete card
+        """
+        from .models import AlertConfig, OfflineMessage
+        
         db = SessionLocal()
         try:
             thresholds_config = db.query(AlertConfig).filter(AlertConfig.key == "thresholds").first()
@@ -1543,17 +1550,21 @@ class NodeHealthMonitor:
             
             # Default thresholds
             ping_threshold_ms = 500
-            offline_threshold = 3  # Not used yet - would need consecutive tracking
             
             if thresholds_config and thresholds_config.value:
                 ping_threshold_ms = thresholds_config.value.get("ping_high_ms", 500)
             
-            # Check if telegram notifications are enabled for these alert types
+            # Check if telegram notifications are enabled
             notify_node_offline = False
             notify_ping_high = False
+            bot_token = None
+            chat_id = None
+            
             if telegram_config and telegram_config.enabled and telegram_config.value:
                 notify_node_offline = telegram_config.value.get("notify_node_offline", False)
                 notify_ping_high = telegram_config.value.get("notify_ping_high", False)
+                bot_token = telegram_config.value.get("bot_token")
+                chat_id = telegram_config.value.get("chat_id")
             
             # Node filtering
             node_scope = "all"
@@ -1562,24 +1573,79 @@ class NodeHealthMonitor:
                 node_scope = thresholds_config.value.get("node_scope", "all")
                 selected_nodes = set(thresholds_config.value.get("selected_nodes", []))
             
+            # Track current offline node IDs for cleanup
+            current_offline_ids = set()
+            
             for status in statuses:
                 # Skip nodes not in selection (if using selected mode)
                 if node_scope == "selected" and status.id not in selected_nodes:
                     continue
                 
-                # Check for offline nodes
-                if status.status == "offline" and notify_node_offline:
-                    await trigger_alert(
-                        db=db,
-                        alert_type="node_offline",
-                        severity="critical",
-                        node_id=status.id,
-                        node_name=status.name,
-                        message=f"节点 {status.name} 离线！无法连接到 Agent。",
-                        details={"ip": status.ip}
-                    )
+                # Handle offline nodes with card system
+                if status.status == "offline":
+                    current_offline_ids.add(status.id)
+                    
+                    if notify_node_offline and bot_token and chat_id:
+                        # Check if we already have an offline message for this node
+                        existing_msg = db.query(OfflineMessage).filter(
+                            OfflineMessage.node_id == status.id
+                        ).first()
+                        
+                        if existing_msg:
+                            # Update existing card with new duration
+                            await alert_service.edit_offline_card(
+                                bot_token=bot_token,
+                                chat_id=existing_msg.chat_id,
+                                message_id=existing_msg.message_id,
+                                node_name=status.name,
+                                node_ip=status.ip,
+                                offline_since=existing_msg.offline_since
+                            )
+                            # Update last_updated timestamp
+                            existing_msg.last_updated = datetime.now(timezone.utc)
+                            db.commit()
+                        else:
+                            # Send new offline card
+                            offline_since = datetime.now(timezone.utc)
+                            message_id = await alert_service.send_offline_card(
+                                bot_token=bot_token,
+                                chat_id=chat_id,
+                                node_name=status.name,
+                                node_ip=status.ip,
+                                offline_since=offline_since
+                            )
+                            
+                            if message_id:
+                                # Save offline message record
+                                offline_msg = OfflineMessage(
+                                    node_id=status.id,
+                                    message_id=message_id,
+                                    chat_id=chat_id,
+                                    offline_since=offline_since
+                                )
+                                db.add(offline_msg)
+                                db.commit()
+                                logger.info(f"Created offline message record for node {status.name}")
                 
-                # Check for high ping latency
+                # Handle online nodes - delete any existing offline card
+                elif status.status == "online":
+                    existing_msg = db.query(OfflineMessage).filter(
+                        OfflineMessage.node_id == status.id
+                    ).first()
+                    
+                    if existing_msg and bot_token:
+                        # Delete the offline card from Telegram
+                        await alert_service.delete_telegram_message(
+                            bot_token=bot_token,
+                            chat_id=existing_msg.chat_id,
+                            message_id=existing_msg.message_id
+                        )
+                        # Remove from database
+                        db.delete(existing_msg)
+                        db.commit()
+                        logger.info(f"Deleted offline message for node {status.name} (now online)")
+                
+                # Check for high ping latency (keep existing behavior)
                 if status.backbone_latency and notify_ping_high:
                     for lat in status.backbone_latency:
                         if lat.latency_ms and lat.latency_ms > ping_threshold_ms:
@@ -1598,6 +1664,8 @@ class NodeHealthMonitor:
                             )
         except Exception as e:
             logger.error(f"Failed to check alerts: {e}")
+            import traceback
+            traceback.print_exc()
         finally:
             db.close()
 
