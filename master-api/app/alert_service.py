@@ -219,7 +219,7 @@ class TerminalBox:
     
     def build(self) -> str:
         """Build the final box string with dynamic width."""
-        # Calculate max content width, but limit to max_width
+        # Calculate max content width based on actual content
         max_content_width = 0
         for line_type, content in self.lines:
             if line_type == 'content' and content:
@@ -227,9 +227,8 @@ class TerminalBox:
             elif line_type in ('header', 'separator') and content:
                 max_content_width = max(max_content_width, self._get_display_width(content) + 4)
         
-        # Add padding (2 spaces each side) + apply limits
+        # Add padding (2 spaces each side), apply minimum only
         inner_width = max(max_content_width + 4, self.min_width)
-        inner_width = min(inner_width, self.max_width)  # Apply max limit for mobile
         
         result = []
         for line_type, content in self.lines:
