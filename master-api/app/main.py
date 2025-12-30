@@ -2097,17 +2097,56 @@ def _login_html() -> str:
       flex: 1;
       display: flex;
       flex-direction: column;
-      padding: 2rem 1rem;
+      padding: 2.5rem 1.5rem;
     }
     .page-content {
       width: 100%;
-      max-width: 1200px;
+      max-width: 1400px;
       margin: 0 auto;
       flex: 1;
       display: flex;
       flex-direction: column;
       gap: 2rem;
     }
+    
+    /* Dashboard Header */
+    .dashboard-header {
+      background: linear-gradient(
+        135deg,
+        rgba(30, 41, 59, 0.7) 0%,
+        rgba(15, 23, 42, 0.5) 100%
+      );
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 1.25rem;
+      padding: 1.5rem 2rem;
+      margin-bottom: 0.5rem;
+      backdrop-filter: blur(12px);
+      box-shadow: 
+        0 4px 20px rgba(0, 0, 0, 0.15),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    }
+    .dashboard-title {
+      font-size: 1.75rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, #60a5fa, #c084fc);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin: 0;
+    }
+    .dashboard-subtitle {
+      color: var(--text-muted);
+      font-size: 0.875rem;
+      margin-top: 0.25rem;
+    }
+    .dashboard-label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+      color: rgba(56, 189, 248, 0.7);
+      margin-bottom: 0.25rem;
+    }
+    
     .glass-panel {
       background: var(--card-bg);
       backdrop-filter: blur(12px);
@@ -2476,19 +2515,16 @@ def _login_html() -> str:
     /* Dashboard Specifics */
     .panel-card {
       background: linear-gradient(
-        135deg,
-        rgba(30, 41, 59, 0.6) 0%,
-        rgba(30, 41, 59, 0.4) 50%,
-        rgba(15, 23, 42, 0.5) 100%
+        145deg,
+        rgba(30, 41, 59, 0.75) 0%,
+        rgba(20, 30, 48, 0.65) 100%
       );
-      border: 1px solid;
-      border-image: linear-gradient(135deg, rgba(148, 163, 184, 0.15), rgba(100, 116, 139, 0.1)) 1;
-      backdrop-filter: blur(12px);
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      border-radius: 1.25rem;
+      backdrop-filter: blur(16px);
       box-shadow: 
-        0 1px 2px 0 rgba(0, 0, 0, 0.05),
-        0 4px 6px -1px rgba(0, 0, 0, 0.1),
-        0 10px 15px -3px rgba(0, 0, 0, 0.1),
-        0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+        0 4px 24px rgba(0, 0, 0, 0.2),
+        0 0 0 1px rgba(255, 255, 255, 0.03) inset;
       position: relative;
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
@@ -2496,18 +2532,27 @@ def _login_html() -> str:
       content: '';
       position: absolute;
       top: 0;
-      left: 0;
-      right: 0;
+      left: 1.5rem;
+      right: 1.5rem;
       height: 1px;
-      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
     }
     .panel-card:hover {
-      transform: translateY(-2px);
+      border-color: rgba(148, 163, 184, 0.2);
       box-shadow: 
-        0 4px 6px -1px rgba(0, 0, 0, 0.1),
-        0 10px 15px -3px rgba(0, 0, 0, 0.2),
-        0 20px 25px -5px rgba(0, 0, 0, 0.15),
-        0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+        0 8px 32px rgba(0, 0, 0, 0.25),
+        0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+    }
+    .panel-card-title {
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: #f8fafc;
+      margin: 0;
+    }
+    .panel-card-subtitle {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: 0.25rem;
     }
     .alert {
       padding: 0.75rem 1rem;
@@ -2946,12 +2991,16 @@ def _login_html() -> str:
             </div>
           </div>
 
-          <div id="app-card" class="hidden space-y-8 app-card">
-            <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <p class="text-sm uppercase tracking-[0.25em] text-sky-300/80">节点监控中心</p>
-                <h2 class="text-2xl font-semibold text-white">Iperf3 节点监控中心</h2>
-                <p class="text-sm text-slate-400" id="auth-hint">实时监控全网节点连通性、三网延迟及流媒体解锁状态</p>
+          <div id="app-card" class="hidden space-y-6 app-card">
+            <!-- Dashboard Header -->
+            <div class="dashboard-header flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div class="flex items-center gap-4">
+                <div class="login-logo-icon" style="width: 56px; height: 56px; font-size: 1.5rem;">📊</div>
+                <div>
+                  <p class="dashboard-label">节点监控中心</p>
+                  <h2 class="dashboard-title">iPerf3 网络测试</h2>
+                  <p class="dashboard-subtitle" id="auth-hint">实时监控全网节点连通性、三网延迟及流媒体解锁状态</p>
+                </div>
               </div>
               <div class="flex flex-wrap items-center gap-3">
                 <div class="nav-dropdown">
@@ -2968,7 +3017,7 @@ def _login_html() -> str:
                 </div>
                 <div class="nav-dropdown">
                   <div class="nav-dropdown-btn rounded-lg border border-slate-600 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200">
-                    <span class="text-base">📊</span>
+                    <span class="text-base">🚀</span>
                     <span>新建测速</span>
                   </div>
                   <div class="nav-dropdown-menu">
