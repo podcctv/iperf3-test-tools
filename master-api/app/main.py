@@ -2178,14 +2178,16 @@ def _login_html() -> str:
       align-items: center;
       justify-content: center;
       flex: 1;
-      min-height: 60vh;
+      min-height: 70vh;
+      padding: 2rem;
     }
     .login-card {
       width: 100%;
-      max-width: 420px;
-      padding: 2.5rem;
+      max-width: 460px;
+      padding: 3rem 2.5rem;
       position: relative;
       overflow: hidden;
+      border-radius: 1.5rem;
     }
     .login-card::before {
       content: '';
@@ -2193,20 +2195,94 @@ def _login_html() -> str:
       top: 0; left: 0; right: 0; height: 4px;
       background: linear-gradient(90deg, #3b82f6, #8b5cf6, #ec4899);
     }
+    .login-logo {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 1.5rem;
+    }
+    .login-logo-icon {
+      width: 72px;
+      height: 72px;
+      border-radius: 1.25rem;
+      background: linear-gradient(145deg, rgba(59, 130, 246, 0.2), rgba(139, 92, 246, 0.2));
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2.25rem;
+      box-shadow: 
+        0 8px 32px rgba(59, 130, 246, 0.15),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
     .login-title {
-      font-size: 1.875rem;
+      font-size: 1.75rem;
       font-weight: 700;
       margin-bottom: 0.5rem;
       text-align: center;
       background: linear-gradient(to right, #60a5fa, #c084fc);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
     .login-subtitle {
       text-align: center;
       color: var(--text-muted);
-      font-size: 0.95rem;
+      font-size: 0.875rem;
       margin-bottom: 2rem;
+      line-height: 1.5;
+    }
+    .login-divider {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin: 1.75rem 0;
+      color: var(--text-muted);
+      font-size: 0.75rem;
+    }
+    .login-divider::before,
+    .login-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(148, 163, 184, 0.3), transparent);
+    }
+    .login-footer {
+      margin-top: 0;
+      text-align: center;
+    }
+    .github-badges {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 1.25rem;
+    }
+    .github-badges a {
+      transition: transform 0.2s ease, opacity 0.2s ease;
+    }
+    .github-badges a:hover {
+      transform: translateY(-2px);
+    }
+    .login-copyright {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin: 0;
+      line-height: 1.6;
+    }
+    .login-copyright a {
+      color: #60a5fa;
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+    .login-copyright a:hover {
+      color: #93c5fd;
+    }
+    .login-copyright a.author {
+      color: #c084fc;
+    }
+    .login-copyright a.author:hover {
+      color: #d8b4fe;
     }
     
     .form-group { margin-bottom: 1.5rem; }
@@ -2820,44 +2896,51 @@ def _login_html() -> str:
         <div class="card-stack">
           <div class="login-container hidden" id="login-card">
             <div class="glass-panel login-card">
-              <h1 class="login-title">iperf web login</h1>
+              <!-- Logo Icon -->
+              <div class="login-logo">
+                <div class="login-logo-icon">📊</div>
+              </div>
+              
+              <h1 class="login-title">iPerf3 网络测试</h1>
+              <p class="login-subtitle">分布式网络性能监控 · 节点互测 · 路由追踪</p>
               
               <div id="login-alert" class="alert alert-error hidden"></div>
 
               <form id="login-form">
                 <div class="form-group">
-                  <input id="password-input" class="form-input" type="password" placeholder="Enter dashboard password" autocomplete="current-password" required />
+                  <input id="password-input" class="form-input" type="password" placeholder="请输入访问密码" autocomplete="current-password" required />
                 </div>
                 <button id="login-btn" type="button" class="btn-primary">
-                  Login
+                  <span>登录控制台</span>
                 </button>
                 <button id="guest-login-btn" type="button" class="btn-primary" style="background: linear-gradient(135deg, #475569 0%, #334155 100%); margin-top: 0.75rem;">
-                  访客模式
+                  <span>👤</span> 访客模式
                 </button>
               </form>
               
+              <!-- Divider -->
+              <div class="login-divider">项目信息</div>
+              
               <!-- GitHub Badges & Project Info -->
-              <div class="login-footer" style="margin-top: 2rem; text-align: center;">
-                <div class="github-badges" style="display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 1rem;">
-                  <a href="https://github.com/podcctv/iperf3-test-tools" target="_blank" rel="noopener noreferrer" style="text-decoration: none;">
-                    <img src="https://img.shields.io/github/stars/podcctv/iperf3-test-tools?style=flat-square&logo=github&color=3b82f6" alt="GitHub Stars" />
+              <div class="login-footer">
+                <div class="github-badges">
+                  <a href="https://github.com/podcctv/iperf3-test-tools" target="_blank" rel="noopener noreferrer">
+                    <img src="https://img.shields.io/github/stars/podcctv/iperf3-test-tools?style=for-the-badge&logo=github&logoColor=white&color=3b82f6" alt="Stars" />
                   </a>
-                  <a href="https://github.com/podcctv/iperf3-test-tools/issues" target="_blank" rel="noopener noreferrer" style="text-decoration: none;">
-                    <img src="https://img.shields.io/github/issues/podcctv/iperf3-test-tools?style=flat-square&logo=github&color=10b981" alt="GitHub Issues" />
+                  <a href="https://github.com/podcctv/iperf3-test-tools/issues" target="_blank" rel="noopener noreferrer">
+                    <img src="https://img.shields.io/github/issues/podcctv/iperf3-test-tools?style=for-the-badge&logo=github&logoColor=white&color=10b981" alt="Issues" />
                   </a>
-                  <a href="https://github.com/podcctv/iperf3-test-tools/blob/main/LICENSE" target="_blank" rel="noopener noreferrer" style="text-decoration: none;">
-                    <img src="https://img.shields.io/github/license/podcctv/iperf3-test-tools?style=flat-square&logo=opensourceinitiative&color=8b5cf6" alt="License" />
+                  <a href="https://github.com/podcctv/iperf3-test-tools/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">
+                    <img src="https://img.shields.io/github/license/podcctv/iperf3-test-tools?style=for-the-badge&logo=opensourceinitiative&logoColor=white&color=8b5cf6" alt="License" />
                   </a>
-                  <a href="https://github.com/podcctv/iperf3-test-tools" target="_blank" rel="noopener noreferrer" style="text-decoration: none;">
-                    <img src="https://img.shields.io/badge/Docker-Ready-blue?style=flat-square&logo=docker" alt="Docker Ready" />
+                  <a href="https://github.com/podcctv/iperf3-test-tools" target="_blank" rel="noopener noreferrer">
+                    <img src="https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker" />
                   </a>
                 </div>
-                <p style="font-size: 0.75rem; color: var(--text-muted); margin: 0;">
-                  <a href="https://github.com/podcctv/iperf3-test-tools" target="_blank" rel="noopener noreferrer" style="color: #60a5fa; text-decoration: none;">iPerf3 分布式网络测试工具</a>
-                  <span style="margin: 0 0.5rem;">|</span>
-                  <span>© 2024-2025</span>
-                  <span style="margin: 0 0.5rem;">|</span>
-                  <a href="https://github.com/podcctv" target="_blank" rel="noopener noreferrer" style="color: #c084fc; text-decoration: none;">@podcctv</a>
+                <p class="login-copyright">
+                  <a href="https://github.com/podcctv/iperf3-test-tools" target="_blank" rel="noopener noreferrer">iPerf3 分布式网络测试工具</a>
+                  <br />
+                  © 2024-2025 · Made with ❤️ by <a href="https://github.com/podcctv" target="_blank" rel="noopener noreferrer" class="author">@podcctv</a>
                 </p>
               </div>
             </div>
