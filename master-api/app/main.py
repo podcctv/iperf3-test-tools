@@ -2835,6 +2835,31 @@ def _login_html() -> str:
                   访客模式
                 </button>
               </form>
+              
+              <!-- GitHub Badges & Project Info -->
+              <div class="login-footer" style="margin-top: 2rem; text-align: center;">
+                <div class="github-badges" style="display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 1rem;">
+                  <a href="https://github.com/podcctv/iperf3-test-tools" target="_blank" rel="noopener noreferrer" style="text-decoration: none;">
+                    <img src="https://img.shields.io/github/stars/podcctv/iperf3-test-tools?style=flat-square&logo=github&color=3b82f6" alt="GitHub Stars" />
+                  </a>
+                  <a href="https://github.com/podcctv/iperf3-test-tools/issues" target="_blank" rel="noopener noreferrer" style="text-decoration: none;">
+                    <img src="https://img.shields.io/github/issues/podcctv/iperf3-test-tools?style=flat-square&logo=github&color=10b981" alt="GitHub Issues" />
+                  </a>
+                  <a href="https://github.com/podcctv/iperf3-test-tools/blob/main/LICENSE" target="_blank" rel="noopener noreferrer" style="text-decoration: none;">
+                    <img src="https://img.shields.io/github/license/podcctv/iperf3-test-tools?style=flat-square&logo=opensourceinitiative&color=8b5cf6" alt="License" />
+                  </a>
+                  <a href="https://github.com/podcctv/iperf3-test-tools" target="_blank" rel="noopener noreferrer" style="text-decoration: none;">
+                    <img src="https://img.shields.io/badge/Docker-Ready-blue?style=flat-square&logo=docker" alt="Docker Ready" />
+                  </a>
+                </div>
+                <p style="font-size: 0.75rem; color: var(--text-muted); margin: 0;">
+                  <a href="https://github.com/podcctv/iperf3-test-tools" target="_blank" rel="noopener noreferrer" style="color: #60a5fa; text-decoration: none;">iPerf3 分布式网络测试工具</a>
+                  <span style="margin: 0 0.5rem;">|</span>
+                  <span>© 2024-2025</span>
+                  <span style="margin: 0 0.5rem;">|</span>
+                  <a href="https://github.com/podcctv" target="_blank" rel="noopener noreferrer" style="color: #c084fc; text-decoration: none;">@podcctv</a>
+                </p>
+              </div>
             </div>
           </div>
 
