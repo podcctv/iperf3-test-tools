@@ -2946,7 +2946,7 @@ def _login_html() -> str:
     <!-- App Layout with Sidebar -->
     <div class="app-layout">
       <!-- Sidebar Navigation -->
-      <aside class="sidebar" id="sidebar">
+      <aside class="sidebar hidden" id="sidebar">
         <div class="sidebar-brand">
           <div class="sidebar-logo">📊</div>
           <div>
@@ -3026,10 +3026,10 @@ def _login_html() -> str:
       </aside>
       
       <!-- Sidebar Overlay for Mobile -->
-      <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+      <div class="sidebar-overlay hidden" id="sidebar-overlay" onclick="closeSidebar()"></div>
       
       <!-- Mobile Menu Button -->
-      <button class="mobile-menu-btn" id="mobile-menu-btn" onclick="toggleSidebar()">☰</button>
+      <button class="mobile-menu-btn hidden" id="mobile-menu-btn" onclick="toggleSidebar()">☰</button>
       
       <!-- Main Content Area -->
       <main class="main-content">
@@ -4609,6 +4609,24 @@ def _login_html() -> str:
       }
     }
     
+    // Show sidebar navigation (called after login)
+    function showSidebarNavigation() {
+      const sidebar = document.getElementById('sidebar');
+      const menuBtn = document.getElementById('mobile-menu-btn');
+      if (sidebar) sidebar.classList.remove('hidden');
+      if (menuBtn) menuBtn.classList.remove('hidden');
+    }
+    
+    // Hide sidebar navigation (called when logging out or showing login)
+    function hideSidebarNavigation() {
+      const sidebar = document.getElementById('sidebar');
+      const menuBtn = document.getElementById('mobile-menu-btn');
+      const overlay = document.getElementById('sidebar-overlay');
+      if (sidebar) sidebar.classList.add('hidden');
+      if (menuBtn) menuBtn.classList.add('hidden');
+      if (overlay) overlay.classList.add('hidden');
+    }
+    
     // Initialize sidebar on load
     document.addEventListener('DOMContentLoaded', () => {
       highlightCurrentNavItem();
@@ -5071,6 +5089,7 @@ def _login_html() -> str:
         if (data.authenticated || isGuest) {
           loginCard?.classList.add('hidden');
           appCard?.classList.remove('hidden');
+          showSidebarNavigation();  // Show sidebar after login
           setLoginState('unlocked');
           
           if (isGuest) {
@@ -5095,6 +5114,7 @@ def _login_html() -> str:
         } else {
           appCard?.classList.add('hidden');
           loginCard?.classList.remove('hidden');
+          hideSidebarNavigation();  // Hide sidebar when not authenticated
           setLoginState('idle');
           if (showFeedback) setAlert(loginAlert, '登录状态未建立，请重新登录。');
           return false;
@@ -5103,6 +5123,7 @@ def _login_html() -> str:
         console.error('Auth check failed:', err);
         appCard?.classList.add('hidden');
         loginCard?.classList.remove('hidden');
+        hideSidebarNavigation();  // Hide sidebar on error
         const errorMessage = '无法连接认证服务，请稍后重试。';
         setLoginState('error', errorMessage);
         if (showFeedback) setAlert(loginAlert, errorMessage);
