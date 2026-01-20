@@ -3215,6 +3215,10 @@ def _login_html() -> str:
               <span class="nav-item-icon">🔍</span>
               <span>单次追踪</span>
             </a>
+            <a href="/web/trace#schedules" class="nav-item" data-page="trace-schedules">
+              <span class="nav-item-icon">📅</span>
+              <span>定时追踪</span>
+            </a>
             <a href="/web/trace#compare" class="nav-item" data-page="compare">
               <span class="nav-item-icon">📊</span>
               <span>多元对比</span>
@@ -3234,6 +3238,10 @@ def _login_html() -> str:
             <a href="/web/whitelist" class="nav-item" data-page="whitelist">
               <span class="nav-item-icon">🛡️</span>
               <span>白名单管理</span>
+            </a>
+            <a href="javascript:void(0)" onclick="openSettingsTab('password')" class="nav-item">
+              <span class="nav-item-icon">🔐</span>
+              <span>修改密码</span>
             </a>
             <a href="javascript:void(0)" onclick="openSettingsTab('telegram')" class="nav-item">
               <span class="nav-item-icon">📱</span>
@@ -3258,6 +3266,11 @@ def _login_html() -> str:
           <button onclick="toggleTheme()" class="theme-toggle" style="margin-top: 0.75rem; width: 100%;">
             <span class="theme-toggle-icon">🌙</span>
             <span class="theme-toggle-track"></span>
+          </button>
+          <!-- Logout Button -->
+          <button onclick="logout()" class="nav-item" style="margin-top: 0.5rem; width: 100%; justify-content: center; color: #f87171; border: 1px solid rgba(248, 113, 113, 0.3); background: rgba(248, 113, 113, 0.1);">
+            <span class="nav-item-icon">🚪</span>
+            <span>退出登录</span>
           </button>
         </div>
       </aside>
@@ -3337,44 +3350,8 @@ def _login_html() -> str:
                   <p class="dashboard-subtitle" id="auth-hint">实时监控全网节点连通性、三网延迟及流媒体解锁状态</p>
                 </div>
               </div>
-              <div class="flex flex-wrap items-center gap-3">
-                <div class="nav-dropdown">
-                  <div class="nav-dropdown-btn rounded-lg border border-slate-600 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-cyan-500 hover:text-cyan-200">
-                    <span class="text-base">🌐</span>
-                    <span>路由追踪</span>
-                  </div>
-                  <div class="nav-dropdown-menu">
-                    <a href="/web/trace" class="nav-dropdown-item">🔍 单次追踪</a>
-                    <a href="/web/trace#schedules" class="nav-dropdown-item">📅 定时追踪</a>
-                    <a href="/web/trace#compare" class="nav-dropdown-item">📊 多元对比</a>
-                    <a href="/web/trace#history" class="nav-dropdown-item">📜 历史记录</a>
-                  </div>
-                </div>
-                <div class="nav-dropdown">
-                  <div class="nav-dropdown-btn rounded-lg border border-slate-600 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-sky-500 hover:text-sky-200">
-                    <span class="text-base">🚀</span>
-                    <span>新建测速</span>
-                  </div>
-                  <div class="nav-dropdown-menu">
-                    <a href="/web/tests" class="nav-dropdown-item">🚀 单次测试</a>
-                    <a href="/web/schedules" class="nav-dropdown-item">📅 定时任务</a>
-                  </div>
-                </div>
-                <div class="nav-dropdown guest-hide">
-                  <div class="nav-dropdown-btn rounded-lg border border-slate-600 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-indigo-500 hover:text-indigo-200">
-                    <span class="text-base">⚙️</span>
-                    <span>设置</span>
-                  </div>
-                  <div class="nav-dropdown-menu">
-                    <a href="/web/redis" class="nav-dropdown-item">📊 Redis监控</a>
-                    <a href="/web/whitelist" class="nav-dropdown-item">🛡️ 白名单管理</a>
-                    <a href="javascript:void(0)" onclick="openSettingsTab('password')" class="nav-dropdown-item">🔐 修改密码</a>
-                    <a href="javascript:void(0)" onclick="openSettingsTab('telegram')" class="nav-dropdown-item">📱 Telegram告警</a>
-                    <a href="javascript:void(0)" onclick="openSettingsTab('admin')" class="nav-dropdown-item">🗄️ 数据库管理</a>
-                  </div>
-                </div>
-                <button id="logout-btn" class="rounded-lg border border-slate-600 bg-slate-800/60 px-4 py-2 text-sm font-semibold text-slate-100 shadow-sm transition hover:border-rose-500 hover:text-rose-200">退出登录</button>
-              </div>
+              <!-- 导航已整合到侧边栏，隐藏的退出按钮供JS调用 -->
+              <button id="logout-btn" class="hidden">退出登录</button>
             </div>
 
             <div class="space-y-4">
