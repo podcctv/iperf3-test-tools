@@ -2943,10 +2943,100 @@ def _login_html() -> str:
     }
   </script>
   <div class="radix-themes min-h-screen" data-theme="dark">
-    <div class="page-frame">
-      <div class="page-content">
+    <!-- App Layout with Sidebar -->
+    <div class="app-layout">
+      <!-- Sidebar Navigation -->
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-brand">
+          <div class="sidebar-logo">📊</div>
+          <div>
+            <div class="sidebar-title">iPerf3</div>
+            <div class="sidebar-subtitle">网络测试</div>
+          </div>
+        </div>
+        
+        <nav class="sidebar-nav">
+          <div class="nav-section">
+            <div class="nav-section-title">监控面板</div>
+            <a href="/web" class="nav-item active" data-page="dashboard">
+              <span class="nav-item-icon">🏠</span>
+              <span>节点概览</span>
+            </a>
+            <a href="/web/tests" class="nav-item" data-page="tests">
+              <span class="nav-item-icon">🚀</span>
+              <span>速度测试</span>
+            </a>
+            <a href="/web/schedules" class="nav-item" data-page="schedules">
+              <span class="nav-item-icon">📅</span>
+              <span>定时任务</span>
+            </a>
+          </div>
+          
+          <div class="nav-section">
+            <div class="nav-section-title">路由分析</div>
+            <a href="/web/trace" class="nav-item" data-page="trace">
+              <span class="nav-item-icon">🔍</span>
+              <span>单次追踪</span>
+            </a>
+            <a href="/web/trace#compare" class="nav-item" data-page="compare">
+              <span class="nav-item-icon">📊</span>
+              <span>多元对比</span>
+            </a>
+            <a href="/web/trace#history" class="nav-item" data-page="history">
+              <span class="nav-item-icon">📜</span>
+              <span>历史记录</span>
+            </a>
+          </div>
+          
+          <div class="nav-section guest-hide">
+            <div class="nav-section-title">系统设置</div>
+            <a href="/web/redis" class="nav-item" data-page="redis">
+              <span class="nav-item-icon">📊</span>
+              <span>Redis 监控</span>
+            </a>
+            <a href="/web/whitelist" class="nav-item" data-page="whitelist">
+              <span class="nav-item-icon">🛡️</span>
+              <span>白名单管理</span>
+            </a>
+            <a href="javascript:void(0)" onclick="openSettingsTab('telegram')" class="nav-item">
+              <span class="nav-item-icon">📱</span>
+              <span>Telegram 告警</span>
+            </a>
+            <a href="javascript:void(0)" onclick="openSettingsTab('admin')" class="nav-item">
+              <span class="nav-item-icon">🗄️</span>
+              <span>数据库管理</span>
+            </a>
+          </div>
+        </nav>
+        
+        <div class="sidebar-footer">
+          <div class="sidebar-user">
+            <div class="sidebar-avatar" id="sidebar-avatar">A</div>
+            <div class="sidebar-user-info">
+              <div class="sidebar-user-name" id="sidebar-username">管理员</div>
+              <div class="sidebar-user-role" id="sidebar-role">已登录</div>
+            </div>
+          </div>
+          <!-- Theme Toggle in Sidebar -->
+          <button onclick="toggleTheme()" class="theme-toggle" style="margin-top: 0.75rem; width: 100%;">
+            <span class="theme-toggle-icon">🌙</span>
+            <span class="theme-toggle-track"></span>
+          </button>
+        </div>
+      </aside>
+      
+      <!-- Sidebar Overlay for Mobile -->
+      <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+      
+      <!-- Mobile Menu Button -->
+      <button class="mobile-menu-btn" id="mobile-menu-btn" onclick="toggleSidebar()">☰</button>
+      
+      <!-- Main Content Area -->
+      <main class="main-content">
+        <div class="page-frame">
+          <div class="page-content">
 
-        <div class="card-stack">
+            <div class="card-stack">
           <div class="login-container hidden" id="login-card">
             <div class="glass-panel login-card">
               <!-- Logo Icon -->
@@ -4456,6 +4546,75 @@ def _login_html() -> str:
     function hide(el) { el.classList.add('hidden'); }
     function setAlert(el, message) { el.textContent = message; show(el); }
     function clearAlert(el) { el.textContent = ''; hide(el); }
+
+    // Sidebar Navigation Functions
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebar-overlay');
+      if (sidebar) {
+        sidebar.classList.toggle('open');
+        if (overlay) overlay.classList.toggle('active');
+      }
+    }
+    
+    function closeSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebar-overlay');
+      if (sidebar) {
+        sidebar.classList.remove('open');
+        if (overlay) overlay.classList.remove('active');
+      }
+    }
+    
+    function openSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebar-overlay');
+      if (sidebar) {
+        sidebar.classList.add('open');
+        if (overlay) overlay.classList.add('active');
+      }
+    }
+    
+    // Highlight current page in sidebar
+    function highlightCurrentNavItem() {
+      const currentPath = window.location.pathname;
+      const navItems = document.querySelectorAll('.sidebar .nav-item');
+      navItems.forEach(item => {
+        const href = item.getAttribute('href');
+        if (href === currentPath || (currentPath === '/web' && href === '/web')) {
+          item.classList.add('active');
+        } else {
+          item.classList.remove('active');
+        }
+      });
+    }
+    
+    // Update sidebar user info based on auth state
+    function updateSidebarUserInfo(isGuest = false) {
+      const avatar = document.getElementById('sidebar-avatar');
+      const username = document.getElementById('sidebar-username');
+      const role = document.getElementById('sidebar-role');
+      if (avatar && username && role) {
+        if (isGuest) {
+          avatar.textContent = '👤';
+          username.textContent = '访客';
+          role.textContent = '只读模式';
+          avatar.style.background = 'linear-gradient(135deg, #64748b, #475569)';
+        } else {
+          avatar.textContent = 'A';
+          username.textContent = '管理员';
+          role.textContent = '已登录';
+          avatar.style.background = 'linear-gradient(135deg, #10b981, #3b82f6)';
+        }
+      }
+    }
+    
+    // Initialize sidebar on load
+    document.addEventListener('DOMContentLoaded', () => {
+      highlightCurrentNavItem();
+      const isGuest = document.cookie.includes('guest_session=readonly');
+      updateSidebarUserInfo(isGuest);
+    });
 
     function setLoginState(state, message) {
       if (!loginStatus) return;
