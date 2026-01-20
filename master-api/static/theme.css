@@ -24,6 +24,18 @@
     --gradient-bg-2: rgba(139, 92, 246, 0.15);
     --gradient-bg-3: rgba(16, 185, 129, 0.15);
     --gradient-bg-4: rgba(244, 63, 94, 0.15);
+
+    /* Sidebar Variables */
+    --sidebar-width: 240px;
+    --sidebar-collapsed-width: 72px;
+    --sidebar-bg: rgba(15, 23, 42, 0.98);
+    --sidebar-border: rgba(255, 255, 255, 0.06);
+
+    /* Enhanced Card Variables */
+    --card-radius: 1rem;
+    --card-radius-lg: 1.25rem;
+    --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+    --card-shadow-hover: 0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
 }
 
 /* Light Theme */
@@ -51,6 +63,14 @@
     --gradient-bg-2: rgba(124, 58, 237, 0.08);
     --gradient-bg-3: rgba(5, 150, 105, 0.08);
     --gradient-bg-4: rgba(225, 29, 72, 0.08);
+
+    /* Light mode sidebar */
+    --sidebar-bg: rgba(255, 255, 255, 0.98);
+    --sidebar-border: rgba(0, 0, 0, 0.08);
+
+    /* Light mode card shadows */
+    --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
+    --card-shadow-hover: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.06);
 }
 
 /* Theme Toggle Button Styles */

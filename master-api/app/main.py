@@ -2067,6 +2067,14 @@ def _login_html() -> str:
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@radix-ui/themes@3.1.1/dist/css/themes.css" />
   <script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/shoelace.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="/static/theme.css" />
+  <link rel="stylesheet" href="/static/sidebar.css" />
+  <link rel="stylesheet" href="/static/dashboard.css" />
+  <link rel="stylesheet" href="/static/animations.css" />
+  <link rel="stylesheet" href="/static/loading.css" />
+  <link rel="stylesheet" href="/static/responsive.css" />
+  <script src="/static/theme.js" defer></script>
   <style>
     :root {
       --primary: #3b82f6;
