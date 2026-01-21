@@ -2055,6 +2055,193 @@ async def lookup_geo_info(ip: str) -> dict | None:
     return None
 
 
+def _sidebar_css() -> str:
+    """Generate shared sidebar CSS styles for all pages."""
+    return '''
+    /* Sidebar Navigation Styles */
+    .app-layout { display: flex; min-height: 100vh; }
+    .sidebar {
+      position: fixed; top: 0; left: 0; bottom: 0; width: 240px; z-index: 1000;
+      background: rgba(15, 23, 42, 0.98); backdrop-filter: blur(20px);
+      border-right: 1px solid rgba(148, 163, 184, 0.1);
+      display: flex; flex-direction: column; transition: transform 0.3s ease;
+    }
+    .sidebar-brand { display: flex; align-items: center; gap: 12px; padding: 20px 16px; border-bottom: 1px solid rgba(148, 163, 184, 0.1); }
+    .sidebar-logo { width: 40px; height: 40px; background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; }
+    .sidebar-title { font-size: 1.1rem; font-weight: 700; color: #f8fafc; }
+    .sidebar-subtitle { font-size: 0.75rem; color: #64748b; }
+    .sidebar-nav { flex: 1; overflow-y: auto; padding: 16px 0; }
+    .nav-section { margin-bottom: 20px; }
+    .nav-section-title { padding: 8px 20px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b; }
+    .nav-item { display: flex; align-items: center; gap: 12px; padding: 10px 20px; color: #94a3b8; text-decoration: none; transition: all 0.2s; font-size: 0.9rem; border: none; background: transparent; cursor: pointer; width: 100%; text-align: left; }
+    .nav-item:hover { background: rgba(59, 130, 246, 0.1); color: #e2e8f0; }
+    .nav-item.active { background: rgba(59, 130, 246, 0.15); color: #3b82f6; border-right: 3px solid #3b82f6; }
+    .nav-item-icon { font-size: 1.1rem; width: 24px; text-align: center; }
+    .sidebar-footer { padding: 16px; border-top: 1px solid rgba(148, 163, 184, 0.1); }
+    .sidebar-user { display: flex; align-items: center; gap: 12px; }
+    .sidebar-avatar { width: 36px; height: 36px; background: linear-gradient(135deg, #10b981 0%, #3b82f6 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.9rem; color: white; }
+    .sidebar-user-name { font-size: 0.9rem; font-weight: 600; color: #e2e8f0; }
+    .sidebar-user-role { font-size: 0.75rem; color: #64748b; }
+    .main-content { margin-left: 240px; flex: 1; padding: 24px; }
+    .theme-toggle { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: rgba(51, 65, 85, 0.5); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; color: #94a3b8; cursor: pointer; font-size: 0.85rem; transition: all 0.2s; }
+    .theme-toggle:hover { background: rgba(59, 130, 246, 0.2); color: #e2e8f0; }
+    .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); z-index: 999; }
+    .mobile-menu-btn { display: none; position: fixed; top: 16px; left: 16px; z-index: 1001; width: 44px; height: 44px; background: rgba(15, 23, 42, 0.9); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; color: #e2e8f0; font-size: 1.2rem; cursor: pointer; }
+    @media (max-width: 1024px) {
+      .sidebar { transform: translateX(-100%); }
+      .sidebar.open { transform: translateX(0); }
+      .main-content { margin-left: 0; }
+      .mobile-menu-btn { display: block; }
+      .sidebar-overlay.active { display: block; }
+    }
+    .guest-hide { display: none; }
+    body:not(.guest-mode) .guest-hide { display: block; }
+    '''
+
+
+def _sidebar_html(current_page: str = "dashboard", is_guest: bool = False) -> str:
+    """Generate shared sidebar HTML for all pages.
+    
+    Args:
+        current_page: Current page identifier for highlighting nav item (dashboard, tests, schedules, trace, whitelist, redis, admin)
+        is_guest: Whether the user is in guest mode
+    """
+    def nav_active(page: str) -> str:
+        return "active" if page == current_page else ""
+    
+    guest_class = "guest-mode" if is_guest else ""
+    
+    return f'''
+      <!-- Sidebar Navigation -->
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-brand">
+          <div class="sidebar-logo">📊</div>
+          <div>
+            <div class="sidebar-title">iPerf3</div>
+            <div class="sidebar-subtitle">网络测试</div>
+          </div>
+        </div>
+        
+        <nav class="sidebar-nav">
+          <div class="nav-section">
+            <div class="nav-section-title">监控面板</div>
+            <a href="/web" class="nav-item {nav_active('dashboard')}" data-page="dashboard">
+              <span class="nav-item-icon">🏠</span>
+              <span>节点概览</span>
+            </a>
+            <a href="/web/tests" class="nav-item {nav_active('tests')}" data-page="tests">
+              <span class="nav-item-icon">🚀</span>
+              <span>速度测试</span>
+            </a>
+            <a href="/web/schedules" class="nav-item {nav_active('schedules')}" data-page="schedules">
+              <span class="nav-item-icon">📅</span>
+              <span>定时任务</span>
+            </a>
+          </div>
+          
+          <div class="nav-section">
+            <div class="nav-section-title">路由分析</div>
+            <a href="/web/trace" class="nav-item {nav_active('trace')}" data-page="trace">
+              <span class="nav-item-icon">🔍</span>
+              <span>单次追踪</span>
+            </a>
+            <a href="/web/trace#schedules" class="nav-item" data-page="trace-schedules">
+              <span class="nav-item-icon">📅</span>
+              <span>定时追踪</span>
+            </a>
+            <a href="/web/trace#compare" class="nav-item" data-page="compare">
+              <span class="nav-item-icon">📊</span>
+              <span>多元对比</span>
+            </a>
+            <a href="/web/trace#history" class="nav-item" data-page="history">
+              <span class="nav-item-icon">📜</span>
+              <span>历史记录</span>
+            </a>
+          </div>
+          
+          <div class="nav-section guest-hide">
+            <div class="nav-section-title">系统设置</div>
+            <a href="/web/redis" class="nav-item {nav_active('redis')}" data-page="redis">
+              <span class="nav-item-icon">📊</span>
+              <span>Redis 监控</span>
+            </a>
+            <a href="/web/whitelist" class="nav-item {nav_active('whitelist')}" data-page="whitelist">
+              <span class="nav-item-icon">🛡️</span>
+              <span>白名单管理</span>
+            </a>
+            <a href="/web/admin" class="nav-item {nav_active('admin')}" data-page="admin">
+              <span class="nav-item-icon">🔐</span>
+              <span>系统管理</span>
+            </a>
+          </div>
+        </nav>
+        
+        <div class="sidebar-footer">
+          <div class="sidebar-user">
+            <div class="sidebar-avatar" id="sidebar-avatar">{"G" if is_guest else "A"}</div>
+            <div class="sidebar-user-info">
+              <div class="sidebar-user-name" id="sidebar-username">{"访客" if is_guest else "管理员"}</div>
+              <div class="sidebar-user-role" id="sidebar-role">{"只读模式" if is_guest else "已登录"}</div>
+            </div>
+          </div>
+          <button onclick="toggleTheme()" class="theme-toggle" style="margin-top: 0.75rem; width: 100%;">
+            <span class="theme-toggle-icon">🌙</span>
+            <span class="theme-toggle-track"></span>
+          </button>
+          <button onclick="logout()" class="nav-item" style="margin-top: 0.5rem; width: 100%; justify-content: center; color: #f87171; border: 1px solid rgba(248, 113, 113, 0.3); background: rgba(248, 113, 113, 0.1);">
+            <span class="nav-item-icon">🚪</span>
+            <span>退出登录</span>
+          </button>
+        </div>
+      </aside>
+      
+      <!-- Sidebar Overlay for Mobile -->
+      <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+      
+      <!-- Mobile Menu Button -->
+      <button class="mobile-menu-btn" id="mobile-menu-btn" onclick="toggleSidebar()">☰</button>
+    '''
+
+
+def _sidebar_js() -> str:
+    """Generate shared sidebar JavaScript functions."""
+    return '''
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebar-overlay');
+      if (sidebar) {
+        sidebar.classList.toggle('open');
+        if (overlay) overlay.classList.toggle('active');
+      }
+    }
+    function closeSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebar-overlay');
+      if (sidebar) {
+        sidebar.classList.remove('open');
+        if (overlay) overlay.classList.remove('active');
+      }
+    }
+    function toggleTheme() {
+      document.body.classList.toggle('dark-mode');
+    }
+    async function logout() {
+      try {
+        await fetch('/auth/logout', { method: 'POST', credentials: 'include' });
+        document.cookie = 'session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+        document.cookie = 'guest_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+        window.location.href = '/web';
+      } catch (e) {
+        window.location.href = '/web';
+      }
+    }
+    // Check guest mode on load
+    if (document.cookie.includes('guest_session=readonly')) {
+      document.body.classList.add('guest-mode');
+    }
+    '''
+
+
 def _login_html() -> str:
     return """
 <!DOCTYPE html>
@@ -7315,7 +7502,12 @@ def _login_html() -> str:
 
 def _tests_page_html() -> str:
     """Generate HTML for the tests page with test plan and recent tests"""
-    return '''<!DOCTYPE html>
+    sidebar_css = _sidebar_css()
+    sidebar_html = _sidebar_html(current_page="tests")
+    sidebar_js = _sidebar_js()
+    
+    # Split into parts: header with f-string interpolation + body with raw JS
+    header = f'''<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
@@ -7323,43 +7515,52 @@ def _tests_page_html() -> str:
   <title>单次测试 - iperf3 Master</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    body { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); min-height: 100vh; }
-    .glass-card { background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(148, 163, 184, 0.1); }
-    .panel-card { background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(8px); border: 1px solid rgba(100, 116, 139, 0.2); }
+    body {{ 
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); 
+      min-height: 100vh;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      margin: 0; padding: 0;
+    }}
+    .glass-card {{ background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(148, 163, 184, 0.1); }}
+    .panel-card {{ background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(8px); border: 1px solid rgba(100, 116, 139, 0.2); }}
+    {sidebar_css}
   </style>
   <script>
     // Hide test panel immediately if guest cookie exists to prevent flash
-    if (document.cookie.includes('guest_session=readonly')) {
-      document.write('<style>#test-plan-panel{display:none!important}</style>');
-    }
+    if (document.cookie.includes('guest_session=readonly')) {{
+      document.write('<style>#test-plan-panel{{display:none!important}}</style>');
+    }}
   </script>
 </head>
 <body class="text-slate-100">
   <!-- Guest Mode Banner -->
-  <div id="guest-banner" class="hidden" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(90deg,#f59e0b,#d97706);text-align:center;padding:8px 16px;font-size:14px;font-weight:600;color:#1e293b;box-shadow:0 2px 8px rgba(0,0,0,0.3);">
+  <div id="guest-banner" class="hidden" style="position:fixed;top:0;left:240px;right:0;z-index:9999;background:linear-gradient(90deg,#f59e0b,#d97706);text-align:center;padding:8px 16px;font-size:14px;font-weight:600;color:#1e293b;box-shadow:0 2px 8px rgba(0,0,0,0.3);">
     👁️ 访客模式 · 仅可查看，无法操作
   </div>
   <script>
-    if (document.cookie.includes('guest_session=readonly')) {
+    if (document.cookie.includes('guest_session=readonly')) {{
       document.getElementById('guest-banner').classList.remove('hidden');
       document.body.style.paddingTop = '40px';
-    }
+      document.body.classList.add('guest-mode');
+    }}
   </script>
-  <div class="container mx-auto px-4 py-8 max-w-5xl">
-    <!-- Header -->
-    <div class="mb-8 flex items-center justify-between">
-      <div>
-        <h1 class="text-3xl font-bold text-white">单次测试</h1>
-        <p class="text-slate-400 mt-1">Quick Test & Results</p>
-      </div>
-      <div class="flex gap-3">
-        <a href="/web" class="px-4 py-2 rounded-lg border border-slate-700 bg-slate-800/60 text-sm font-semibold text-slate-100 hover:border-sky-500 transition">
-          ← 返回主页
-        </a>
-      </div>
-    </div>
-
-    <!-- Test Plan Panel -->
+  
+  <!-- App Layout with Sidebar -->
+  <div class="app-layout">
+    {sidebar_html}
+    
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <div class="max-w-5xl mx-auto">
+        <!-- Header -->
+        <div class="mb-8">
+          <h1 class="text-3xl font-bold text-white">单次测试</h1>
+          <p class="text-slate-400 mt-1">Quick Test & Results</p>
+        </div>
+'''
+    
+    # Middle part contains raw JavaScript - use triple quotes without f-string
+    body = '''
     <div id="test-plan-panel" class="panel-card rounded-2xl p-5 space-y-4 mb-6">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -7983,8 +8184,20 @@ def _tests_page_html() -> str:
     }
     init();
   </script>
+      </div>
+    </main>
+  </div>
+'''
+    
+    # Footer with sidebar JS using f-string
+    footer = f'''
+  <script>
+    {sidebar_js}
+  </script>
 </body>
 </html>'''
+    
+    return header + body + footer
 
 
 def _whitelist_html() -> str:
@@ -8398,6 +8611,7 @@ def _whitelist_html() -> str:
 
     init();
   </script>
+  </div>
 </body>
 </html>'''
 
@@ -8413,7 +8627,12 @@ def _schedules_html() -> str:
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <style>
-    body { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); min-height: 100vh; }
+    body { 
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); 
+      min-height: 100vh;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      margin: 0; padding: 0;
+    }
     .glass-card { background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(148, 163, 184, 0.1); }
     .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
     .custom-scrollbar::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.3); border-radius: 3px; }
