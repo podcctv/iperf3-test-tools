@@ -10472,9 +10472,10 @@ def _trace_html() -> str:
     css_content = '''
     body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
     
-    /* Guest mode - hide elements by default, shown via JS for authenticated users */
-    .guest-hide { display: none !important; }
-    body.authenticated .guest-hide { display: inline-flex !important; }
+    /* Guest mode - hide elements by default, show for non-guests */
+    .guest-hide { display: none; }
+    body:not(.guest-mode) .guest-hide { display: block; }
+    body:not(.guest-mode) button.guest-hide { display: inline-flex; }
     
     /* Animations */
     @keyframes fadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -12263,17 +12264,16 @@ def _trace_html() -> str:
 
 
     document.addEventListener('DOMContentLoaded', async function() {
-      // Check auth status and add authenticated class for logged-in users
+      // Check auth status and add guest-mode class for guests
       try {
         const authRes = await fetch('/auth/status', { credentials: 'include' });
         const authData = await authRes.json();
-        if (!authData.isGuest) {
-          document.body.classList.add('authenticated');
+        if (authData.isGuest) {
+          document.body.classList.add('guest-mode');
         }
       } catch (e) {
         console.error('Auth check failed:', e);
-        // Default to authenticated to show admin features
-        document.body.classList.add('authenticated');
+        // Default to non-guest to show admin features
       }
       
       loadNodes();
