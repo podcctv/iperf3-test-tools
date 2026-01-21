@@ -12262,7 +12262,20 @@ def _trace_html() -> str:
     }
 
 
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', async function() {
+      // Check auth status and add authenticated class for logged-in users
+      try {
+        const authRes = await fetch('/auth/status', { credentials: 'include' });
+        const authData = await authRes.json();
+        if (!authData.isGuest) {
+          document.body.classList.add('authenticated');
+        }
+      } catch (e) {
+        console.error('Auth check failed:', e);
+        // Default to authenticated to show admin features
+        document.body.classList.add('authenticated');
+      }
+      
       loadNodes();
       // Initialize tab state from URL hash
       handleHashChange();
