@@ -12280,23 +12280,7 @@ def _trace_html(is_guest: bool = False) -> str:
       // Initialize tab state from URL hash
       handleHashChange();
       
-      // Handle sidebar navigation clicks for trace page tabs
-      document.querySelectorAll('.sidebar .nav-item[data-page]').forEach(link => {
-        link.addEventListener('click', function(e) {
-          const page = this.dataset.page;
-          // Handle trace-related tabs when already on trace page
-          if (page === 'trace' || page === 'trace-schedules' || page === 'compare' || page === 'history') {
-            e.preventDefault();
-            if (page === 'trace') switchTab('single');
-            else if (page === 'trace-schedules') switchTab('schedules');
-            else if (page === 'compare') switchTab('multisrc');
-            else if (page === 'history') switchTab('history');
-            // Update URL hash without triggering navigation
-            const hashMap = { 'trace': '', 'trace-schedules': '#schedules', 'compare': '#compare', 'history': '#history' };
-            history.replaceState(null, '', '/web/trace' + (hashMap[page] || ''));
-          }
-        });
-      });
+
     });
   </script>
     </main>
