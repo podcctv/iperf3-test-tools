@@ -8201,7 +8201,12 @@ def _tests_page_html() -> str:
 
 
 def _whitelist_html() -> str:
-    return '''<!DOCTYPE html>
+    sidebar_css = _sidebar_css()
+    sidebar_html = _sidebar_html(current_page="whitelist")
+    sidebar_js = _sidebar_js()
+    
+    # Header with sidebar (f-string)
+    header = f'''<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
@@ -8209,34 +8214,49 @@ def _whitelist_html() -> str:
   <title>白名单管理 - iperf3 Master</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    body { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); min-height: 100vh; }
-    .glass-card { background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(148, 163, 184, 0.1); }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .spin { display: inline-block; animation: spin 1s linear infinite; }
+    body {{ 
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); 
+      min-height: 100vh;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      margin: 0; padding: 0;
+    }}
+    .glass-card {{ background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(148, 163, 184, 0.1); }}
+    @keyframes spin {{ to {{ transform: rotate(360deg); }} }}
+    .spin {{ display: inline-block; animation: spin 1s linear infinite; }}
+    {sidebar_css}
   </style>
 </head>
 <body class="text-slate-100">
-  <div class="container mx-auto px-4 py-8 max-w-6xl">
-    <!-- Header -->
-    <div class="mb-8 flex items-center justify-between">
-      <div>
-        <h1 class="text-3xl font-bold text-white">白名单管理</h1>
-        <p class="text-slate-400 mt-1">IP Whitelist Management - 支持 IPv4、IPv6 和 CIDR 网段</p>
-      </div>
-      <div class="flex gap-3">
-        <a href="/web" class="px-4 py-2 rounded-lg border border-slate-700 bg-slate-800/60 text-sm font-semibold text-slate-100 hover:border-sky-500 transition">
-          ← 返回主页
-        </a>
-        <button id="check-status-btn" class="px-4 py-2 rounded-lg border border-amber-600 bg-amber-900/20 text-sm font-semibold text-amber-300 hover:bg-amber-900/40 transition">
-          📊 检查同步状态
-        </button>
-        <button id="sync-btn" class="px-4 py-2 rounded-lg bg-gradient-to-r from-sky-500 to-indigo-500 text-sm font-semibold text-white shadow-lg hover:scale-105 transition">
-          🔄 同步到所有Agent
-        </button>
-      </div>
-    </div>
-
-    <!-- Alert Box -->
+  <script>
+    if (document.cookie.includes('guest_session=readonly')) {{
+      document.body.classList.add('guest-mode');
+    }}
+  </script>
+  
+  <div class="app-layout">
+    {sidebar_html}
+    
+    <main class="main-content">
+      <div class="max-w-6xl mx-auto">
+        <!-- Header -->
+        <div class="mb-8 flex items-center justify-between">
+          <div>
+            <h1 class="text-3xl font-bold text-white">白名单管理</h1>
+            <p class="text-slate-400 mt-1">IP Whitelist Management - 支持 IPv4、IPv6 和 CIDR 网段</p>
+          </div>
+          <div class="flex gap-3">
+            <button id="check-status-btn" class="px-4 py-2 rounded-lg border border-amber-600 bg-amber-900/20 text-sm font-semibold text-amber-300 hover:bg-amber-900/40 transition">
+              📊 检查同步状态
+            </button>
+            <button id="sync-btn" class="px-4 py-2 rounded-lg bg-gradient-to-r from-sky-500 to-indigo-500 text-sm font-semibold text-white shadow-lg hover:scale-105 transition">
+              🔄 同步到所有Agent
+            </button>
+          </div>
+        </div>
+'''
+    
+    # Body with raw JavaScript (no f-string)
+    body = '''
     <div id="alert-box" class="hidden mb-6 p-4 rounded-lg border"></div>
 
     <!-- Stats Cards -->
@@ -8611,13 +8631,29 @@ def _whitelist_html() -> str:
 
     init();
   </script>
+      </div>
+    </main>
   </div>
+'''
+    
+    # Footer with sidebar JS (f-string)
+    footer = f'''
+  <script>
+    {sidebar_js}
+  </script>
 </body>
 </html>'''
+    
+    return header + body + footer
 
 
 def _schedules_html() -> str:
-    return '''<!DOCTYPE html>
+    sidebar_css = _sidebar_css()
+    sidebar_html = _sidebar_html(current_page="schedules")
+    sidebar_js = _sidebar_js()
+    
+    # Header with sidebar (f-string)
+    header = f'''<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
@@ -8627,62 +8663,69 @@ def _schedules_html() -> str:
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <style>
-    body { 
+    body {{ 
       background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); 
       min-height: 100vh;
       font-family: 'Inter', system-ui, -apple-system, sans-serif;
       margin: 0; padding: 0;
-    }
-    .glass-card { background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(148, 163, 184, 0.1); }
-    .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
-    .custom-scrollbar::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.3); border-radius: 3px; }
-    .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.3); border-radius: 3px; }
-    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.5); }
+    }}
+    .glass-card {{ background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(148, 163, 184, 0.1); }}
+    .custom-scrollbar::-webkit-scrollbar {{ width: 6px; height: 6px; }}
+    .custom-scrollbar::-webkit-scrollbar-track {{ background: rgba(15, 23, 42, 0.3); border-radius: 3px; }}
+    .custom-scrollbar::-webkit-scrollbar-thumb {{ background: rgba(148, 163, 184, 0.3); border-radius: 3px; }}
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {{ background: rgba(148, 163, 184, 0.5); }}
+    {sidebar_css}
   </style>
 </head>
 <body class="text-slate-100">
   <!-- Guest Mode Banner -->
-  <div id="guest-banner" class="hidden" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(90deg,#f59e0b,#d97706);text-align:center;padding:8px 16px;font-size:14px;font-weight:600;color:#1e293b;box-shadow:0 2px 8px rgba(0,0,0,0.3);">
+  <div id="guest-banner" class="hidden" style="position:fixed;top:0;left:240px;right:0;z-index:9999;background:linear-gradient(90deg,#f59e0b,#d97706);text-align:center;padding:8px 16px;font-size:14px;font-weight:600;color:#1e293b;box-shadow:0 2px 8px rgba(0,0,0,0.3);">
     👁️ 访客模式 · 仅可查看，无法操作
   </div>
   <script>
-    if (document.cookie.includes('guest_session=readonly')) {
+    if (document.cookie.includes('guest_session=readonly')) {{
       document.getElementById('guest-banner').classList.remove('hidden');
       document.body.style.paddingTop = '40px';
-    }
+      document.body.classList.add('guest-mode');
+    }}
   </script>
-  <div class="container mx-auto px-4 py-8 max-w-7xl">
-    <!-- Header -->
-    <div class="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-      <div>
-        <h1 class="text-2xl sm:text-3xl font-bold text-white">定时任务管理</h1>
-        <p class="text-slate-400 mt-1 text-sm">Schedule Management & Monitoring</p>
+  
+  <div class="app-layout">
+    {sidebar_html}
+    
+    <main class="main-content">
+      <div class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <div class="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 class="text-2xl sm:text-3xl font-bold text-white">定时任务管理</h1>
+            <p class="text-slate-400 mt-1 text-sm">Schedule Management & Monitoring</p>
+          </div>
+          <div class="flex flex-wrap gap-2 sm:gap-3">
+            <button id="create-schedule-btn" class="px-3 sm:px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-sky-500 text-xs sm:text-sm font-semibold text-white shadow-lg hover:scale-105 transition">
+              + 新建任务
+            </button>
+            <button id="refresh-btn" class="px-3 sm:px-4 py-2 rounded-lg border border-slate-700 bg-slate-800/60 text-xs sm:text-sm font-semibold text-slate-100 hover:border-sky-500 transition">
+              🔄 刷新
+            </button>
+          </div>
+        </div>
+
+        <!-- VPS Daily Summary -->
+        <div id="vps-daily-summary" class="mb-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <!-- Populated by JS -->
+        </div>
+
+        <!-- Schedules List -->
+        <div id="schedules-container" class="space-y-6">
+          <div class="text-center text-slate-400 py-12">加载中...</div>
+        </div>
       </div>
-      <div class="flex flex-wrap gap-2 sm:gap-3">
-        <a href="/web" class="px-3 sm:px-4 py-2 rounded-lg border border-slate-700 bg-slate-800/60 text-xs sm:text-sm font-semibold text-slate-100 hover:border-sky-500 transition">
-          ← 返回主页
-        </a>
-        <button id="create-schedule-btn" class="px-3 sm:px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-sky-500 text-xs sm:text-sm font-semibold text-white shadow-lg hover:scale-105 transition">
-          + 新建任务
-        </button>
-        <button id="refresh-btn" class="px-3 sm:px-4 py-2 rounded-lg border border-slate-700 bg-slate-800/60 text-xs sm:text-sm font-semibold text-slate-100 hover:border-sky-500 transition">
-          🔄 刷新
-        </button>
-      </div>
-    </div>
-
-    <!-- VPS Daily Summary -->
-    <div id="vps-daily-summary" class="mb-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <!-- Populated by JS -->
-    </div>
-
-    <!-- Schedules List -->
-    <div id="schedules-container" class="space-y-6">
-      <div class="text-center text-slate-400 py-12">加载中...</div>
-    </div>
-  </div>
-
-  <!-- Create/Edit Modal -->
+'''
+    
+    # Body with raw JavaScript (no f-string) - continues from modal onwards
+    body = '''
+    <!-- Create/Edit Modal -->
   <div id="schedule-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/80 px-4 backdrop-blur">
     <div class="glass-card relative w-full max-w-2xl rounded-2xl p-6 shadow-2xl">
       <button id="close-modal" class="absolute right-4 top-4 rounded-full border border-slate-700 bg-slate-800 p-2 text-slate-300 hover:bg-slate-700">✕</button>
@@ -10391,13 +10434,28 @@ ${latestStats}
       setInterval(updateScheduleTrafficBadges, 5 * 60 * 1000);
     })();
   </script>
-</body>
-</html>
+    </main>
+  </div>
 '''
+    
+    # Footer with sidebar JS (f-string)
+    footer = f'''
+  <script>
+    {sidebar_js}
+  </script>
+</body>
+</html>'''
+    
+    return header + body + footer
 
 
 def _trace_html() -> str:
-    return '''<!DOCTYPE html>
+    sidebar_css = _sidebar_css()
+    sidebar_html = _sidebar_html(current_page="trace")
+    sidebar_js = _sidebar_js()
+    
+    # Header Part 1 (f-string)
+    header_part1 = f'''<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
@@ -10407,6 +10465,11 @@ def _trace_html() -> str:
   <script src="https://cdnjs.cloudflare.com/ajax/libs/dom-to-image/2.6.0/dom-to-image.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
+    {sidebar_css}
+'''
+
+    # CSS Content (raw string)
+    css_content = '''
     body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
     
     /* Guest mode - hide elements by default, shown via JS for authenticated users */
@@ -10643,14 +10706,25 @@ def _trace_html() -> str:
       width: 20px;
       text-align: right;
     }
+'''
+    
+    # Header Part 2 (f-string)
+    header_part2 = f'''
   </style>
 </head>
 <body class="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
-  <div class="max-w-7xl mx-auto px-4 py-8">
-    <div class="mb-6">
-      <a href="/web" class="text-sm text-slate-400 hover:text-white transition">← 返回主页</a>
-      <h1 class="text-2xl font-bold mt-2">🌐 Traceroute 路由追踪</h1>
-    </div>
+  <div class="app-layout">
+    {sidebar_html}
+    
+    <main class="main-content">
+      <div class="max-w-7xl mx-auto px-4 py-8">
+        <div class="mb-6">
+          <h1 class="text-2xl font-bold mt-2">🌐 Traceroute 路由追踪</h1>
+        </div>
+'''
+    
+    # Body (raw string)
+    body = '''
 
     <div class="flex border-b border-slate-700 mb-6 gap-6" id="trace-tabs">
       <button onclick="switchTab('single')" id="tab-single" class="pb-3 text-sm font-semibold tab-active guest-hide">🚀 单次追踪</button>
@@ -12170,15 +12244,30 @@ def _trace_html() -> str:
 
     document.addEventListener('DOMContentLoaded', loadNodes);
   </script>
-</body>
-</html>
+    </main>
+  </div>
 '''
 
+    # Footer
+    footer = f'''
+<script>
+{sidebar_js}
+</script>
+</body>
+</html>'''
+
+    return header_part1 + css_content + header_part2 + body + footer
 
 
 
-def _admin_html() -> str:
-    return '''<!DOCTYPE html>
+
+
+def _admin_html_deprecated() -> str:
+    sidebar_css = _sidebar_css()
+    sidebar_html = _sidebar_html(current_page="admin")
+    sidebar_js = _sidebar_js()
+    
+    header = f'''<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
@@ -12186,22 +12275,28 @@ def _admin_html() -> str:
   <title>系统管理 - iPerf3 测试工具</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    body {{ font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }}
+    {sidebar_css}
   </style>
 </head>
 <body class="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
-  <div class="max-w-4xl mx-auto px-6 py-10">
+  <div class="app-layout">
+    {sidebar_html}
     
-    <!-- Header -->
-    <div class="flex items-center justify-between mb-10">
-      <div>
-        <h1 class="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500">系统管理</h1>
-        <p class="text-sm text-slate-400 mt-1">System Administration</p>
-      </div>
-      <a href="/web" class="px-4 py-2 bg-slate-700 rounded-lg text-sm font-medium hover:bg-slate-600 transition-colors flex items-center gap-2">
-        ← 返回主页
-      </a>
-    </div>
+    <main class="main-content">
+      <div class="max-w-4xl mx-auto px-6 py-10">
+        
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-10">
+          <div>
+            <h1 class="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500">系统管理</h1>
+            <p class="text-sm text-slate-400 mt-1">System Administration</p>
+          </div>
+        </div>
+'''
+
+    # Body
+    body = '''
     
     <!-- Database Management Card -->
     <div class="bg-slate-800/50 backdrop-blur border border-slate-700 rounded-2xl p-6 mb-6">
@@ -12450,9 +12545,19 @@ def _admin_html() -> str:
       }
     });
   </script>
-</body>
-</html>
+    </main>
+  </div>
 '''
+
+    # Footer (f-string)
+    footer = f'''
+<script>
+{sidebar_js}
+</script>
+</body>
+</html>'''
+
+    return header + body + footer
 
 
 @app.get("/web", response_class=HTMLResponse)
@@ -12490,13 +12595,8 @@ async def tests_page(request: Request):
     return HTMLResponse(content=_tests_page_html())
 
 
-@app.get("/web/admin")
-async def admin_page(request: Request):
-    """系统管理页面"""
-    if not auth_manager().is_authenticated(request):
-        return HTMLResponse(content="<script>window.location.href='/web';</script>")
-    
-    return HTMLResponse(content=_admin_html())
+# Duplicate /web/admin route deleted to avoid conflict with active route
+
 
 
 @app.get("/web/trace")
@@ -16833,7 +16933,11 @@ async def agent_pending_count(
 
 def _admin_html():
     """Generate system admin HTML page."""
-    return """<!DOCTYPE html>
+    sidebar_css = _sidebar_css()
+    sidebar_html = _sidebar_html(current_page="admin")
+    sidebar_js = _sidebar_js()
+    
+    header = f'''<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
@@ -16841,20 +16945,26 @@ def _admin_html():
   <title>系统管理 - iPerf3 测试工具</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); min-height: 100vh; }
-    .card { background: rgba(30, 41, 59, 0.5); backdrop-filter: blur(10px); border: 1px solid rgba(71, 85, 105, 0.5); border-radius: 1rem; }
-    .btn { padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 500; transition: all 0.2s; }
-    .btn-primary { background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; }
-    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4); }
-    .btn-danger { background: linear-gradient(135deg, #ef4444, #dc2626); color: white; }
-    .btn-success { background: linear-gradient(135deg, #22c55e, #16a34a); color: white; }
-    .stat-card { background: rgba(15, 23, 42, 0.6); border-radius: 0.75rem; padding: 1rem; }
+    body {{ font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); min-height: 100vh; }}
+    .card {{ background: rgba(30, 41, 59, 0.5); backdrop-filter: blur(10px); border: 1px solid rgba(71, 85, 105, 0.5); border-radius: 1rem; }}
+    .btn {{ padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 500; transition: all 0.2s; }}
+    .btn-primary {{ background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; }}
+    .btn-primary:hover {{ transform: translateY(-1px); box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4); }}
+    .btn-danger {{ background: linear-gradient(135deg, #ef4444, #dc2626); color: white; }}
+    .btn-success {{ background: linear-gradient(135deg, #22c55e, #16a34a); color: white; }}
+    .stat-card {{ background: rgba(15, 23, 42, 0.6); border-radius: 0.75rem; padding: 1rem; }}
+    {sidebar_css}
   </style>
 </head>
-<body class="text-white p-6">
-  <div class="max-w-6xl mx-auto">
-    <a href="/web" class="text-slate-400 hover:text-white text-sm mb-4 inline-block">← 返回主页</a>
-    <h1 class="text-2xl font-bold mb-6 flex items-center gap-3">⚙️ 系统管理</h1>
+<body class="text-white">
+  <div class="app-layout">
+    {sidebar_html}
+    <main class="main-content">
+      <div class="max-w-6xl mx-auto p-6">
+        <h1 class="text-2xl font-bold mb-6 flex items-center gap-3">⚙️ 系统管理</h1>
+'''
+
+    body = r'''
     
     <!-- System Stats Card -->
     <div class="card p-6 mb-6">
@@ -17030,8 +17140,19 @@ def _admin_html():
     loadWebhookConfig();
     loadAuditLogs();
   </script>
+'''
+
+    footer = f'''
+    </main>
+  </div>
+  <script>
+    {sidebar_js}
+  </script>
 </body>
-</html>"""
+</html>'''
+
+    return header + body + footer
+
 
 
 @app.get("/web/admin")
@@ -17215,7 +17336,11 @@ async def trigger_alert(
 
 def _redis_monitoring_html() -> str:
     """Redis cache monitoring and management page."""
-    return '''<!DOCTYPE html>
+    sidebar_css = _sidebar_css()
+    sidebar_html = _sidebar_html(current_page="redis")
+    sidebar_js = _sidebar_js()
+
+    header = f'''<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
@@ -17223,46 +17348,45 @@ def _redis_monitoring_html() -> str:
   <title>Redis 监控 - iperf3 Master</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    body { 
+    body {{ 
       background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); 
       min-height: 100vh; 
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    }
-    .glass-card { 
+    }}
+    .glass-card {{ 
       background: rgba(15, 23, 42, 0.7); 
       backdrop-filter: blur(10px); 
       border: 1px solid rgba(148, 163, 184, 0.1); 
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .animate-spin { animation: spin 1s linear infinite; }
-    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-    .animate-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+    }}
+    @keyframes spin {{ to {{ transform: rotate(360deg); }} }}
+    .animate-spin {{ animation: spin 1s linear infinite; }}
+    @keyframes pulse {{ 0%, 100% {{ opacity: 1; }} 50% {{ opacity: 0.5; }} }}
+    .animate-pulse {{ animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }}
     
     /* Progress bar animation */
-    .progress-bar {
+    .progress-bar {{
       transition: width 0.3s ease-in-out;
-    }
+    }}
     
     /* Stat card hover effect */
-    .stat-card {
+    .stat-card {{
       transition: transform 0.2s, box-shadow 0.2s;
-    }
-    .stat-card:hover {
+    }}
+    .stat-card:hover {{
       transform: translateY(-2px);
       box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
-    }
+    }}
+    {sidebar_css}
   </style>
 </head>
-<body class="min-h-screen p-6">
-  <div class="max-w-7xl mx-auto">
+<body class="min-h-screen">
+  <div class="app-layout">
+    {sidebar_html}
+    <main class="main-content">
+      <div class="max-w-7xl mx-auto p-6">
     <!-- Header -->
     <div class="flex items-center justify-between mb-8">
       <div class="flex items-center gap-4">
-        <a href="/web" class="text-slate-400 hover:text-white transition-colors">
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
-          </svg>
-        </a>
         <h1 class="text-3xl font-bold text-white flex items-center gap-3">
           <span class="text-4xl">📊</span>
           Redis 缓存监控
@@ -17275,6 +17399,9 @@ def _redis_monitoring_html() -> str:
         刷新数据
       </button>
     </div>
+'''
+
+    body = r'''
 
     <!-- Loading State -->
     <div id="loading-state" class="glass-card rounded-2xl p-8 text-center">
@@ -17595,9 +17722,19 @@ def _redis_monitoring_html() -> str:
     // Initial load
     loadStats();
   </script>
-</body>
-</html>
 '''
+
+    footer = f'''
+    </main>
+  </div>
+  <script>
+    {sidebar_js}
+  </script>
+</body>
+</html>'''
+
+    return header + body + footer
+
 
 
 @app.get("/web/redis")
