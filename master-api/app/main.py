@@ -2077,14 +2077,37 @@ def _sidebar_css() -> str:
     .nav-item:hover { background: rgba(59, 130, 246, 0.1); color: #e2e8f0; }
     .nav-item.active { background: rgba(59, 130, 246, 0.15); color: #3b82f6; border-right: 3px solid #3b82f6; }
     .nav-item-icon { font-size: 1.1rem; width: 24px; text-align: center; }
+    /* Global Styles */
+    body {
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      min-height: 100vh;
+      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: #f8fafc;
+      margin: 0;
+    }
+    .glass-card, .card {
+      background: rgba(15, 23, 42, 0.7) !important;
+      backdrop-filter: blur(10px) !important;
+      border: 1px solid rgba(148, 163, 184, 0.1) !important;
+      border-radius: 0.75rem;
+    }
+    
     .sidebar-footer { padding: 16px; border-top: 1px solid rgba(148, 163, 184, 0.1); }
     .sidebar-user { display: flex; align-items: center; gap: 12px; }
     .sidebar-avatar { width: 36px; height: 36px; background: linear-gradient(135deg, #10b981 0%, #3b82f6 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.9rem; color: white; }
     .sidebar-user-name { font-size: 0.9rem; font-weight: 600; color: #e2e8f0; }
     .sidebar-user-role { font-size: 0.75rem; color: #64748b; }
     .main-content { margin-left: 240px; flex: 1; padding: 24px; }
-    .theme-toggle { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: rgba(51, 65, 85, 0.5); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; color: #94a3b8; cursor: pointer; font-size: 0.85rem; transition: all 0.2s; }
-    .theme-toggle:hover { background: rgba(59, 130, 246, 0.2); color: #e2e8f0; }
+    
+    .theme-toggle { 
+      display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%;
+      padding: 10px; background: rgba(30, 41, 59, 0.4); 
+      border: 1px solid rgba(148, 163, 184, 0.2); 
+      border-radius: 8px; color: #94a3b8; cursor: pointer; 
+      font-size: 0.85rem; font-weight: 500; transition: all 0.2s; 
+    }
+    .theme-toggle:hover { background: rgba(59, 130, 246, 0.2); color: #e2e8f0; border-color: rgba(59, 130, 246, 0.4); }
+    
     .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); z-index: 999; }
     .mobile-menu-btn { display: none; position: fixed; top: 16px; left: 16px; z-index: 1001; width: 44px; height: 44px; background: rgba(15, 23, 42, 0.9); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; color: #e2e8f0; font-size: 1.2rem; cursor: pointer; }
     @media (max-width: 1024px) {
@@ -2184,9 +2207,9 @@ def _sidebar_html(current_page: str = "dashboard", is_guest: bool = False) -> st
               <div class="sidebar-user-role" id="sidebar-role">{"只读模式" if is_guest else "已登录"}</div>
             </div>
           </div>
-          <button onclick="toggleTheme()" class="theme-toggle" style="margin-top: 0.75rem; width: 100%;">
+          <button onclick="toggleTheme()" class="theme-toggle" style="margin-top: 0.75rem;">
             <span class="theme-toggle-icon">🌙</span>
-            <span class="theme-toggle-track"></span>
+            <span id="theme-text">暗黑模式</span>
           </button>
           <button onclick="logout()" class="nav-item" style="margin-top: 0.5rem; width: 100%; justify-content: center; color: #f87171; border: 1px solid rgba(248, 113, 113, 0.3); background: rgba(248, 113, 113, 0.1);">
             <span class="nav-item-icon">🚪</span>
@@ -8214,13 +8237,6 @@ def _whitelist_html() -> str:
   <title>白名单管理 - iperf3 Master</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    body {{ 
-      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); 
-      min-height: 100vh;
-      font-family: 'Inter', system-ui, -apple-system, sans-serif;
-      margin: 0; padding: 0;
-    }}
-    .glass-card {{ background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(148, 163, 184, 0.1); }}
     @keyframes spin {{ to {{ transform: rotate(360deg); }} }}
     .spin {{ display: inline-block; animation: spin 1s linear infinite; }}
     {sidebar_css}
@@ -10483,8 +10499,7 @@ def _trace_html(is_guest: bool = False) -> str:
     .fade-in { animation: fadeInUp 0.4s ease forwards; }
     .pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
     
-    /* Glassmorphism */
-    .glass-card { background: rgba(30, 41, 59, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(148, 163, 184, 0.15); }
+    /* Glassmorphism settings moved to global sidebar css */
     .glass-card:hover { border-color: rgba(148, 163, 184, 0.25); }
     
     /* Latency Heatmap Colors */
@@ -10714,7 +10729,7 @@ def _trace_html(is_guest: bool = False) -> str:
     header_part2 = f'''
   </style>
 </head>
-<body class="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white {guest_cls}">
+<body class="min-h-screen text-white {guest_cls}">
   <div class="app-layout">
     {sidebar_html}
     
@@ -16985,8 +17000,6 @@ def _admin_html():
   <title>系统管理 - iPerf3 测试工具</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    body {{ font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); min-height: 100vh; }}
-    .card {{ background: rgba(30, 41, 59, 0.5); backdrop-filter: blur(10px); border: 1px solid rgba(71, 85, 105, 0.5); border-radius: 1rem; }}
     .btn {{ padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 500; transition: all 0.2s; }}
     .btn-primary {{ background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; }}
     .btn-primary:hover {{ transform: translateY(-1px); box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4); }}
@@ -17388,16 +17401,6 @@ def _redis_monitoring_html() -> str:
   <title>Redis 监控 - iperf3 Master</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    body {{ 
-      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); 
-      min-height: 100vh; 
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    }}
-    .glass-card {{ 
-      background: rgba(15, 23, 42, 0.7); 
-      backdrop-filter: blur(10px); 
-      border: 1px solid rgba(148, 163, 184, 0.1); 
-    }}
     @keyframes spin {{ to {{ transform: rotate(360deg); }} }}
     .animate-spin {{ animation: spin 1s linear infinite; }}
     @keyframes pulse {{ 0%, 100% {{ opacity: 1; }} 50% {{ opacity: 0.5; }} }}
