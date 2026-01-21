@@ -10928,6 +10928,7 @@ def _trace_html() -> str:
         } else {
           // Show tabs for authenticated users
           document.body.classList.add('authenticated');
+          handleHashChange(); // Sync initial tab with hash
         }
       } catch (e) {
         console.error('Guest mode check failed:', e);
@@ -11297,10 +11298,29 @@ def _trace_html() -> str:
         document.getElementById(`tab-${t}`).classList.toggle('tab-active', t === tab);
         document.getElementById(`tab-${t}`).classList.toggle('text-slate-400', t !== tab);
       });
+      
+      // Update Sidebar Active State
+      document.querySelectorAll('.sidebar .nav-item').forEach(el => el.classList.remove('active'));
+      let pageId = 'trace';
+      if (tab === 'schedules') pageId = 'trace-schedules';
+      if (tab === 'multisrc') pageId = 'compare';
+      if (tab === 'history') pageId = 'history';
+      const navItem = document.querySelector(`.sidebar .nav-item[data-page="${pageId}"]`);
+      if (navItem) navItem.classList.add('active');
+
       if (tab === 'schedules') loadSchedules();
       if (tab === 'multisrc') loadMultisrcNodes();
       if (tab === 'history') loadHistory();
     }
+
+    function handleHashChange() {
+      const hash = window.location.hash;
+      if (hash === '#schedules') switchTab('schedules');
+      else if (hash === '#compare') switchTab('multisrc');
+      else if (hash === '#history') switchTab('history');
+      else switchTab('single');
+    }
+    window.addEventListener('hashchange', handleHashChange);
     
     function loadMultisrcNodes() {
       const container = document.getElementById('multisrc-nodes');
@@ -12242,7 +12262,29 @@ def _trace_html() -> str:
     }
 
 
-    document.addEventListener('DOMContentLoaded', loadNodes);
+    document.addEventListener('DOMContentLoaded', function() {
+      loadNodes();
+      // Initialize tab state from URL hash
+      handleHashChange();
+      
+      // Handle sidebar navigation clicks for trace page tabs
+      document.querySelectorAll('.sidebar .nav-item[data-page]').forEach(link => {
+        link.addEventListener('click', function(e) {
+          const page = this.dataset.page;
+          // Handle trace-related tabs when already on trace page
+          if (page === 'trace' || page === 'trace-schedules' || page === 'compare' || page === 'history') {
+            e.preventDefault();
+            if (page === 'trace') switchTab('single');
+            else if (page === 'trace-schedules') switchTab('schedules');
+            else if (page === 'compare') switchTab('multisrc');
+            else if (page === 'history') switchTab('history');
+            // Update URL hash without triggering navigation
+            const hashMap = { 'trace': '', 'trace-schedules': '#schedules', 'compare': '#compare', 'history': '#history' };
+            history.replaceState(null, '', '/web/trace' + (hashMap[page] || ''));
+          }
+        });
+      });
+    });
   </script>
     </main>
   </div>
