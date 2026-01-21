@@ -283,7 +283,15 @@ docker compose exec master-api python -m app.auth --set-password 'YourNewPass' -
 
 ## 📝 版本历史 / Changelog
 
-### v1.5.0 (Latest)
+### v1.6.0 (Latest)
+
+- ✅ **全站视觉统一** - 深色玻璃拟态风格 (Glassmorphism) 全面覆盖
+- ✅ **路由追踪导航重构** - 丝滑的 Hash 路由切换，告别页面刷新
+- ✅ **侧边栏主题按钮** - 修复显示问题，清晰的暗黑模式标识
+- ✅ **鉴权体验优化** - 智能识别访客身份，菜单自动显隐
+- ✅ **普通路由追踪** - 新增常规 traceroute 定时任务支持
+
+### v1.5.0
 
 - ✅ **Dashboard UI 现代化** - 商业级仪表盘设计
 - ✅ **Trace 页面 Metro-line 样式** - 地铁线路图可视化
