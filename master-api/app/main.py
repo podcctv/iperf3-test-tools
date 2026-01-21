@@ -10449,9 +10449,9 @@ ${latestStats}
     return header + body + footer
 
 
-def _trace_html() -> str:
+def _trace_html(is_guest: bool = False) -> str:
     sidebar_css = _sidebar_css()
-    sidebar_html = _sidebar_html(current_page="trace")
+    sidebar_html = _sidebar_html(current_page="trace", is_guest=is_guest)
     sidebar_js = _sidebar_js()
     
     # Header Part 1 (f-string)
@@ -10710,10 +10710,11 @@ def _trace_html() -> str:
 '''
     
     # Header Part 2 (f-string)
+    guest_cls = "guest-mode" if is_guest else ""
     header_part2 = f'''
   </style>
 </head>
-<body class="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
+<body class="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white {guest_cls}">
   <div class="app-layout">
     {sidebar_html}
     
@@ -12264,10 +12265,7 @@ def _trace_html() -> str:
 
 
     document.addEventListener('DOMContentLoaded', function() {
-      // Check guest mode from cookie (faster and more reliable than API call)
-      if (document.cookie.includes('guest_session=readonly')) {
-        document.body.classList.add('guest-mode');
-      }
+      // Auth state is now handled by server-side rendering (is_guest passed to _trace_html)
       
       loadNodes();
       // Initialize tab state from URL hash
@@ -12653,7 +12651,7 @@ async def trace_page(request: Request):
     if not auth_manager().is_authenticated(request) and not _is_guest(request):
         return HTMLResponse(content="<script>window.location.href='/web';</script>")
     
-    return HTMLResponse(content=_trace_html())
+    return HTMLResponse(content=_trace_html(is_guest=_is_guest(request)))
 
 
 @app.get("/auth/status")
