@@ -10728,12 +10728,7 @@ def _trace_html(is_guest: bool = False) -> str:
     # Body (raw string)
     body = '''
 
-    <div class="flex border-b border-slate-700 mb-6 gap-6" id="trace-tabs">
-      <button onclick="switchTab('single')" id="tab-single" class="pb-3 text-sm font-semibold tab-active guest-hide">🚀 单次追踪</button>
-      <button onclick="switchTab('schedules')" id="tab-schedules" class="pb-3 text-sm font-semibold text-slate-400 hover:text-white guest-hide">📅 定时监控</button>
-      <button onclick="switchTab('multisrc')" id="tab-multisrc" class="pb-3 text-sm font-semibold text-slate-400 hover:text-white guest-hide">🌐 多源对比</button>
-      <button onclick="switchTab('history')" id="tab-history" class="pb-3 text-sm font-semibold text-slate-400 hover:text-white">📜 历史记录</button>
-    </div>
+
 
     <div id="panel-single">
       <div class="rounded-xl border border-slate-700 bg-slate-800/60 p-5 mb-6">
@@ -11296,9 +11291,8 @@ def _trace_html(is_guest: bool = False) -> str:
 
     function switchTab(tab) {
       ['single', 'schedules', 'multisrc', 'history'].forEach(t => {
-        document.getElementById(`panel-${t}`).classList.toggle('hidden', t !== tab);
-        document.getElementById(`tab-${t}`).classList.toggle('tab-active', t === tab);
-        document.getElementById(`tab-${t}`).classList.toggle('text-slate-400', t !== tab);
+        const panel = document.getElementById(`panel-${t}`);
+        if (panel) panel.classList.toggle('hidden', t !== tab);
       });
       
       // Update Sidebar Active State
