@@ -12263,17 +12263,10 @@ def _trace_html() -> str:
     }
 
 
-    document.addEventListener('DOMContentLoaded', async function() {
-      // Check auth status and add guest-mode class for guests
-      try {
-        const authRes = await fetch('/auth/status', { credentials: 'include' });
-        const authData = await authRes.json();
-        if (authData.isGuest) {
-          document.body.classList.add('guest-mode');
-        }
-      } catch (e) {
-        console.error('Auth check failed:', e);
-        // Default to non-guest to show admin features
+    document.addEventListener('DOMContentLoaded', function() {
+      // Check guest mode from cookie (faster and more reliable than API call)
+      if (document.cookie.includes('guest_session=readonly')) {
+        document.body.classList.add('guest-mode');
       }
       
       loadNodes();
