@@ -2277,6 +2277,7 @@ def _login_html() -> str:
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@radix-ui/themes@3.1.1/dist/css/themes.css" />
   <script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/shoelace.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/glass-design.css" />
   <!-- Custom CSS -->
   <link rel="stylesheet" href="/static/theme.css" />
   <link rel="stylesheet" href="/static/sidebar.css" />
@@ -7537,6 +7538,7 @@ def _tests_page_html() -> str:
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>单次测试 - iperf3 Master</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/glass-design.css" />
   <style>
     body {{ 
       background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); 
@@ -8236,6 +8238,7 @@ def _whitelist_html() -> str:
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>白名单管理 - iperf3 Master</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/glass-design.css" />
   <style>
     @keyframes spin {{ to {{ transform: rotate(360deg); }} }}
     .spin {{ display: inline-block; animation: spin 1s linear infinite; }}
@@ -8676,6 +8679,7 @@ def _schedules_html() -> str:
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>定时任务 - iperf3 Master</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/glass-design.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <style>
@@ -10478,6 +10482,7 @@ def _trace_html(is_guest: bool = False) -> str:
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>路由追踪 - iPerf3 测试工具</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/glass-design.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/dom-to-image/2.6.0/dom-to-image.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
@@ -16983,6 +16988,7 @@ def _admin_html():
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>系统管理 - iPerf3 测试工具</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/glass-design.css" />
   <style>
     .btn {{ padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 500; transition: all 0.2s; }}
     .btn-primary {{ background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; }}
@@ -17384,6 +17390,7 @@ def _redis_monitoring_html() -> str:
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Redis 监控 - iperf3 Master</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/glass-design.css" />
   <style>
     @keyframes spin {{ to {{ transform: rotate(360deg); }} }}
     .animate-spin {{ animation: spin 1s linear infinite; }}
