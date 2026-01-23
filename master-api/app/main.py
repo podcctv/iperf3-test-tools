@@ -2056,28 +2056,13 @@ async def lookup_geo_info(ip: str) -> dict | None:
 
 
 def _sidebar_css() -> str:
-    """Generate shared sidebar CSS styles for all pages."""
+    """Generate shared sidebar CSS styles for all pages.
+    
+    Note: Most sidebar styles are now in glass-design.css.
+    This function only contains legacy global styles for compatibility.
+    """
     return '''
-    /* Sidebar Navigation Styles */
-    .app-layout { display: flex; min-height: 100vh; }
-    .sidebar {
-      position: fixed; top: 0; left: 0; bottom: 0; width: 240px; z-index: 1000;
-      background: rgba(15, 23, 42, 0.98); backdrop-filter: blur(20px);
-      border-right: 1px solid rgba(148, 163, 184, 0.1);
-      display: flex; flex-direction: column; transition: transform 0.3s ease;
-    }
-    .sidebar-brand { display: flex; align-items: center; gap: 12px; padding: 20px 16px; border-bottom: 1px solid rgba(148, 163, 184, 0.1); }
-    .sidebar-logo { width: 40px; height: 40px; background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; }
-    .sidebar-title { font-size: 1.1rem; font-weight: 700; color: #f8fafc; }
-    .sidebar-subtitle { font-size: 0.75rem; color: #64748b; }
-    .sidebar-nav { flex: 1; overflow-y: auto; padding: 16px 0; }
-    .nav-section { margin-bottom: 20px; }
-    .nav-section-title { padding: 8px 20px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b; }
-    .nav-item { display: flex; align-items: center; gap: 12px; padding: 10px 20px; color: #94a3b8; text-decoration: none; transition: all 0.2s; font-size: 0.9rem; border: none; background: transparent; cursor: pointer; width: 100%; text-align: left; }
-    .nav-item:hover { background: rgba(59, 130, 246, 0.1); color: #e2e8f0; }
-    .nav-item.active { background: rgba(59, 130, 246, 0.15); color: #3b82f6; border-right: 3px solid #3b82f6; }
-    .nav-item-icon { font-size: 1.1rem; width: 24px; text-align: center; }
-    /* Global Styles */
+    /* Global Styles - Legacy compatibility */
     body {
       background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
       min-height: 100vh;
@@ -2091,34 +2076,6 @@ def _sidebar_css() -> str:
       border: 1px solid rgba(148, 163, 184, 0.1) !important;
       border-radius: 0.75rem;
     }
-    
-    .sidebar-footer { padding: 16px; border-top: 1px solid rgba(148, 163, 184, 0.1); }
-    .sidebar-user { display: flex; align-items: center; gap: 12px; }
-    .sidebar-avatar { width: 36px; height: 36px; background: linear-gradient(135deg, #10b981 0%, #3b82f6 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.9rem; color: white; }
-    .sidebar-user-name { font-size: 0.9rem; font-weight: 600; color: #e2e8f0; }
-    .sidebar-user-role { font-size: 0.75rem; color: #64748b; }
-    .main-content { margin-left: 240px; flex: 1; padding: 24px; }
-    
-    .theme-toggle { 
-      display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%;
-      padding: 10px; background: rgba(30, 41, 59, 0.4); 
-      border: 1px solid rgba(148, 163, 184, 0.2); 
-      border-radius: 8px; color: #94a3b8; cursor: pointer; 
-      font-size: 0.85rem; font-weight: 500; transition: all 0.2s; 
-    }
-    .theme-toggle:hover { background: rgba(59, 130, 246, 0.2); color: #e2e8f0; border-color: rgba(59, 130, 246, 0.4); }
-    
-    .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); z-index: 999; }
-    .mobile-menu-btn { display: none; position: fixed; top: 16px; left: 16px; z-index: 1001; width: 44px; height: 44px; background: rgba(15, 23, 42, 0.9); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; color: #e2e8f0; font-size: 1.2rem; cursor: pointer; }
-    @media (max-width: 1024px) {
-      .sidebar { transform: translateX(-100%); }
-      .sidebar.open { transform: translateX(0); }
-      .main-content { margin-left: 0; }
-      .mobile-menu-btn { display: block; }
-      .sidebar-overlay.active { display: block; }
-    }
-    .guest-hide { display: none; }
-    body:not(.guest-mode) .guest-hide { display: block; }
     '''
 
 
@@ -2132,9 +2089,22 @@ def _sidebar_html(current_page: str = "dashboard", is_guest: bool = False) -> st
     def nav_active(page: str) -> str:
         return "active" if page == current_page else ""
     
-    guest_class = "guest-mode" if is_guest else ""
+    # Role class for body - single source of truth for permissions
+    role_class = "role-guest" if is_guest else "role-admin"
+    avatar_class = "guest" if is_guest else "admin"
+    avatar_letter = "G" if is_guest else "A"
+    user_name = "访客" if is_guest else "管理员"
+    user_role = "只读模式" if is_guest else "已登录"
     
     return f'''
+      <!-- Role Class Script - Must be first -->
+      <script>document.body.classList.add('{role_class}');</script>
+      
+      <!-- Guest Mode Banner (auto shown for role-guest) -->
+      <div class="guest-banner">
+        👁️ 访客模式 · 仅可查看，无法操作
+      </div>
+      
       <!-- Sidebar Navigation -->
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-brand">
@@ -2182,7 +2152,8 @@ def _sidebar_html(current_page: str = "dashboard", is_guest: bool = False) -> st
             </a>
           </div>
           
-          <div class="nav-section guest-hide">
+          <!-- Admin-only section: Uses CSS to hide for guests -->
+          <div class="nav-section admin-only">
             <div class="nav-section-title">系统设置</div>
             <a href="/web/redis" class="nav-item {nav_active('redis')}" data-page="redis">
               <span class="nav-item-icon">📊</span>
@@ -2201,18 +2172,18 @@ def _sidebar_html(current_page: str = "dashboard", is_guest: bool = False) -> st
         
         <div class="sidebar-footer">
           <div class="sidebar-user">
-            <div class="sidebar-avatar" id="sidebar-avatar">{"G" if is_guest else "A"}</div>
+            <div class="sidebar-avatar {avatar_class}" id="sidebar-avatar">{avatar_letter}</div>
             <div class="sidebar-user-info">
-              <div class="sidebar-user-name" id="sidebar-username">{"访客" if is_guest else "管理员"}</div>
-              <div class="sidebar-user-role" id="sidebar-role">{"只读模式" if is_guest else "已登录"}</div>
+              <div class="sidebar-user-name" id="sidebar-username">{user_name}</div>
+              <div class="sidebar-user-role" id="sidebar-role">{user_role}</div>
             </div>
           </div>
-          <button onclick="toggleTheme()" class="theme-toggle" style="margin-top: 0.75rem;">
+          <button onclick="toggleTheme()" class="theme-toggle">
             <span class="theme-toggle-icon">🌙</span>
             <span id="theme-text">暗黑模式</span>
           </button>
-          <button onclick="logout()" class="nav-item" style="margin-top: 0.5rem; width: 100%; justify-content: center; color: #f87171; border: 1px solid rgba(248, 113, 113, 0.3); background: rgba(248, 113, 113, 0.1);">
-            <span class="nav-item-icon">🚪</span>
+          <button onclick="logout()" class="btn-logout">
+            <span>🚪</span>
             <span>退出登录</span>
           </button>
         </div>
@@ -2246,8 +2217,26 @@ def _sidebar_js() -> str:
       }
     }
     function toggleTheme() {
-      document.body.classList.toggle('dark-mode');
+      const body = document.body;
+      const currentTheme = body.getAttribute('data-theme');
+      const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+      body.setAttribute('data-theme', newTheme);
+      localStorage.setItem('theme', newTheme);
+      // Update toggle button text
+      const themeText = document.getElementById('theme-text');
+      if (themeText) {
+        themeText.textContent = newTheme === 'light' ? '浅色模式' : '暗黑模式';
+      }
     }
+    // Initialize theme from localStorage
+    (function() {
+      const savedTheme = localStorage.getItem('theme') || 'dark';
+      document.body.setAttribute('data-theme', savedTheme);
+      const themeText = document.getElementById('theme-text');
+      if (themeText) {
+        themeText.textContent = savedTheme === 'light' ? '浅色模式' : '暗黑模式';
+      }
+    })();
     async function logout() {
       try {
         await fetch('/auth/logout', { method: 'POST', credentials: 'include' });
@@ -2257,10 +2246,6 @@ def _sidebar_js() -> str:
       } catch (e) {
         window.location.href = '/web';
       }
-    }
-    // Check guest mode on load
-    if (document.cookie.includes('guest_session=readonly')) {
-      document.body.classList.add('guest-mode');
     }
     '''
 
