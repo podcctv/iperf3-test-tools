@@ -2058,203 +2058,6 @@ async def lookup_geo_info(ip: str) -> dict | None:
     return None
 
 
-def _sidebar_css() -> str:
-    """Generate shared sidebar CSS styles for all pages.
-    
-    Note: Most sidebar styles are now in glass-design.css.
-    This function only contains legacy global styles for compatibility.
-    """
-    return '''
-    /* Global Styles - Legacy compatibility */
-    body {
-      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-      min-height: 100vh;
-      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      color: #f8fafc;
-      margin: 0;
-    }
-    .glass-card, .card {
-      background: rgba(15, 23, 42, 0.7) !important;
-      backdrop-filter: blur(10px) !important;
-      border: 1px solid rgba(148, 163, 184, 0.1) !important;
-      border-radius: 0.75rem;
-    }
-    '''
-
-
-def _sidebar_html(current_page: str = "dashboard", is_guest: bool = False) -> str:
-    """Generate shared sidebar HTML for all pages.
-    
-    Args:
-        current_page: Current page identifier for highlighting nav item (dashboard, tests, schedules, trace, whitelist, redis, admin)
-        is_guest: Whether the user is in guest mode
-    """
-    def nav_active(page: str) -> str:
-        return "active" if page == current_page else ""
-    
-    # Role class for body - single source of truth for permissions
-    role_class = "role-guest" if is_guest else "role-admin"
-    avatar_class = "guest" if is_guest else "admin"
-    avatar_letter = "G" if is_guest else "A"
-    user_name = "访客" if is_guest else "管理员"
-    user_role = "只读模式" if is_guest else "已登录"
-    
-    return f'''
-      <!-- Role Class Script - Must be first -->
-      <script>document.body.classList.add('{role_class}');</script>
-      
-      <!-- Guest Mode Banner (auto shown for role-guest) -->
-      <div class="guest-banner">
-        👁️ 访客模式 · 仅可查看，无法操作
-      </div>
-      
-      <!-- Sidebar Navigation -->
-      <aside class="sidebar" id="sidebar">
-        <div class="sidebar-brand">
-          <div class="sidebar-logo">📊</div>
-          <div>
-            <div class="sidebar-title">iPerf3</div>
-            <div class="sidebar-subtitle">网络测试</div>
-          </div>
-        </div>
-        
-        <nav class="sidebar-nav">
-          <div class="nav-section">
-            <div class="nav-section-title">监控面板</div>
-            <a href="/web" class="nav-item {nav_active('dashboard')}" data-page="dashboard">
-              <span class="nav-item-icon">🏠</span>
-              <span>节点概览</span>
-            </a>
-            <a href="/web/tests" class="nav-item {nav_active('tests')}" data-page="tests">
-              <span class="nav-item-icon">🚀</span>
-              <span>速度测试</span>
-            </a>
-            <a href="/web/schedules" class="nav-item {nav_active('schedules')}" data-page="schedules">
-              <span class="nav-item-icon">📅</span>
-              <span>定时任务</span>
-            </a>
-          </div>
-          
-          <div class="nav-section">
-            <div class="nav-section-title">路由分析</div>
-            <a href="/web/trace" class="nav-item {nav_active('trace')}" data-page="trace">
-              <span class="nav-item-icon">🔍</span>
-              <span>单次追踪</span>
-            </a>
-            <a href="/web/trace#schedules" class="nav-item" data-page="trace-schedules">
-              <span class="nav-item-icon">📅</span>
-              <span>定时追踪</span>
-            </a>
-            <a href="/web/trace#compare" class="nav-item" data-page="compare">
-              <span class="nav-item-icon">📊</span>
-              <span>多元对比</span>
-            </a>
-            <a href="/web/trace#history" class="nav-item" data-page="history">
-              <span class="nav-item-icon">📜</span>
-              <span>历史记录</span>
-            </a>
-          </div>
-          
-          <!-- Admin-only section: Uses CSS to hide for guests -->
-          <div class="nav-section admin-only">
-            <div class="nav-section-title">系统设置</div>
-            <a href="/web/redis" class="nav-item {nav_active('redis')}" data-page="redis">
-              <span class="nav-item-icon">📊</span>
-              <span>Redis 监控</span>
-            </a>
-            <a href="/web/whitelist" class="nav-item {nav_active('whitelist')}" data-page="whitelist">
-              <span class="nav-item-icon">🛡️</span>
-              <span>白名单管理</span>
-            </a>
-            <a href="/web/admin" class="nav-item {nav_active('admin')}" data-page="admin">
-              <span class="nav-item-icon">🔐</span>
-              <span>系统管理</span>
-            </a>
-          </div>
-        </nav>
-        
-        <div class="sidebar-footer">
-          <div class="sidebar-user">
-            <div class="sidebar-avatar {avatar_class}" id="sidebar-avatar">{avatar_letter}</div>
-            <div class="sidebar-user-info">
-              <div class="sidebar-user-name" id="sidebar-username">{user_name}</div>
-              <div class="sidebar-user-role" id="sidebar-role">{user_role}</div>
-            </div>
-          </div>
-          <button onclick="toggleTheme()" class="theme-toggle">
-            <span class="theme-toggle-icon">🌙</span>
-            <span id="theme-text">暗黑模式</span>
-          </button>
-          <button onclick="logout()" class="btn-logout">
-            <span>🚪</span>
-            <span>退出登录</span>
-          </button>
-        </div>
-      </aside>
-      
-      <!-- Sidebar Overlay for Mobile -->
-      <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
-      
-      <!-- Mobile Menu Button -->
-      <button class="mobile-menu-btn" id="mobile-menu-btn" onclick="toggleSidebar()">☰</button>
-    '''
-
-
-def _sidebar_js() -> str:
-    """Generate shared sidebar JavaScript functions."""
-    return '''
-    function toggleSidebar() {
-      const sidebar = document.getElementById('sidebar');
-      const overlay = document.getElementById('sidebar-overlay');
-      if (sidebar) {
-        sidebar.classList.toggle('open');
-        if (overlay) overlay.classList.toggle('active');
-      }
-    }
-    function closeSidebar() {
-      const sidebar = document.getElementById('sidebar');
-      const overlay = document.getElementById('sidebar-overlay');
-      if (sidebar) {
-        sidebar.classList.remove('open');
-        if (overlay) overlay.classList.remove('active');
-      }
-    }
-    function toggleTheme() {
-      const body = document.body;
-      const currentTheme = body.getAttribute('data-theme');
-      const newTheme = currentTheme === 'light' ? 'dark' : 'light';
-      body.setAttribute('data-theme', newTheme);
-      localStorage.setItem('theme', newTheme);
-      // Update toggle button text
-      const themeText = document.getElementById('theme-text');
-      if (themeText) {
-        themeText.textContent = newTheme === 'light' ? '浅色模式' : '暗黑模式';
-      }
-    }
-    // Initialize theme from localStorage
-    (function() {
-      const savedTheme = localStorage.getItem('theme') || 'dark';
-      document.body.setAttribute('data-theme', savedTheme);
-      const themeText = document.getElementById('theme-text');
-      if (themeText) {
-        themeText.textContent = savedTheme === 'light' ? '浅色模式' : '暗黑模式';
-      }
-    })();
-    async function logout() {
-      try {
-        await fetch('/auth/logout', { method: 'POST', credentials: 'include' });
-        document.cookie = 'session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-        document.cookie = 'guest_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-        window.location.href = '/web';
-      } catch (e) {
-        window.location.href = '/web';
-      }
-    }
-    '''
-
-
-def _login_html() -> str:
-    return """
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -7512,14 +7315,6 @@ def _login_html() -> str:
     """
 
 
-def _tests_page_html() -> str:
-    """Generate HTML for the tests page with test plan and recent tests"""
-    sidebar_css = _sidebar_css()
-    sidebar_html = _sidebar_html(current_page="tests")
-    sidebar_js = _sidebar_js()
-    
-    # Split into parts: header with f-string interpolation + body with raw JS
-    header = f'''<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
@@ -8213,13 +8008,6 @@ def _tests_page_html() -> str:
     return header + body + footer
 
 
-def _whitelist_html() -> str:
-    sidebar_css = _sidebar_css()
-    sidebar_html = _sidebar_html(current_page="whitelist")
-    sidebar_js = _sidebar_js()
-    
-    # Header with sidebar (f-string)
-    header = f'''<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
@@ -8654,13 +8442,6 @@ def _whitelist_html() -> str:
     return header + body + footer
 
 
-def _schedules_html() -> str:
-    sidebar_css = _sidebar_css()
-    sidebar_html = _sidebar_html(current_page="schedules")
-    sidebar_js = _sidebar_js()
-    
-    # Header with sidebar (f-string)
-    header = f'''<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
@@ -10457,13 +10238,6 @@ ${latestStats}
     return header + body + footer
 
 
-def _trace_html(is_guest: bool = False) -> str:
-    sidebar_css = _sidebar_css()
-    sidebar_html = _sidebar_html(current_page="trace", is_guest=is_guest)
-    sidebar_js = _sidebar_js()
-    
-    # Header Part 1 (f-string)
-    header_part1 = f'''<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
@@ -12294,12 +12068,6 @@ def _trace_html(is_guest: bool = False) -> str:
 
 
 
-def _admin_html_deprecated() -> str:
-    sidebar_css = _sidebar_css()
-    sidebar_html = _sidebar_html(current_page="admin")
-    sidebar_js = _sidebar_js()
-    
-    header = f'''<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
@@ -12592,14 +12360,6 @@ def _admin_html_deprecated() -> str:
     return header + body + footer
 
 
-# @app.get("/web", response_class=HTMLResponse)
-def dashboard() -> HTMLResponse:
-    """Serve dashboard page."""
-
-    return HTMLResponse(content=_login_html())
-
-
-# @app.get("/web/schedules")
 async def schedules_page(request: Request):
     """定时任务管理页面"""
     if not auth_manager().is_authenticated(request) and not _is_guest(request):
@@ -12608,17 +12368,6 @@ async def schedules_page(request: Request):
     return HTMLResponse(content=_schedules_html())
 
 
-# @app.get("/web/whitelist")
-async def whitelist_page(request: Request):
-    """白名单管理页面"""
-    if not auth_manager().is_authenticated(request):
-        return HTMLResponse(content="<script>window.location.href='/web';</script>")
-    
-    return HTMLResponse(content=_whitelist_html())
-
-
-
-# @app.get("/web/tests")
 async def tests_page(request: Request):
     """单次测试页面 - 显示测试计划和最近测试"""
     if not auth_manager().is_authenticated(request) and not _is_guest(request):
@@ -12629,15 +12378,6 @@ async def tests_page(request: Request):
 
 # Duplicate /web/admin route deleted to avoid conflict with active route
 
-
-
-# @app.get("/web/trace")
-async def trace_page(request: Request):
-    """路由追踪页面"""
-    if not auth_manager().is_authenticated(request) and not _is_guest(request):
-        return HTMLResponse(content="<script>window.location.href='/web';</script>")
-    
-    return HTMLResponse(content=_trace_html(is_guest=_is_guest(request)))
 
 
 @app.get("/auth/status")
@@ -16963,13 +16703,6 @@ async def agent_pending_count(
 # System Admin Page
 # ============================================================================
 
-def _admin_html():
-    """Generate system admin HTML page."""
-    sidebar_css = _sidebar_css()
-    sidebar_html = _sidebar_html(current_page="admin")
-    sidebar_js = _sidebar_js()
-    
-    header = f'''<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
@@ -17186,17 +16919,6 @@ def _admin_html():
 
 
 
-# @app.get("/web/admin")
-async def admin_page(request: Request):
-    """System admin page."""
-    if not auth_manager().is_authenticated(request):
-        return HTMLResponse(content="<script>window.location.href='/web';</script>")
-    
-    return HTMLResponse(content=_admin_html())
-
-
-# ============== Alert Notification API ==============
-
 class AlertConfigUpdate(BaseModel):
     """Request model for updating alert configuration."""
     key: str  # "telegram", "webhook", "thresholds"
@@ -17365,13 +17087,6 @@ async def trigger_alert(
 # Redis Monitoring Page
 # ============================================================================
 
-def _redis_monitoring_html() -> str:
-    """Redis cache monitoring and management page."""
-    sidebar_css = _sidebar_css()
-    sidebar_html = _sidebar_html(current_page="redis")
-    sidebar_js = _sidebar_js()
-
-    header = f'''<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
@@ -17759,10 +17474,3 @@ def _redis_monitoring_html() -> str:
 
 
 
-# @app.get("/web/redis")
-async def redis_monitoring_page(request: Request):
-    """Redis cache monitoring and management page."""
-    if not auth_manager().is_authenticated(request):
-        return HTMLResponse(content="<script>window.location.href='/web';</script>")
-    
-    return HTMLResponse(content=_redis_monitoring_html())
