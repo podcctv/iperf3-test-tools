@@ -44,7 +44,7 @@ async def whitelist_page(request: Request):
 
 @router.get("/redis", response_class=HTMLResponse)
 async def redis_page(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse("redis.html", {"request": request})
 
 @router.get("/admin", response_class=HTMLResponse)
 async def admin_page(request: Request):
