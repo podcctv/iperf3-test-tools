@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>白名单管理 - iPerf3 测试工具</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/themes/dark.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@radix-ui/themes@3.1.1/dist/css/themes.css" />
+    <script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/shoelace.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/static/glass-design.css" />
+    <!-- Common Styles -->
+    <link rel="stylesheet" href="/static/theme.css" />
+    <link rel="stylesheet" href="/static/sidebar.css" />
+    <style>
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .spin {
+            display: inline-block;
+            animation: spin 1s linear infinite;
+        }
+    </style>
+    <script src="/static/theme.js" defer></script>
+</head>
+
+<body class="min-h-screen text-white">
+    <script>
+        if (document.cookie.includes('guest_session=readonly')) {
+            document.body.classList.add('guest-mode');
+        }
+    </script>
+
+    <div class="radix-themes min-h-screen" data-theme="dark">
+        <div class="app-layout">
+            <!-- Sidebar Navigation -->
+            <aside class="sidebar hidden" id="sidebar">
+                <div class="sidebar-brand">
+                    <div class="sidebar-logo">📊</div>
+                    <div>
+                        <div class="sidebar-title">iPerf3</div>
+                        <div class="sidebar-subtitle">网络测试</div>
+                    </div>
+                </div>
+
+                <nav class="sidebar-nav">
+                    <div class="nav-section">
+                        <div class="nav-section-title">监控面板</div>
+                        <a href="/web" class="nav-item" data-page="dashboard">
+                            <span class="nav-item-icon">🏠</span>
+                            <span>节点概览</span>
+                        </a>
+                        <a href="/web/tests" class="nav-item" data-page="tests">
+                            <span class="nav-item-icon">🚀</span>
+                            <span>速度测试</span>
+                        </a>
+                        <a href="/web/schedules" class="nav-item" data-page="schedules">
+                            <span class="nav-item-icon">📅</span>
+                            <span>定时任务</span>
+                        </a>
+                    </div>
+
+                    <div class="nav-section">
+                        <div class="nav-section-title">路由分析</div>
+                        <a href="/web/trace" class="nav-item" data-page="trace">
+                            <span class="nav-item-icon">🔍</span>
+                            <span>单次追踪</span>
+                        </a>
+                        <a href="/web/trace#schedules" class="nav-item" data-page="trace-schedules">
+                            <span class="nav-item-icon">📅</span>
+                            <span>定时追踪</span>
+                        </a>
+                        <a href="/web/trace#compare" class="nav-item" data-page="compare">
+                            <span class="nav-item-icon">📊</span>
+                            <span>多元对比</span>
+                        </a>
+                        <a href="/web/trace#history" class="nav-item" data-page="history">
+                            <span class="nav-item-icon">📜</span>
+                            <span>历史记录</span>
+                        </a>
+                    </div>
+
+                    <div class="nav-section guest-hide">
+                        <div class="nav-section-title">系统设置</div>
+                        <a href="/web/redis" class="nav-item" data-page="redis">
+                            <span class="nav-item-icon">📊</span>
+                            <span>Redis 监控</span>
+                        </a>
+                        <a href="/web/whitelist" class="nav-item active" data-page="whitelist">
+                            <span class="nav-item-icon">🛡️</span>
+                            <span>白名单管理</span>
+                        </a>
+                        <a href="javascript:void(0)" onclick="openSettingsTab('password')" class="nav-item">
+                            <span class="nav-item-icon">🔐</span>
+                            <span>修改密码</span>
+                        </a>
+                        <a href="javascript:void(0)" onclick="openSettingsTab('telegram')" class="nav-item">
+                            <span class="nav-item-icon">📱</span>
+                            <span>Telegram 告警</span>
+                        </a>
+                        <a href="/web/admin" class="nav-item" data-page="admin">
+                            <span class="nav-item-icon">🗄️</span>
+                            <span>数据库管理</span>
+                        </a>
+                    </div>
+                </nav>
+
+                <div class="sidebar-footer">
+                    <div class="sidebar-user">
+                        <div class="sidebar-avatar" id="sidebar-avatar">A</div>
+                        <div class="sidebar-user-info">
+                            <div class="sidebar-user-name" id="sidebar-username">管理员</div>
+                            <div class="sidebar-user-role" id="sidebar-role">已登录</div>
+                        </div>
+                    </div>
+                    <button onclick="toggleTheme()" class="theme-toggle" style="margin-top: 0.75rem; width: 100%;">
+                        <span class="theme-toggle-icon">🌙</span>
+                        <span class="theme-toggle-track"></span>
+                    </button>
+                    <button onclick="logout()" class="nav-item"
+                        style="margin-top: 0.5rem; width: 100%; justify-content: center; color: #f87171; border: 1px solid rgba(248, 113, 113, 0.3); background: rgba(248, 113, 113, 0.1);">
+                        <span class="nav-item-icon">🚪</span>
+                        <span>退出登录</span>
+                    </button>
+                </div>
+            </aside>
+
+            <!-- Sidebar Overlay for Mobile -->
+            <div class="sidebar-overlay hidden" id="sidebar-overlay" onclick="closeSidebar()"></div>
+
+            <!-- Mobile Menu Button -->
+            <button class="mobile-menu-btn hidden" id="mobile-menu-btn" onclick="toggleSidebar()">☰</button>
+
+            <main class="main-content">
+                <div class="max-w-6xl mx-auto px-6 py-10">
+
+                    <!-- Header -->
+                    <div class="mb-8 flex items-center justify-between">
+                        <div>
+                            <h1 class="text-3xl font-bold text-white">白名单管理</h1>
+                            <p class="text-slate-400 mt-1">IP Whitelist Management - 支持 IPv4、IPv6 和 CIDR 网段</p>
+                        </div>
+                        <div class="flex gap-3">
+                            <button id="check-status-btn"
+                                class="px-4 py-2 rounded-lg border border-amber-600 bg-amber-900/20 text-sm font-semibold text-amber-300 hover:bg-amber-900/40 transition">
+                                📊 检查同步状态
+                            </button>
+                            <button id="sync-btn"
+                                class="px-4 py-2 rounded-lg bg-gradient-to-r from-sky-500 to-indigo-500 text-sm font-semibold text-white shadow-lg hover:scale-105 transition">
+                                🔄 同步到所有Agent
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="alert-box" class="hidden mb-6 p-4 rounded-lg border"></div>
+
+                    <!-- Stats Cards -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                        <div class="glass-card rounded-2xl p-6">
+                            <p class="text-slate-400 text-sm mb-1">总 IP 数</p>
+                            <p id="whitelist-total" class="text-3xl font-bold text-white">0</p>
+                        </div>
+                        <div class="glass-card rounded-2xl p-6">
+                            <p class="text-slate-400 text-sm mb-1">同步状态</p>
+                            <p id="sync-status" class="text-xl font-semibold text-emerald-400">● 检查中...</p>
+                        </div>
+                        <div class="glass-card rounded-2xl p-6">
+                            <p class="text-slate-400 text-sm mb-1">CIDR 范围</p>
+                            <p id="whitelist-cidr-count" class="text-3xl font-bold text-purple-400">0</p>
+                        </div>
+                    </div>
+
+                    <!-- Add IP Card -->
+                    <div class="glass-card rounded-2xl p-6 mb-6">
+                        <h2 class="text-xl font-semibold text-sky-400 mb-4">添加 IP 地址</h2>
+                        <div class="flex gap-3">
+                            <input id="ip-input" type="text" placeholder="例如: 10.0.0.1 或 10.0.0.0/24"
+                                class="flex-1 px-4 py-2 rounded-lg bg-slate-800/60 border border-slate-700 text-white focus:border-sky-500 focus:outline-none" />
+                            <button id="add-ip-btn"
+                                class="px-6 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-sky-500 text-sm font-semibold text-white shadow-lg hover:scale-105 transition">
+                                + 添加
+                            </button>
+                        </div>
+                        <p class="text-xs text-slate-500 mt-2">支持 IPv4、IPv6 和 CIDR 网段格式</p>
+                    </div>
+
+                    <!-- Whitelist Table -->
+                    <div class="glass-card rounded-2xl p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <h2 class="text-xl font-semibold text-white">白名单列表</h2>
+                            <button id="refresh-btn"
+                                class="px-4 py-2 rounded-lg border border-slate-700 bg-slate-800/60 text-sm font-semibold text-slate-100 hover:border-sky-500 transition">
+                                🔄 刷新列表
+                            </button>
+                        </div>
+
+                        <!-- Table -->
+                        <div class="overflow-x-auto">
+                            <table class="w-full">
+                                <thead>
+                                    <tr class="border-b border-slate-700">
+                                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">
+                                            IP 地址</th>
+                                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">
+                                            来源</th>
+                                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">
+                                            同步状态</th>
+                                        <th class="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">
+                                            类型</th>
+                                        <th class="px-4 py-3 text-right text-xs font-semibold text-slate-400 uppercase">
+                                            操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="whitelist-table-body">
+                                    <!-- Populated by JS -->
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <p class="text-xs text-amber-400 mt-4">💡 提示: 添加/删除节点时会自动同步白名单，也可手动触发同步。</p>
+                    </div>
+
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script src="/static/js/sidebar.js"></script>
+    <script type="module" src="/static/js/whitelist.js"></script>
+</body>
+
+</html>

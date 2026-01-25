@@ -40,7 +40,7 @@ async def trace_page(request: Request):
 
 @router.get("/whitelist", response_class=HTMLResponse)
 async def whitelist_page(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse("whitelist.html", {"request": request})
 
 @router.get("/redis", response_class=HTMLResponse)
 async def redis_page(request: Request):
