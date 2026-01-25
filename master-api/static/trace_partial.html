@@ -1,0 +1,172 @@
+    <div id="panel-single">
+      <div class="rounded-xl border border-slate-700 bg-slate-800/60 p-5 mb-6">
+        <div class="grid gap-4 md:grid-cols-4">
+          <div>
+            <label class="text-xs font-medium text-slate-400">节点 A</label>
+            <select id="trace-src-node" class="trace-input w-full mt-1 p-2.5 text-sm text-white"><option value="">选择...</option></select>
+          </div>
+          <div>
+            <label class="text-xs font-medium text-slate-400">目标类型</label>
+            <select id="trace-target-type" onchange="toggleTargetInput()" class="trace-input w-full mt-1 p-2.5 text-sm text-white">
+              <option value="node" selected>选择节点（双向对比）</option>
+              <option value="custom">自定义地址（单向）</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs font-medium text-slate-400">节点 B / 目标</label>
+            <select id="trace-target-node" class="trace-input w-full mt-1 p-2.5 text-sm text-white"><option value="">选择...</option></select>
+            <input type="text" id="trace-target-input" placeholder="IP或域名" class="trace-input hidden w-full mt-1 p-2.5 text-sm text-white">
+          </div>
+          <div class="flex items-end">
+            <button id="trace-start-btn" onclick="runBidirectionalTrace()" class="w-full px-4 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm font-bold">🚀 开始追踪</button>
+          </div>
+        </div>
+        <div id="trace-status" class="mt-3 text-sm text-slate-400"></div>
+      </div>
+
+      <div id="trace-results" class="hidden">
+        <div class="mb-4 p-4 rounded-xl border border-slate-700 bg-slate-800/60">
+          <div class="flex items-start justify-between gap-4">
+            <div class="grid grid-cols-2 gap-4 flex-1">
+              <div>
+                <div class="flex items-center gap-2 mb-2"><span class="text-emerald-400 text-lg">→</span><span class="font-semibold" id="fwd-title">去程</span></div>
+                <div class="flex flex-wrap items-center gap-2 text-sm"><span id="fwd-badges"></span><span class="text-slate-400" id="fwd-stats"></span></div>
+              </div>
+              <div>
+                <div class="flex items-center gap-2 mb-2"><span class="text-amber-400 text-lg">←</span><span class="font-semibold" id="rev-title">回程</span></div>
+                <div class="flex flex-wrap items-center gap-2 text-sm"><span id="rev-badges"></span><span class="text-slate-400" id="rev-stats"></span></div>
+              </div>
+            </div>
+            <button id="share-btn" onclick="shareAsImage()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+              <span>📋</span><span>分享图片</span>
+            </button>
+          </div>
+        </div>
+        <div class="rounded-xl border border-slate-700 bg-slate-800/60 overflow-hidden">
+          <div class="grid grid-cols-2">
+            <div class="px-4 py-3 bg-slate-900/60 font-semibold text-emerald-400 border-b border-slate-700">→ 去程路由</div>
+            <div class="px-4 py-3 bg-slate-900/60 font-semibold text-amber-400 border-b border-slate-700">← 回程路由</div>
+          </div>
+          <div id="comparison-body"></div>
+        </div>
+        
+        <!-- Latency Chart Section -->
+        <div id="latency-charts" class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="glass-card rounded-xl p-4 fade-in">
+            <h4 class="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">📈 去程延迟分布</h4>
+            <div class="chart-container">
+              <canvas id="fwd-latency-chart"></canvas>
+            </div>
+          </div>
+          <div class="glass-card rounded-xl p-4 fade-in">
+            <h4 class="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">📉 回程延迟分布</h4>
+            <div class="chart-container">
+              <canvas id="rev-latency-chart"></canvas>
+            </div>
+          </div>
+        </div>
+        
+        <!-- AS Path Analysis Section -->
+        <div class="mt-4 glass-card rounded-xl p-4 fade-in">
+          <h4 class="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">📊 AS 路径分析</h4>
+          <div class="space-y-4">
+            <div>
+              <div class="text-xs text-emerald-400 mb-2">→ 去程 AS 路径</div>
+              <div id="fwd-as-path" class="flex flex-wrap items-center gap-2"></div>
+            </div>
+            <div>
+              <div class="text-xs text-amber-400 mb-2">← 回程 AS 路径</div>
+              <div id="rev-as-path" class="flex flex-wrap items-center gap-2"></div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="mt-3 text-xs text-slate-500"><span class="inline-block w-3 h-3 bg-amber-500/30 border-l-2 border-amber-500 mr-1"></span> 去回程不同的跳点</div>
+      </div>
+
+      <div id="single-result" class="hidden rounded-xl border border-slate-700 bg-slate-800/60 overflow-hidden">
+        <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <span class="font-semibold" id="single-title">追踪结果</span>
+            <span id="single-badges"></span>
+            <span class="text-slate-400 text-sm" id="single-stats"></span>
+          </div>
+          <button id="share-single-btn" onclick="shareSingleAsImage()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+            <span>📋</span><span>打码分享</span>
+          </button>
+        </div>
+        <div id="single-hops"></div>
+      </div>
+    </div>
+
+    <div id="panel-schedules" class="hidden">
+      <div class="rounded-xl border border-slate-700 bg-slate-800/60 p-5">
+        <div class="flex items-center justify-between mb-4"><h3 class="font-semibold">定时追踪任务</h3><button onclick="showCreateScheduleModal()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-semibold">+ 新建</button></div>
+        <div id="schedule-list" class="space-y-2"><p class="text-slate-500 text-sm">加载中...</p></div>
+      </div>
+    </div>
+
+    <div id="panel-multisrc" class="hidden">
+      <div class="glass-card rounded-xl p-5 mb-6">
+        <h3 class="font-semibold mb-4">🌐 多源节点对比</h3>
+        <p class="text-sm text-slate-400 mb-4">从多个节点同时追踪到同一目标，对比不同地区的路由差异。</p>
+        
+        <div class="grid gap-4 md:grid-cols-2 mb-4">
+          <div>
+            <label class="text-xs font-medium text-slate-400 mb-2 block">选择源节点（可多选）</label>
+            <div id="multisrc-nodes" class="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 bg-slate-900/50 rounded-lg border border-slate-700"></div>
+          </div>
+          <div>
+            <label class="text-xs font-medium text-slate-400 mb-2 block">目标类型</label>
+            <select id="multisrc-target-type" onchange="toggleMultisrcTarget()" class="w-full p-2.5 rounded-lg border border-slate-600 bg-slate-700 text-white text-sm mb-2">
+              <option value="node">选择节点</option>
+              <option value="custom">自定义地址</option>
+            </select>
+            <select id="multisrc-target-node" onchange="updateMultisrcNodeDisabled()" class="w-full p-2.5 rounded-lg border border-slate-600 bg-slate-700 text-white text-sm">
+              <option value="">选择目标节点...</option>
+            </select>
+            <input id="multisrc-target" type="text" placeholder="IP 或 域名 (如 8.8.8.8 或 google.com)" class="hidden w-full p-2.5 rounded-lg border border-slate-600 bg-slate-700 text-white text-sm">
+            <button id="multisrc-start-btn" onclick="runMultiSourceTrace()" class="w-full mt-3 px-4 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm font-bold">
+              🚀 开始多源追踪
+            </button>
+          </div>
+        </div>
+        
+        <div id="multisrc-status" class="text-sm text-slate-400"></div>
+      </div>
+      
+      <div id="multisrc-results" class="hidden space-y-4"></div>
+    </div>
+
+    <div id="panel-history" class="hidden">
+      <div class="rounded-xl border border-slate-700 bg-slate-800/60 p-5">
+        <div class="flex items-center justify-between mb-4"><h3 class="font-semibold">历史记录</h3><button onclick="loadHistory()" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm">🔄 刷新</button></div>
+        <div id="history-list" class="space-y-2"><p class="text-slate-500 text-sm">加载中...</p></div>
+      </div>
+    </div>
+
+    <div id="schedule-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+      <div class="bg-slate-800 rounded-xl border border-slate-700 p-5 w-full max-w-md">
+        <h3 class="font-bold mb-4">新建定时追踪</h3>
+        <div class="space-y-3">
+          <div><label class="text-xs text-slate-400">名称</label><input id="sched-name" type="text" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm"></div>
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="text-xs text-slate-400">源节点</label><select id="sched-src" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm"></select></div>
+            <div><label class="text-xs text-slate-400">目标类型</label><select id="sched-target-type" onchange="toggleSchedTarget()" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm"><option value="node">选择节点</option><option value="custom">自定义 IP/域名</option></select></div>
+          </div>
+          <div class="grid grid-cols-1 gap-3">
+            <div id="sched-target-node-row"><label class="text-xs text-slate-400">目标节点</label><select id="sched-target-node" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm"></select></div>
+            <div id="sched-target-input-row" class="hidden"><label class="text-xs text-slate-400">目标地址</label><input id="sched-target" type="text" placeholder="IP 或 域名" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm"></div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="text-xs text-slate-400">间隔(分钟)</label><input id="sched-interval" type="number" value="60" min="5" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm"></div>
+            <div><label class="text-xs text-slate-400">变化告警</label><select id="sched-alert" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm"><option value="true">启用</option><option value="false">禁用</option></select></div>
+          </div>
+        </div>
+        <div class="flex justify-end gap-2 mt-5">
+          <button onclick="hideScheduleModal()" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">取消</button>
+          <button onclick="createSchedule()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-sm font-semibold">创建</button>
+        </div>
+      </div>
+    </div>
+  </div>

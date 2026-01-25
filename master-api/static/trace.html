@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>路由追踪 - iPerf3 测试工具</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/themes/dark.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@radix-ui/themes@3.1.1/dist/css/themes.css" />
+  <script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/shoelace.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/glass-design.css" />
+  <link rel="stylesheet" href="/static/css/trace.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dom-to-image/2.6.0/dom-to-image.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Common Styles -->
+  <link rel="stylesheet" href="/static/theme.css" />
+  <link rel="stylesheet" href="/static/sidebar.css" />
+  <script src="/static/theme.js" defer></script>
+</head>
+<body class="min-h-screen text-white">
+  <div class="radix-themes min-h-screen" data-theme="dark">
+    <div class="app-layout">
+      <!-- Sidebar Navigation -->
+      <aside class="sidebar hidden" id="sidebar">
+        <div class="sidebar-brand">
+          <div class="sidebar-logo">📊</div>
+          <div>
+            <div class="sidebar-title">iPerf3</div>
+            <div class="sidebar-subtitle">网络测试</div>
+          </div>
+        </div>
+        
+        <nav class="sidebar-nav">
+          <div class="nav-section">
+            <div class="nav-section-title">监控面板</div>
+            <a href="/web" class="nav-item" data-page="dashboard">
+              <span class="nav-item-icon">🏠</span>
+              <span>节点概览</span>
+            </a>
+            <a href="/web/tests" class="nav-item" data-page="tests">
+              <span class="nav-item-icon">🚀</span>
+              <span>速度测试</span>
+            </a>
+            <a href="/web/schedules" class="nav-item" data-page="schedules">
+              <span class="nav-item-icon">📅</span>
+              <span>定时任务</span>
+            </a>
+          </div>
+          
+          <div class="nav-section">
+            <div class="nav-section-title">路由分析</div>
+            <a href="/web/trace" class="nav-item active" data-page="trace">
+              <span class="nav-item-icon">🔍</span>
+              <span>单次追踪</span>
+            </a>
+            <a href="/web/trace#schedules" class="nav-item" data-page="trace-schedules">
+              <span class="nav-item-icon">📅</span>
+              <span>定时追踪</span>
+            </a>
+            <a href="/web/trace#compare" class="nav-item" data-page="compare">
+              <span class="nav-item-icon">📊</span>
+              <span>多元对比</span>
+            </a>
+            <a href="/web/trace#history" class="nav-item" data-page="history">
+              <span class="nav-item-icon">📜</span>
+              <span>历史记录</span>
+            </a>
+          </div>
+          
+          <div class="nav-section guest-hide">
+            <div class="nav-section-title">系统设置</div>
+            <a href="/web/redis" class="nav-item" data-page="redis">
+              <span class="nav-item-icon">📊</span>
+              <span>Redis 监控</span>
+            </a>
+            <a href="/web/whitelist" class="nav-item" data-page="whitelist">
+              <span class="nav-item-icon">🛡️</span>
+              <span>白名单管理</span>
+            </a>
+            <a href="javascript:void(0)" onclick="openSettingsTab('password')" class="nav-item">
+              <span class="nav-item-icon">🔐</span>
+              <span>修改密码</span>
+            </a>
+            <a href="javascript:void(0)" onclick="openSettingsTab('telegram')" class="nav-item">
+              <span class="nav-item-icon">📱</span>
+              <span>Telegram 告警</span>
+            </a>
+            <a href="javascript:void(0)" onclick="openSettingsTab('admin')" class="nav-item">
+              <span class="nav-item-icon">🗄️</span>
+              <span>数据库管理</span>
+            </a>
+          </div>
+        </nav>
+        
+        <div class="sidebar-footer">
+          <div class="sidebar-user">
+            <div class="sidebar-avatar" id="sidebar-avatar">A</div>
+            <div class="sidebar-user-info">
+              <div class="sidebar-user-name" id="sidebar-username">管理员</div>
+              <div class="sidebar-user-role" id="sidebar-role">已登录</div>
+            </div>
+          </div>
+          <button onclick="toggleTheme()" class="theme-toggle" style="margin-top: 0.75rem; width: 100%;">
+            <span class="theme-toggle-icon">🌙</span>
+            <span class="theme-toggle-track"></span>
+          </button>
+          <button onclick="logout()" class="nav-item" style="margin-top: 0.5rem; width: 100%; justify-content: center; color: #f87171; border: 1px solid rgba(248, 113, 113, 0.3); background: rgba(248, 113, 113, 0.1);">
+            <span class="nav-item-icon">🚪</span>
+            <span>退出登录</span>
+          </button>
+        </div>
+      </aside>
+      
+      <!-- Sidebar Overlay for Mobile -->
+      <div class="sidebar-overlay hidden" id="sidebar-overlay" onclick="closeSidebar()"></div>
+      
+      <!-- Mobile Menu Button -->
+      <button class="mobile-menu-btn hidden" id="mobile-menu-btn" onclick="toggleSidebar()">☰</button>
+
+      <main class="main-content">
+        <div class="max-w-7xl mx-auto px-4 py-8">
+          <div class="mb-6">
+            <h1 class="text-2xl font-bold mt-2">🌐 Traceroute 路由追踪</h1>
+          </div>
+
+          <!-- Trace Content -->
+          <div id="panel-single">
+            <div class="rounded-xl border border-slate-700 bg-slate-800/60 p-5 mb-6">
+              <div class="grid gap-4 md:grid-cols-4">
+                <div>
+                  <label class="text-xs font-medium text-slate-400">节点 A</label>
+                  <select id="trace-src-node" class="trace-input w-full mt-1 p-2.5 text-sm text-white"><option value="">选择...</option></select>
+                </div>
+                <div>
+                  <label class="text-xs font-medium text-slate-400">目标类型</label>
+                  <select id="trace-target-type" onchange="toggleTargetInput()" class="trace-input w-full mt-1 p-2.5 text-sm text-white">
+                    <option value="node" selected>选择节点（双向对比）</option>
+                    <option value="custom">自定义地址（单向）</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="text-xs font-medium text-slate-400">节点 B / 目标</label>
+                  <select id="trace-target-node" class="trace-input w-full mt-1 p-2.5 text-sm text-white"><option value="">选择...</option></select>
+                  <input type="text" id="trace-target-input" placeholder="IP或域名" class="trace-input hidden w-full mt-1 p-2.5 text-sm text-white">
+                </div>
+                <div class="flex items-end">
+                  <button id="trace-start-btn" onclick="runBidirectionalTrace()" class="w-full px-4 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm font-bold">🚀 开始追踪</button>
+                </div>
+              </div>
+              <div id="trace-status" class="mt-3 text-sm text-slate-400"></div>
+            </div>
+
+            <div id="trace-results" class="hidden">
+              <div class="mb-4 p-4 rounded-xl border border-slate-700 bg-slate-800/60">
+                <div class="flex items-start justify-between gap-4">
+                  <div class="grid grid-cols-2 gap-4 flex-1">
+                    <div>
+                      <div class="flex items-center gap-2 mb-2"><span class="text-emerald-400 text-lg">→</span><span class="font-semibold" id="fwd-title">去程</span></div>
+                      <div class="flex flex-wrap items-center gap-2 text-sm"><span id="fwd-badges"></span><span class="text-slate-400" id="fwd-stats"></span></div>
+                    </div>
+                    <div>
+                      <div class="flex items-center gap-2 mb-2"><span class="text-amber-400 text-lg">←</span><span class="font-semibold" id="rev-title">回程</span></div>
+                      <div class="flex flex-wrap items-center gap-2 text-sm"><span id="rev-badges"></span><span class="text-slate-400" id="rev-stats"></span></div>
+                    </div>
+                  </div>
+                  <button id="share-btn" onclick="shareAsImage()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+                    <span>📋</span><span>分享图片</span>
+                  </button>
+                </div>
+              </div>
+              <div class="rounded-xl border border-slate-700 bg-slate-800/60 overflow-hidden">
+                <div class="grid grid-cols-2">
+                  <div class="px-4 py-3 bg-slate-900/60 font-semibold text-emerald-400 border-b border-slate-700">→ 去程路由</div>
+                  <div class="px-4 py-3 bg-slate-900/60 font-semibold text-amber-400 border-b border-slate-700">← 回程路由</div>
+                </div>
+                <div id="comparison-body"></div>
+              </div>
+              
+              <!-- Latency Chart Section -->
+              <div id="latency-charts" class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="glass-card rounded-xl p-4 fade-in">
+                  <h4 class="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">📈 去程延迟分布</h4>
+                  <div class="chart-container">
+                    <canvas id="fwd-latency-chart"></canvas>
+                  </div>
+                </div>
+                <div class="glass-card rounded-xl p-4 fade-in">
+                  <h4 class="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">📉 回程延迟分布</h4>
+                  <div class="chart-container">
+                    <canvas id="rev-latency-chart"></canvas>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- AS Path Analysis Section -->
+              <div class="mt-4 glass-card rounded-xl p-4 fade-in">
+                <h4 class="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">📊 AS 路径分析</h4>
+                <div class="space-y-4">
+                  <div>
+                    <div class="text-xs text-emerald-400 mb-2">→ 去程 AS 路径</div>
+                    <div id="fwd-as-path" class="flex flex-wrap items-center gap-2"></div>
+                  </div>
+                  <div>
+                    <div class="text-xs text-amber-400 mb-2">← 回程 AS 路径</div>
+                    <div id="rev-as-path" class="flex flex-wrap items-center gap-2"></div>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="mt-3 text-xs text-slate-500"><span class="inline-block w-3 h-3 bg-amber-500/30 border-l-2 border-amber-500 mr-1"></span> 去回程不同的跳点</div>
+            </div>
+
+            <div id="single-result" class="hidden rounded-xl border border-slate-700 bg-slate-800/60 overflow-hidden">
+              <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  <span class="font-semibold" id="single-title">追踪结果</span>
+                  <span id="single-badges"></span>
+                  <span class="text-slate-400 text-sm" id="single-stats"></span>
+                </div>
+                <button id="share-single-btn" onclick="shareSingleAsImage()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+                  <span>📋</span><span>打码分享</span>
+                </button>
+              </div>
+              <div id="single-hops"></div>
+            </div>
+          </div>
+
+          <div id="panel-schedules" class="hidden">
+            <div class="rounded-xl border border-slate-700 bg-slate-800/60 p-5">
+              <div class="flex items-center justify-between mb-4"><h3 class="font-semibold">定时追踪任务</h3><button onclick="showCreateScheduleModal()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-semibold">+ 新建</button></div>
+              <div id="schedule-list" class="space-y-2"><p class="text-slate-500 text-sm">加载中...</p></div>
+            </div>
+          </div>
+
+          <div id="panel-multisrc" class="hidden">
+            <div class="glass-card rounded-xl p-5 mb-6">
+              <h3 class="font-semibold mb-4">🌐 多源节点对比</h3>
+              <p class="text-sm text-slate-400 mb-4">从多个节点同时追踪到同一目标，对比不同地区的路由差异。</p>
+              
+              <div class="grid gap-4 md:grid-cols-2 mb-4">
+                <div>
+                  <label class="text-xs font-medium text-slate-400 mb-2 block">选择源节点（可多选）</label>
+                  <div id="multisrc-nodes" class="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 bg-slate-900/50 rounded-lg border border-slate-700"></div>
+                </div>
+                <div>
+                  <label class="text-xs font-medium text-slate-400 mb-2 block">目标类型</label>
+                  <select id="multisrc-target-type" onchange="toggleMultisrcTarget()" class="w-full p-2.5 rounded-lg border border-slate-600 bg-slate-700 text-white text-sm mb-2">
+                    <option value="node">选择节点</option>
+                    <option value="custom">自定义地址</option>
+                  </select>
+                  <select id="multisrc-target-node" onchange="updateMultisrcNodeDisabled()" class="w-full p-2.5 rounded-lg border border-slate-600 bg-slate-700 text-white text-sm">
+                    <option value="">选择目标节点...</option>
+                  </select>
+                  <input id="multisrc-target" type="text" placeholder="IP 或 域名 (如 8.8.8.8 或 google.com)" class="hidden w-full p-2.5 rounded-lg border border-slate-600 bg-slate-700 text-white text-sm">
+                  <button id="multisrc-start-btn" onclick="runMultiSourceTrace()" class="w-full mt-3 px-4 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm font-bold">
+                    🚀 开始多源追踪
+                  </button>
+                </div>
+              </div>
+              
+              <div id="multisrc-status" class="text-sm text-slate-400"></div>
+            </div>
+            
+            <div id="multisrc-results" class="hidden space-y-4"></div>
+          </div>
+
+          <div id="panel-history" class="hidden">
+            <div class="rounded-xl border border-slate-700 bg-slate-800/60 p-5">
+              <div class="flex items-center justify-between mb-4"><h3 class="font-semibold">历史记录</h3><button onclick="loadHistory()" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm">🔄 刷新</button></div>
+              <div id="history-list" class="space-y-2"><p class="text-slate-500 text-sm">加载中...</p></div>
+            </div>
+          </div>
+
+          <div id="schedule-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+            <div class="bg-slate-800 rounded-xl border border-slate-700 p-5 w-full max-w-md">
+              <h3 class="font-bold mb-4">新建定时追踪</h3>
+              <div class="space-y-3">
+                <div><label class="text-xs text-slate-400">名称</label><input id="sched-name" type="text" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm"></div>
+                <div class="grid grid-cols-2 gap-3">
+                  <div><label class="text-xs text-slate-400">源节点</label><select id="sched-src" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm"></select></div>
+                  <div><label class="text-xs text-slate-400">目标类型</label><select id="sched-target-type" onchange="toggleSchedTarget()" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm"><option value="node">选择节点</option><option value="custom">自定义 IP/域名</option></select></div>
+                </div>
+                <div class="grid grid-cols-1 gap-3">
+                  <div id="sched-target-node-row"><label class="text-xs text-slate-400">目标节点</label><select id="sched-target-node" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm"></select></div>
+                  <div id="sched-target-input-row" class="hidden"><label class="text-xs text-slate-400">目标地址</label><input id="sched-target" type="text" placeholder="IP 或 域名" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm"></div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                  <div><label class="text-xs text-slate-400">间隔(分钟)</label><input id="sched-interval" type="number" value="60" min="5" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm"></div>
+                  <div><label class="text-xs text-slate-400">变化告警</label><select id="sched-alert" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm"><option value="true">启用</option><option value="false">禁用</option></select></div>
+                </div>
+              </div>
+              <div class="flex justify-end gap-2 mt-5">
+                <button onclick="hideScheduleModal()" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">取消</button>
+                <button onclick="createSchedule()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-sm font-semibold">创建</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+  
+  <script src="/static/js/sidebar.js"></script>
+  <script type="module" src="/static/js/trace.js"></script>
+</body>
+</html>

@@ -63,7 +63,7 @@ services:
       - ./agent_configs.json:/app/agent_configs.json
       - ./data:/app/data
       - ./master-api/static:/app/static
-      - ./master-api/app/main.py:/app/app/main.py
+      - ./master-api/app:/app/app
 
 volumes:
   db_data:
