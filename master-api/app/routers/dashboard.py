@@ -35,6 +35,7 @@ async def schedules_page(request: Request):
     return templates.TemplateResponse("schedules.html", {"request": request})
 
 @router.get("/trace", response_class=HTMLResponse)
+async def trace_page(request: Request):
     return templates.TemplateResponse("trace.html", {"request": request})
 
 @router.get("/whitelist", response_class=HTMLResponse)
@@ -47,5 +48,5 @@ async def redis_page(request: Request):
 
 @router.get("/admin", response_class=HTMLResponse)
 async def admin_page(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse("admin.html", {"request": request})
 

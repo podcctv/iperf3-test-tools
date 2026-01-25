@@ -1,0 +1,142 @@
+    <div class="bg-slate-800/50 backdrop-blur border border-slate-700 rounded-2xl p-6 mb-6">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-10 h-10 bg-rose-500/20 rounded-xl flex items-center justify-center">
+          <span class="text-xl">🗄️</span>
+        </div>
+        <div>
+          <h2 class="text-lg font-bold text-white">数据库管理</h2>
+          <p class="text-xs text-slate-400">Database Management</p>
+        </div>
+      </div>
+      
+      <p class="text-sm text-slate-400 mb-6">
+        清空测试数据将删除所有单次测试记录和定时任务执行历史。<strong class="text-rose-400">节点配置和定时任务设置不会被删除。</strong>
+      </p>
+      
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Clear All Test Data -->
+        <div class="bg-slate-900/50 border border-slate-700 rounded-xl p-4">
+          <h3 class="font-bold text-white mb-2">🧹 清空所有测试数据</h3>
+          <p class="text-xs text-slate-400 mb-4">删除 test_results 和 schedule_results 表中的所有记录</p>
+          <button id="clear-all-data" class="w-full px-4 py-2 bg-rose-600 hover:bg-rose-500 rounded-lg text-sm font-bold transition-colors">
+            清空所有数据
+          </button>
+        </div>
+        
+        <!-- Clear Only Schedule Results -->
+        <div class="bg-slate-900/50 border border-slate-700 rounded-xl p-4">
+          <h3 class="font-bold text-white mb-2">📊 仅清空定时任务历史</h3>
+          <p class="text-xs text-slate-400 mb-4">只删除 schedule_results 表中的记录</p>
+          <button id="clear-schedule-results" class="w-full px-4 py-2 bg-amber-600 hover:bg-amber-500 rounded-lg text-sm font-bold transition-colors">
+            清空定时任务历史
+          </button>
+        </div>
+      </div>
+      
+      <!-- Result Message -->
+      <div id="db-result" class="mt-4 hidden"></div>
+    </div>
+    
+    <!-- Telegram Bot Settings Card -->
+    <div class="bg-slate-800/50 backdrop-blur border border-slate-700 rounded-2xl p-6 mb-6">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-10 h-10 bg-blue-500/20 rounded-xl flex items-center justify-center">
+          <span class="text-xl">🤖</span>
+        </div>
+        <div>
+          <h2 class="text-lg font-bold text-white">Telegram Bot 告警</h2>
+          <p class="text-xs text-slate-400">Telegram Alert Notifications</p>
+        </div>
+      </div>
+      
+      <p class="text-sm text-slate-400 mb-6">
+        配置 Telegram Bot 接收路由变化告警通知。创建 Bot 请与 <a href="https://t.me/BotFather" target="_blank" class="text-blue-400 underline">@BotFather</a> 对话。
+      </p>
+      
+      <div class="space-y-4">
+        <div>
+          <label class="text-xs text-slate-400">Bot Token</label>
+          <input id="tg-bot-token" type="text" placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm font-mono">
+        </div>
+        <div>
+          <label class="text-xs text-slate-400">Chat ID</label>
+          <input id="tg-chat-id" type="text" placeholder="-1001234567890 或 123456789" class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm font-mono">
+        </div>
+        <div class="flex gap-3">
+          <button id="save-tg-settings" class="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-sm font-bold transition-colors">
+            💾 保存设置
+          </button>
+          <button id="test-tg-settings" class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-bold transition-colors">
+            📤 发送测试消息
+          </button>
+        </div>
+        <div id="tg-result" class="hidden text-sm p-3 rounded-lg"></div>
+      </div>
+    </div>
+    
+    <!-- Traceroute Card -->
+    <div class="bg-slate-800/50 backdrop-blur border border-slate-700 rounded-2xl p-6 mb-6">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-10 h-10 bg-emerald-500/20 rounded-xl flex items-center justify-center">
+          <span class="text-xl">🌐</span>
+        </div>
+        <div>
+          <h2 class="text-lg font-bold text-white">Traceroute 路由追踪</h2>
+          <p class="text-xs text-slate-400">Network Path Tracing</p>
+        </div>
+      </div>
+      
+      <p class="text-sm text-slate-400 mb-6">
+        从指定节点到目标地址进行路由追踪，分析网络路径和延迟。
+      </p>
+      
+      <div class="bg-slate-900/50 border border-slate-700 rounded-xl p-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="font-bold text-white mb-1">🚧 即将推出</h3>
+            <p class="text-xs text-slate-400">此功能正在开发中...</p>
+          </div>
+          <button disabled class="px-4 py-2 bg-slate-600 text-slate-400 rounded-lg text-sm font-bold cursor-not-allowed">
+            开发中
+          </button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Other Tools Card -->
+    <div class="bg-slate-800/50 backdrop-blur border border-slate-700 rounded-2xl p-6">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-10 h-10 bg-sky-500/20 rounded-xl flex items-center justify-center">
+          <span class="text-xl">🔧</span>
+        </div>
+        <div>
+          <h2 class="text-lg font-bold text-white">其他工具</h2>
+          <p class="text-xs text-slate-400">Other Tools</p>
+        </div>
+      </div>
+      
+      <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <a href="/web/whitelist" class="bg-slate-900/50 border border-slate-700 rounded-xl p-4 text-center hover:border-sky-500/50 transition-colors">
+          <span class="text-2xl">🛡️</span>
+          <div class="text-sm font-bold mt-2">IP 白名单</div>
+        </a>
+        <a href="/web/schedules" class="bg-slate-900/50 border border-slate-700 rounded-xl p-4 text-center hover:border-emerald-500/50 transition-colors">
+          <span class="text-2xl">📅</span>
+          <div class="text-sm font-bold mt-2">定时任务</div>
+        </a>
+        <a href="/web/tests" class="bg-slate-900/50 border border-slate-700 rounded-xl p-4 text-center hover:border-purple-500/50 transition-colors">
+          <span class="text-2xl">🚀</span>
+          <div class="text-sm font-bold mt-2">单次测试</div>
+        </a>
+        <a href="/web/admin" class="bg-slate-900/50 border border-slate-700 rounded-xl p-4 text-center hover:border-rose-500/50 transition-colors">
+          <span class="text-2xl">⚙️</span>
+          <div class="text-sm font-bold mt-2">系统管理</div>
+        </a>
+        <a href="/web" class="bg-slate-900/50 border border-slate-700 rounded-xl p-4 text-center hover:border-amber-500/50 transition-colors">
+          <span class="text-2xl">🏠</span>
+          <div class="text-sm font-bold mt-2">主控面板</div>
+        </a>
+      </div>
+    </div>
+    
+  </div>

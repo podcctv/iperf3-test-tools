@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>系统管理 - iPerf3 测试工具</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/themes/dark.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@radix-ui/themes@3.1.1/dist/css/themes.css" />
+    <script type="module" src="https://cdn.jsdelivr.net/npm/@shoelace-style/shoelace@2.15.1/cdn/shoelace.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/static/glass-design.css" />
+    <!-- Common Styles -->
+    <link rel="stylesheet" href="/static/theme.css" />
+    <link rel="stylesheet" href="/static/sidebar.css" />
+    <script src="/static/theme.js" defer></script>
+</head>
+
+<body class="min-h-screen text-white">
+    <div class="radix-themes min-h-screen" data-theme="dark">
+        <div class="app-layout">
+            <!-- Sidebar Navigation -->
+            <aside class="sidebar hidden" id="sidebar">
+                <div class="sidebar-brand">
+                    <div class="sidebar-logo">📊</div>
+                    <div>
+                        <div class="sidebar-title">iPerf3</div>
+                        <div class="sidebar-subtitle">网络测试</div>
+                    </div>
+                </div>
+
+                <nav class="sidebar-nav">
+                    <div class="nav-section">
+                        <div class="nav-section-title">监控面板</div>
+                        <a href="/web" class="nav-item" data-page="dashboard">
+                            <span class="nav-item-icon">🏠</span>
+                            <span>节点概览</span>
+                        </a>
+                        <a href="/web/tests" class="nav-item" data-page="tests">
+                            <span class="nav-item-icon">🚀</span>
+                            <span>速度测试</span>
+                        </a>
+                        <a href="/web/schedules" class="nav-item" data-page="schedules">
+                            <span class="nav-item-icon">📅</span>
+                            <span>定时任务</span>
+                        </a>
+                    </div>
+
+                    <div class="nav-section">
+                        <div class="nav-section-title">路由分析</div>
+                        <a href="/web/trace" class="nav-item" data-page="trace">
+                            <span class="nav-item-icon">🔍</span>
+                            <span>单次追踪</span>
+                        </a>
+                        <a href="/web/trace#schedules" class="nav-item" data-page="trace-schedules">
+                            <span class="nav-item-icon">📅</span>
+                            <span>定时追踪</span>
+                        </a>
+                        <a href="/web/trace#compare" class="nav-item" data-page="compare">
+                            <span class="nav-item-icon">📊</span>
+                            <span>多元对比</span>
+                        </a>
+                        <a href="/web/trace#history" class="nav-item" data-page="history">
+                            <span class="nav-item-icon">📜</span>
+                            <span>历史记录</span>
+                        </a>
+                    </div>
+
+                    <div class="nav-section guest-hide">
+                        <div class="nav-section-title">系统设置</div>
+                        <a href="/web/redis" class="nav-item" data-page="redis">
+                            <span class="nav-item-icon">📊</span>
+                            <span>Redis 监控</span>
+                        </a>
+                        <a href="/web/whitelist" class="nav-item" data-page="whitelist">
+                            <span class="nav-item-icon">🛡️</span>
+                            <span>白名单管理</span>
+                        </a>
+                        <a href="javascript:void(0)" onclick="openSettingsTab('password')" class="nav-item">
+                            <span class="nav-item-icon">🔐</span>
+                            <span>修改密码</span>
+                        </a>
+                        <a href="javascript:void(0)" onclick="openSettingsTab('telegram')" class="nav-item">
+                            <span class="nav-item-icon">📱</span>
+                            <span>Telegram 告警</span>
+                        </a>
+                        <a href="javascript:void(0)" onclick="openSettingsTab('admin')" class="nav-item active">
+                            <span class="nav-item-icon">🗄️</span>
+                            <span>数据库管理</span>
+                        </a>
+                    </div>
+                </nav>
+
+                <div class="sidebar-footer">
+                    <div class="sidebar-user">
+                        <div class="sidebar-avatar" id="sidebar-avatar">A</div>
+                        <div class="sidebar-user-info">
+                            <div class="sidebar-user-name" id="sidebar-username">管理员</div>
+                            <div class="sidebar-user-role" id="sidebar-role">已登录</div>
+                        </div>
+                    </div>
+                    <button onclick="toggleTheme()" class="theme-toggle" style="margin-top: 0.75rem; width: 100%;">
+                        <span class="theme-toggle-icon">🌙</span>
+                        <span class="theme-toggle-track"></span>
+                    </button>
+                    <button onclick="logout()" class="nav-item"
+                        style="margin-top: 0.5rem; width: 100%; justify-content: center; color: #f87171; border: 1px solid rgba(248, 113, 113, 0.3); background: rgba(248, 113, 113, 0.1);">
+                        <span class="nav-item-icon">🚪</span>
+                        <span>退出登录</span>
+                    </button>
+                </div>
+            </aside>
+
+            <!-- Sidebar Overlay for Mobile -->
+            <div class="sidebar-overlay hidden" id="sidebar-overlay" onclick="closeSidebar()"></div>
+
+            <!-- Mobile Menu Button -->
+            <button class="mobile-menu-btn hidden" id="mobile-menu-btn" onclick="toggleSidebar()">☰</button>
+
+            <main class="main-content">
+                <div class="max-w-4xl mx-auto px-6 py-10">
+
+                    <!-- Header -->
+                    <div class="flex items-center justify-between mb-10">
+                        <div>
+                            <h1
+                                class="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500">
+                                系统管理</h1>
+                            <p class="text-sm text-slate-400 mt-1">System Administration</p>
+                        </div>
+                    </div>
+
+                    <!-- Content from partial -->
+                    <div class="bg-slate-800/50 backdrop-blur border border-slate-700 rounded-2xl p-6 mb-6">
+                        <div class="flex items-center gap-3 mb-4">
+                            <div class="w-10 h-10 bg-rose-500/20 rounded-xl flex items-center justify-center">
+                                <span class="text-xl">🗄️</span>
+                            </div>
+                            <div>
+                                <h2 class="text-lg font-bold text-white">数据库管理</h2>
+                                <p class="text-xs text-slate-400">Database Management</p>
+                            </div>
+                        </div>
+
+                        <p class="text-sm text-slate-400 mb-6">
+                            清空测试数据将删除所有单次测试记录和定时任务执行历史。<strong class="text-rose-400">节点配置和定时任务设置不会被删除。</strong>
+                        </p>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <!-- Clear All Test Data -->
+                            <div class="bg-slate-900/50 border border-slate-700 rounded-xl p-4">
+                                <h3 class="font-bold text-white mb-2">🧹 清空所有测试数据</h3>
+                                <p class="text-xs text-slate-400 mb-4">删除 test_results 和 schedule_results 表中的所有记录</p>
+                                <button id="clear-all-data"
+                                    class="w-full px-4 py-2 bg-rose-600 hover:bg-rose-500 rounded-lg text-sm font-bold transition-colors">
+                                    清空所有数据
+                                </button>
+                            </div>
+
+                            <!-- Clear Only Schedule Results -->
+                            <div class="bg-slate-900/50 border border-slate-700 rounded-xl p-4">
+                                <h3 class="font-bold text-white mb-2">📊 仅清空定时任务历史</h3>
+                                <p class="text-xs text-slate-400 mb-4">只删除 schedule_results 表中的记录</p>
+                                <button id="clear-schedule-results"
+                                    class="w-full px-4 py-2 bg-amber-600 hover:bg-amber-500 rounded-lg text-sm font-bold transition-colors">
+                                    清空定时任务历史
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Result Message -->
+                        <div id="db-result" class="mt-4 hidden"></div>
+                    </div>
+
+                    <!-- Telegram Bot Settings Card -->
+                    <div class="bg-slate-800/50 backdrop-blur border border-slate-700 rounded-2xl p-6 mb-6">
+                        <div class="flex items-center gap-3 mb-4">
+                            <div class="w-10 h-10 bg-blue-500/20 rounded-xl flex items-center justify-center">
+                                <span class="text-xl">🤖</span>
+                            </div>
+                            <div>
+                                <h2 class="text-lg font-bold text-white">Telegram Bot 告警</h2>
+                                <p class="text-xs text-slate-400">Telegram Alert Notifications</p>
+                            </div>
+                        </div>
+
+                        <p class="text-sm text-slate-400 mb-6">
+                            配置 Telegram Bot 接收路由变化告警通知。创建 Bot 请与 <a href="https://t.me/BotFather" target="_blank"
+                                class="text-blue-400 underline">@BotFather</a> 对话。
+                        </p>
+
+                        <div class="space-y-4">
+                            <div>
+                                <label class="text-xs text-slate-400">Bot Token</label>
+                                <input id="tg-bot-token" type="text"
+                                    placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
+                                    class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm font-mono">
+                            </div>
+                            <div>
+                                <label class="text-xs text-slate-400">Chat ID</label>
+                                <input id="tg-chat-id" type="text" placeholder="-1001234567890 或 123456789"
+                                    class="w-full mt-1 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-sm font-mono">
+                            </div>
+                            <div class="flex gap-3">
+                                <button id="save-tg-settings"
+                                    class="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-sm font-bold transition-colors">
+                                    💾 保存设置
+                                </button>
+                                <button id="test-tg-settings"
+                                    class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-bold transition-colors">
+                                    📤 发送测试消息
+                                </button>
+                            </div>
+                            <div id="tg-result" class="hidden text-sm p-3 rounded-lg"></div>
+                        </div>
+                    </div>
+
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script src="/static/js/sidebar.js"></script>
+    <script type="module" src="/static/js/admin.js"></script>
+</body>
+
+</html>
