@@ -52,6 +52,7 @@ from .schemas import (
     PasswordChangeRequest,
 )
 from .state_store import StateStore
+from .routers import dashboard
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -488,9 +489,11 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)  # Enable Gzip compression
 
 # Mount static files directory if it exists
 import os
-static_dir = Path(__file__).parent / "static"
+static_dir = Path(__file__).parent.parent / "static"
 if static_dir.exists():
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+app.include_router(dashboard.router, prefix="/web", tags=["dashboard"])
 
 
 
@@ -12589,14 +12592,14 @@ def _admin_html_deprecated() -> str:
     return header + body + footer
 
 
-@app.get("/web", response_class=HTMLResponse)
+# @app.get("/web", response_class=HTMLResponse)
 def dashboard() -> HTMLResponse:
     """Serve dashboard page."""
 
     return HTMLResponse(content=_login_html())
 
 
-@app.get("/web/schedules")
+# @app.get("/web/schedules")
 async def schedules_page(request: Request):
     """定时任务管理页面"""
     if not auth_manager().is_authenticated(request) and not _is_guest(request):
@@ -12605,7 +12608,7 @@ async def schedules_page(request: Request):
     return HTMLResponse(content=_schedules_html())
 
 
-@app.get("/web/whitelist")
+# @app.get("/web/whitelist")
 async def whitelist_page(request: Request):
     """白名单管理页面"""
     if not auth_manager().is_authenticated(request):
@@ -12615,7 +12618,7 @@ async def whitelist_page(request: Request):
 
 
 
-@app.get("/web/tests")
+# @app.get("/web/tests")
 async def tests_page(request: Request):
     """单次测试页面 - 显示测试计划和最近测试"""
     if not auth_manager().is_authenticated(request) and not _is_guest(request):
@@ -12628,7 +12631,7 @@ async def tests_page(request: Request):
 
 
 
-@app.get("/web/trace")
+# @app.get("/web/trace")
 async def trace_page(request: Request):
     """路由追踪页面"""
     if not auth_manager().is_authenticated(request) and not _is_guest(request):
@@ -17183,7 +17186,7 @@ def _admin_html():
 
 
 
-@app.get("/web/admin")
+# @app.get("/web/admin")
 async def admin_page(request: Request):
     """System admin page."""
     if not auth_manager().is_authenticated(request):
@@ -17756,7 +17759,7 @@ def _redis_monitoring_html() -> str:
 
 
 
-@app.get("/web/redis")
+# @app.get("/web/redis")
 async def redis_monitoring_page(request: Request):
     """Redis cache monitoring and management page."""
     if not auth_manager().is_authenticated(request):

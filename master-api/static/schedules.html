@@ -1,0 +1,178 @@
+    header = f'''<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>定时任务 - iperf3 Master</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/glass-design.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <style>
+    body {{ 
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); 
+      min-height: 100vh;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      margin: 0; padding: 0;
+    }}
+    .glass-card {{ background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(148, 163, 184, 0.1); }}
+    .custom-scrollbar::-webkit-scrollbar {{ width: 6px; height: 6px; }}
+    .custom-scrollbar::-webkit-scrollbar-track {{ background: rgba(15, 23, 42, 0.3); border-radius: 3px; }}
+    .custom-scrollbar::-webkit-scrollbar-thumb {{ background: rgba(148, 163, 184, 0.3); border-radius: 3px; }}
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {{ background: rgba(148, 163, 184, 0.5); }}
+    {sidebar_css}
+  </style>
+</head>
+<body class="text-slate-100">
+  <!-- Guest Mode Banner -->
+  <div id="guest-banner" class="hidden" style="position:fixed;top:0;left:240px;right:0;z-index:9999;background:linear-gradient(90deg,#f59e0b,#d97706);text-align:center;padding:8px 16px;font-size:14px;font-weight:600;color:#1e293b;box-shadow:0 2px 8px rgba(0,0,0,0.3);">
+    👁️ 访客模式 · 仅可查看，无法操作
+  </div>
+  <script>
+    if (document.cookie.includes('guest_session=readonly')) {{
+      document.getElementById('guest-banner').classList.remove('hidden');
+      document.body.style.paddingTop = '40px';
+      document.body.classList.add('guest-mode');
+    }}
+  </script>
+  
+  <div class="app-layout">
+    {sidebar_html}
+    
+    <main class="main-content">
+      <div class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <div class="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 class="text-2xl sm:text-3xl font-bold text-white">定时任务管理</h1>
+            <p class="text-slate-400 mt-1 text-sm">Schedule Management & Monitoring</p>
+          </div>
+          <div class="flex flex-wrap gap-2 sm:gap-3">
+            <button id="create-schedule-btn" class="px-3 sm:px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-sky-500 text-xs sm:text-sm font-semibold text-white shadow-lg hover:scale-105 transition">
+              + 新建任务
+            </button>
+            <button id="refresh-btn" class="px-3 sm:px-4 py-2 rounded-lg border border-slate-700 bg-slate-800/60 text-xs sm:text-sm font-semibold text-slate-100 hover:border-sky-500 transition">
+              🔄 刷新
+            </button>
+          </div>
+        </div>
+
+        <!-- VPS Daily Summary -->
+        <div id="vps-daily-summary" class="mb-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <!-- Populated by JS -->
+        </div>
+
+        <!-- Schedules List -->
+        <div id="schedules-container" class="space-y-6">
+          <div class="text-center text-slate-400 py-12">加载中...</div>
+        </div>
+      </div>
+'''
+    
+    # Body with raw JavaScript (no f-string) - continues from modal onwards
+    body = '''
+    <!-- Create/Edit Modal -->
+  <div id="schedule-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/80 px-4 backdrop-blur">
+    <div class="glass-card relative w-full max-w-2xl rounded-2xl p-6 shadow-2xl">
+      <button id="close-modal" class="absolute right-4 top-4 rounded-full border border-slate-700 bg-slate-800 p-2 text-slate-300 hover:bg-slate-700">✕</button>
+      
+      <h3 id="modal-title" class="text-xl font-bold text-white mb-6">新建定时任务</h3>
+      
+      <!-- Tabs -->
+      <div class="flex border-b border-slate-700 mb-6">
+        <button id="tab-uni" onclick="switchScheduleTab('uni')" class="px-4 py-2 text-sm font-medium text-sky-400 border-b-2 border-sky-400 transition hover:text-sky-300">单向测试</button>
+        <button id="tab-bidir" onclick="switchScheduleTab('bidir')" class="px-4 py-2 text-sm font-medium text-slate-400 border-b-2 border-transparent transition hover:text-slate-300">双向测试</button>
+      </div>
+      
+      <div class="space-y-4">
+        <div>
+          <label class="text-sm font-medium text-slate-200">任务名称</label>
+          <input id="schedule-name" type="text" placeholder="例如: 北京→上海链路监控" class="w-full mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none">
+        </div>
+        
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="text-sm font-medium text-slate-200">源节点</label>
+            <select id="schedule-src" class="w-full mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none"></select>
+          </div>
+          <div>
+            <label class="text-sm font-medium text-slate-200">目标节点</label>
+            <select id="schedule-dst" class="w-full mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none"></select>
+          </div>
+        </div>
+        
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="text-sm font-medium text-slate-200">协议</label>
+            <select id="schedule-protocol" onchange="updateUdpBandwidthVisibility()" class="w-full mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none">
+              <!-- Options populated by JS -->
+            </select>
+          </div>
+          <div id="direction-wrapper">
+             <label class="text-sm font-medium text-slate-200">方向</label>
+             <select id="schedule-direction" class="w-full mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none">
+                <option value="upload">上行 (Client→Server)</option>
+                <option value="download">下行 (Server→Client)</option>
+             </select>
+          </div>
+        </div>
+        
+        <!-- UDP Bandwidth (shown when UDP or TCP+UDP is selected) -->
+        <div id="udp-bandwidth-wrapper" class="hidden">
+          <label class="text-sm font-medium text-slate-200">UDP带宽</label>
+          <input id="schedule-udp-bandwidth" type="text" placeholder="例如: 100M, 500M, 1G" class="w-full mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none">
+          <p class="text-xs text-slate-500 mt-1">留空使用默认带宽，支持 M(兆) 或 G(吉) 后缀</p>
+        </div>
+        
+        <div class="grid grid-cols-3 gap-4">
+          <div>
+            <label class="text-sm font-medium text-slate-200">时长(秒)</label>
+            <input id="schedule-duration" type="number" value="10" min="1" class="w-full mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="text-sm font-medium text-slate-200">并行数</label>
+            <input id="schedule-parallel" type="number" value="1" min="1" class="w-full mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="text-sm font-medium text-slate-200">执行时间 (Cron)</label>
+            <input id="schedule-cron" type="text" value="*/10 * * * *" placeholder="*/5 * * * *" class="w-full mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none font-mono">
+            <div class="flex flex-wrap gap-2 mt-2">
+              <button type="button" onclick="setCron('*/5 * * * *')" class="cron-preset px-2 py-1 text-xs rounded bg-slate-700 hover:bg-slate-600 text-slate-300">每5分钟</button>
+              <button type="button" onclick="setCron('*/10 * * * *')" class="cron-preset px-2 py-1 text-xs rounded bg-slate-700 hover:bg-slate-600 text-slate-300">每10分钟</button>
+              <button type="button" onclick="setCron('*/30 * * * *')" class="cron-preset px-2 py-1 text-xs rounded bg-slate-700 hover:bg-slate-600 text-slate-300">每30分钟</button>
+              <button type="button" onclick="setCron('0 * * * *')" class="cron-preset px-2 py-1 text-xs rounded bg-slate-700 hover:bg-slate-600 text-slate-300">每小时</button>
+              <button type="button" onclick="setCron('0 */6 * * *')" class="cron-preset px-2 py-1 text-xs rounded bg-slate-700 hover:bg-slate-600 text-slate-300">每6小时</button>
+              <button type="button" onclick="setCron('0 0 * * *')" class="cron-preset px-2 py-1 text-xs rounded bg-slate-700 hover:bg-slate-600 text-slate-300">每天0点</button>
+            </div>
+            <p class="text-xs text-slate-500 mt-1">格式: 分 时 日 月 周 (如 */10 * * * * = 每10分钟)</p>
+          </div>
+        </div>
+        
+        <div>
+          <label class="text-sm font-medium text-slate-200">备注(可选)</label>
+          <textarea id="schedule-notes" rows="2" placeholder="任务说明..." class="w-full mt-1 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-slate-100 focus:border-sky-500 focus:outline-none"></textarea>
+        </div>
+      </div>
+      
+      <div class="mt-6 flex justify-end gap-3">
+        <button id="cancel-modal" class="px-4 py-2 rounded-lg border border-slate-700 bg-slate-800 text-sm font-semibold text-slate-100 hover:border-slate-500">取消</button>
+        <button id="save-schedule" class="px-6 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-sky-500 text-sm font-semibold text-white shadow-lg hover:scale-105 transition">保存</button>
+      </div>
+    </div>
+  </div>
+
+
+  <script type="module" src="/static/js/api.js"></script>
+  <script type="module" src="/static/js/sidebar.js"></script>
+  <script type="module" src="/static/js/schedules.js"></script>
+    </main>
+  </div>
+'''
+    
+    # Footer with sidebar JS (f-string)
+    footer = f'''
+  <script>
+    {sidebar_js}
+  </script>
+</body>
+</html>'''
