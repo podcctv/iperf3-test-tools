@@ -10,3 +10,4 @@ croniter>=2.0.0
 requests
 cachetools
 redis
+jinja2

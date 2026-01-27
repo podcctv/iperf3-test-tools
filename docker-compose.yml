@@ -32,7 +32,9 @@ services:
       - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
 
   master-api:
-    build: ./master-api
+    image: iperf3-test-tools-master-api:fixed
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    # build: ./master-api
     environment:
       DATABASE_URL: postgresql://iperf:iperf_pass@db:5432/iperf_db
       REQUEST_TIMEOUT: 10
