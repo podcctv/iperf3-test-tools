@@ -49,7 +49,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push master-api
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./master-api
           push: ${{ github.event_name != 'pull_request' }}
@@ -90,7 +90,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push agent
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./agent
           push: ${{ github.event_name != 'pull_request' }}
@@ -123,7 +123,7 @@ jobs:
 
       - name: Build and push agent (China optimized)
         if: github.event_name != 'pull_request'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./agent
           push: true
