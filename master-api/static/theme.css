@@ -10,8 +10,8 @@
     --card-hover: rgba(30, 41, 59, 0.85);
     --glass-border: rgba(255, 255, 255, 0.08);
     --text-main: #f8fafc;
-    --text-muted: #94a3b8;
-    --text-dimmed: #64748b;
+    --text-muted: #b6c2d3;
+    --text-dimmed: #8a9ab1;
     --border-color: rgba(148, 163, 184, 0.1);
     --shadow-color: rgba(0, 0, 0, 0.5);
     --success: #10b981;
@@ -49,8 +49,8 @@
     --card-hover: rgba(255, 255, 255, 1);
     --glass-border: rgba(0, 0, 0, 0.08);
     --text-main: #0f172a;
-    --text-muted: #475569;
-    --text-dimmed: #64748b;
+    --text-muted: #334155;
+    --text-dimmed: #475569;
     --border-color: rgba(15, 23, 42, 0.1);
     --shadow-color: rgba(0, 0, 0, 0.1);
     --success: #059669;
@@ -193,4 +193,75 @@ textarea {
 .no-transitions,
 .no-transitions * {
     transition: none !important;
+}
+/* Floating toggle fallback when no in-layout switch exists */
+.theme-toggle-floating {
+    position: fixed;
+    right: 1rem;
+    bottom: 1rem;
+    z-index: 1100;
+}
+
+/* Legacy sidebar toggle compatibility */
+.theme-toggle .theme-toggle-icon {
+    position: relative;
+    z-index: 2;
+    margin-left: 4px;
+    font-size: 14px;
+}
+
+.theme-toggle .theme-toggle-track {
+    position: absolute;
+    width: 26px;
+    height: 26px;
+    left: 2px;
+    top: 2px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #fbbf24, #f59e0b);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-theme="light"] .theme-toggle .theme-toggle-track {
+    transform: translateX(28px);
+    background: linear-gradient(135deg, #60a5fa, #3b82f6);
+}
+
+/* Readability improvements */
+body {
+    line-height: 1.55;
+}
+
+.dashboard-subtitle,
+.login-subtitle,
+.sidebar-user-role,
+.stat-card-label,
+.stat-card-footer,
+.node-location,
+.text-muted {
+    color: var(--text-muted) !important;
+}
+
+[data-theme="light"] .dashboard-header {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.96) 0%, rgba(241, 245, 249, 0.92) 100%);
+    border-color: rgba(15, 23, 42, 0.12);
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+}
+
+[data-theme="light"] .dashboard-label {
+    color: #1d4ed8 !important;
+}
+
+[data-theme="light"] .login-card,
+[data-theme="light"] .glass-panel,
+[data-theme="light"] .panel-card,
+[data-theme="light"] .panel-card-enhanced,
+[data-theme="light"] .stat-card,
+[data-theme="light"] .node-card-enhanced {
+    border-color: rgba(15, 23, 42, 0.12) !important;
+}
+
+[data-theme="light"] .sidebar-user-name,
+[data-theme="light"] .panel-title,
+[data-theme="light"] .stat-card-value {
+    color: #0f172a !important;
 }

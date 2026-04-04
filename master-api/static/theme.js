@@ -14,7 +14,7 @@
 
     class ThemeManager {
         constructor() {
-            this.currentTheme = this.getStoredTheme() || THEMES.DARK;
+            this.currentTheme = this.getStoredTheme() || this.getPreferredTheme();
             this.init();
         }
 
@@ -32,11 +32,18 @@
 
         getStoredTheme() {
             try {
-                return localStorage.getItem(THEME_KEY);
+                const value = localStorage.getItem(THEME_KEY);
+                return Object.values(THEMES).includes(value) ? value : null;
             } catch (e) {
                 console.warn('localStorage not available:', e);
                 return null;
             }
+        }
+
+        getPreferredTheme() {
+            return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? THEMES.DARK
+                : THEMES.LIGHT;
         }
 
         setStoredTheme(theme) {
@@ -62,6 +69,8 @@
                 html.removeAttribute('data-theme');
             }
 
+            html.style.colorScheme = theme;
+
             this.currentTheme = theme;
             this.setStoredTheme(theme);
 
@@ -83,32 +92,35 @@
         }
 
         setupToggle() {
-            // Create toggle button
-            const toggle = this.createToggleButton();
+            const existingToggles = Array.from(document.querySelectorAll('.theme-toggle'));
 
-            // Insert near logout button when possible
-            const logoutBtn = document.getElementById('logout-btn');
-            if (logoutBtn?.parentElement) {
-                logoutBtn.parentElement.insertBefore(toggle, logoutBtn);
+            if (existingToggles.length) {
+                existingToggles.forEach(toggle => this.bindToggleButton(toggle));
             } else {
-                // Fallback to header action area
-                const nav = document.querySelector('.flex.flex-wrap.items-center.gap-3');
-                if (nav) {
-                    nav.appendChild(toggle);
-                }
+                const toggle = this.createToggleButton();
+                document.body.appendChild(toggle);
+                this.bindToggleButton(toggle.querySelector('.theme-toggle'));
             }
 
-            // Update initial UI state
             this.updateToggleUI();
+        }
+
+        bindToggleButton(button) {
+            if (!button || button.dataset.themeBound === '1') {
+                return;
+            }
+
+            button.dataset.themeBound = '1';
+            button.removeAttribute('onclick');
+            button.addEventListener('click', () => this.toggleTheme());
         }
 
         createToggleButton() {
             const container = document.createElement('div');
-            container.className = 'theme-toggle-container';
+            container.className = 'theme-toggle-container theme-toggle-floating';
             container.innerHTML = `
-        <button id="theme-toggle-btn" 
-                class="theme-toggle" 
-                aria-label="Toggle theme"
+        <button class="theme-toggle"
+                aria-label="切换主题"
                 title="切换深色/浅色模式">
           <div class="theme-toggle-slider">
             <span class="theme-icon"></span>
@@ -116,17 +128,22 @@
         </button>
       `;
 
-            const button = container.querySelector('#theme-toggle-btn');
-            button.addEventListener('click', () => this.toggleTheme());
-
             return container;
         }
 
         updateToggleUI() {
-            const icon = document.querySelector('.theme-icon');
-            if (icon) {
-                icon.textContent = this.currentTheme === THEMES.DARK ? '🌙' : '☀️';
-            }
+            const isDark = this.currentTheme === THEMES.DARK;
+            const icon = isDark ? '🌙' : '☀️';
+            const title = isDark ? '切换到浅色模式' : '切换到深色模式';
+
+            document.querySelectorAll('.theme-icon, .theme-toggle-icon').forEach(node => {
+                node.textContent = icon;
+            });
+
+            document.querySelectorAll('.theme-toggle').forEach(button => {
+                button.setAttribute('aria-label', title);
+                button.setAttribute('title', title);
+            });
         }
     }
 
