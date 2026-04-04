@@ -864,6 +864,10 @@ function show(el) { el.classList.remove('hidden'); }
 function hide(el) { el.classList.add('hidden'); }
 function setAlert(el, message) { el.textContent = message; show(el); }
 function clearAlert(el) { el.textContent = ''; hide(el); }
+function applyRoleClass(isGuest = false) {
+  document.body.classList.toggle('role-admin', !isGuest);
+  document.body.classList.toggle('role-guest', isGuest);
+}
 
 // Sidebar Navigation Functions
 function toggleSidebar() {
@@ -949,6 +953,7 @@ function hideSidebarNavigation() {
 document.addEventListener('DOMContentLoaded', () => {
   highlightCurrentNavItem();
   const isGuest = document.cookie.includes('guest_session=readonly');
+  applyRoleClass(isGuest);
   updateSidebarUserInfo(isGuest);
 });
 
@@ -1421,6 +1426,7 @@ async function checkAuth(showFeedback = false) {
     const data = await res.json();
     const isGuest = data.isGuest === true;
     window.isGuest = isGuest;
+    applyRoleClass(isGuest);
 
     if (data.authenticated || isGuest) {
       loginCard?.classList.add('hidden');
@@ -1775,7 +1781,7 @@ async function refreshNodes() {
                 <span class="text-slate-500 border-l border-slate-700 pl-2" id="isp-${node.id}"></span>
               </p>
             </div>
-            ${!window.isGuest ? `<div class="flex flex-wrap items-center justify-start gap-2 lg:flex-col lg:items-end lg:justify-center lg:min-w-[170px] opacity-100 md:opacity-0 md:pointer-events-none md:transition md:duration-200 md:group-hover:opacity-100 md:group-hover:pointer-events-auto md:focus-within:opacity-100 md:focus-within:pointer-events-auto">
+            ${!window.isGuest ? `<div class="flex flex-wrap items-center justify-start gap-2 lg:flex-col lg:items-end lg:justify-center lg:min-w-[170px]">
               <button class="${styles.pillInfo}" onclick="runStreamingCheck(${node.id})">流媒体解锁测试</button>
               <button class="${styles.pillInfo}" onclick="editNode(${node.id})">编辑</button>
               <button class="${styles.pillDanger}" onclick="removeNode(${node.id})">删除</button>
