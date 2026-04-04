@@ -3,6 +3,7 @@
 set -euo pipefail
 
 AGENT_IMAGE=${AGENT_IMAGE:-"iperf-agent:latest"}
+MASTER_IMAGE=${MASTER_IMAGE:-"ghcr.io/podcctv/iperf3-master-api:latest"}
 AGENT_PORT=${AGENT_PORT:-8000}
 IPERF_PORT=${IPERF_PORT:-}
 MASTER_API_PORT=${MASTER_API_PORT:-9000}
@@ -578,10 +579,10 @@ start_agent() {
 
 start_master_stack() {
   log "Building master-api service..."
-  MASTER_API_PORT="${MASTER_API_PORT}" MASTER_WEB_PORT="${MASTER_WEB_PORT}" ${COMPOSE_CMD} -f "${REPO_ROOT}/docker-compose.yml" build master-api
+  MASTER_IMAGE="${MASTER_IMAGE}" MASTER_API_PORT="${MASTER_API_PORT}" MASTER_WEB_PORT="${MASTER_WEB_PORT}" ${COMPOSE_CMD} -f "${REPO_ROOT}/docker-compose.yml" build master-api
 
   log "Starting master-api (and dependencies) via docker compose..."
-  MASTER_API_PORT="${MASTER_API_PORT}" MASTER_WEB_PORT="${MASTER_WEB_PORT}" ${COMPOSE_CMD} -f "${REPO_ROOT}/docker-compose.yml" up -d db master-api
+  MASTER_IMAGE="${MASTER_IMAGE}" MASTER_API_PORT="${MASTER_API_PORT}" MASTER_WEB_PORT="${MASTER_WEB_PORT}" ${COMPOSE_CMD} -f "${REPO_ROOT}/docker-compose.yml" up -d db master-api
 }
 
 deploy_remote_agents() {
@@ -619,6 +620,8 @@ parse_args() {
         IPERF_PORT="$2"; shift 2 ;;
       --master-port|--master-api-port)
         MASTER_API_PORT="$2"; shift 2 ;;
+      --master-image)
+        MASTER_IMAGE="$2"; shift 2 ;;
       --web-port|--dashboard-port)
         MASTER_WEB_PORT="$2"; shift 2 ;;
       --no-start-server)
@@ -642,6 +645,7 @@ parse_args() {
     --iperf-port <port>      iperf3 TCP/UDP port to expose (default: random available port)
     --master-port <port>     Master API host port (default: 9000)
     --master-api-port <port> Same as --master-port for convenience
+    --master-image <image>   Master API image name/tag (default: ghcr.io/podcctv/iperf3-master-api:latest)
     --web-port <port>        Dashboard host port (default: 9100)
     --dashboard-port <port>  Same as --web-port for convenience
   --no-start-server        Skip auto-starting iperf3 server inside the agent
