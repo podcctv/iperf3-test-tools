@@ -1391,6 +1391,24 @@
     }
 
 
+    // Expose handlers for inline HTML event attributes in trace.html/trace_partial.html
+    Object.assign(window, {
+      runBidirectionalTrace,
+      shareAsImage,
+      shareSingleAsImage,
+      showCreateScheduleModal,
+      runMultiSourceTrace,
+      loadHistory,
+      hideScheduleModal,
+      createSchedule,
+      toggleTargetInput,
+      toggleMultisrcTarget,
+      updateMultisrcNodeDisabled,
+      toggleSchedTarget,
+      toggleSchedule,
+      deleteSchedule
+    });
+
     document.addEventListener('DOMContentLoaded', function() {
       // Auth state is now handled by server-side rendering (is_guest passed to _trace_html)
       
