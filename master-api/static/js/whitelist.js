@@ -33,7 +33,7 @@ async function loadWhitelist() {
     if (!data.whitelist || data.whitelist.length === 0) {
       tbody.innerHTML = `
             <tr>
-              <td colspan="5" class="px-4 py-8 text-center text-slate-500">
+              <td colspan="5" class="px-4 py-8 text-center text-slate-500 wl-help">
                 暂无白名单 IP，点击上方"添加"按钮开始
               </td>
             </tr>
@@ -79,11 +79,11 @@ async function loadWhitelist() {
           'bg-emerald-500/20 text-emerald-300';
 
       return `
-            <tr class="hover:bg-slate-800/40 transition border-b border-slate-800">
+            <tr class="wl-table-row transition border-b border-slate-800">
               <td class="px-4 py-3">
                 <code class="text-sm font-mono text-sky-300">${ip}</code>
               </td>
-              <td class="px-4 py-3 text-slate-400 text-xs">${source}</td>
+              <td class="px-4 py-3 text-slate-400 text-xs wl-help">${source}</td>
               <td class="px-4 py-3 text-xs">${syncStatusHtml}</td>
               <td class="px-4 py-3">
                 <span class="inline-flex items-center px-2 py-1 rounded-md text-xs font-semibold ${typeClass}">${ipType}</span>
