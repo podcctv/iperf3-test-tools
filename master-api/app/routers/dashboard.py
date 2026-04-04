@@ -22,31 +22,28 @@ async def dashboard(request: Request):
     """
     Render global dashboard (SPA entry point).
     """
-    return templates.TemplateResponse("index.html", {
-        "request": request
-    })
+    return templates.TemplateResponse(request, "index.html")
 
 @router.get("/tests", response_class=HTMLResponse)
 async def tests_page(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(request, "index.html")
 
 @router.get("/schedules", response_class=HTMLResponse)
 async def schedules_page(request: Request):
-    return templates.TemplateResponse("schedules.html", {"request": request})
+    return templates.TemplateResponse(request, "schedules.html")
 
 @router.get("/trace", response_class=HTMLResponse)
 async def trace_page(request: Request):
-    return templates.TemplateResponse("trace.html", {"request": request})
+    return templates.TemplateResponse(request, "trace.html")
 
 @router.get("/whitelist", response_class=HTMLResponse)
 async def whitelist_page(request: Request):
-    return templates.TemplateResponse("whitelist.html", {"request": request})
+    return templates.TemplateResponse(request, "whitelist.html")
 
 @router.get("/redis", response_class=HTMLResponse)
 async def redis_page(request: Request):
-    return templates.TemplateResponse("redis.html", {"request": request})
+    return templates.TemplateResponse(request, "redis.html")
 
 @router.get("/admin", response_class=HTMLResponse)
 async def admin_page(request: Request):
-    return templates.TemplateResponse("admin.html", {"request": request})
-
+    return templates.TemplateResponse(request, "admin.html")
