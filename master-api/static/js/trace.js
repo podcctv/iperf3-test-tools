@@ -892,15 +892,54 @@
     }
 
 
+    function refreshSingleTraceTargetOptions() {
+      const srcSel = document.getElementById('trace-src-node');
+      const targetSel = document.getElementById('trace-target-node');
+      const targetTypeSel = document.getElementById('trace-target-type');
+      if (!srcSel || !targetSel || !targetTypeSel) return;
+
+      const selectedSourceId = String(srcSel.value || '');
+      const previousTargetId = String(targetSel.value || '');
+
+      // Node B should exclude Node A (self-trace does not make sense for bidirectional mode)
+      const candidateNodes = nodes.filter(n => String(n.id) !== selectedSourceId);
+      targetSel.innerHTML = '<option value="">选择...</option>';
+      candidateNodes.forEach(n => {
+        const opt = new Option(`${n.name} (${n.ip})`, n.id);
+        opt.dataset.ip = n.ip;
+        opt.dataset.name = n.name;
+        targetSel.appendChild(opt);
+      });
+
+      if (candidateNodes.some(n => String(n.id) === previousTargetId)) {
+        targetSel.value = previousTargetId;
+      }
+
+      const nodeOption = targetTypeSel.querySelector('option[value="node"]');
+      const hasPeerNode = candidateNodes.length > 0;
+      if (nodeOption) nodeOption.disabled = !hasPeerNode;
+
+      // If no other node is available (e.g. only one agent), force custom target mode
+      if (!hasPeerNode && targetTypeSel.value === 'node') {
+        targetTypeSel.value = 'custom';
+      }
+      toggleTargetInput();
+    }
+
     async function loadNodes() {
       try {
         const res = await apiFetch('/nodes');
         nodes = await res.json();
-        ['trace-src-node', 'trace-target-node'].forEach(id => {
-          const sel = document.getElementById(id);
-          sel.innerHTML = '<option value="">选择...</option>';
-          nodes.forEach(n => { const opt = new Option(`${n.name} (${n.ip})`, n.id); opt.dataset.ip = n.ip; opt.dataset.name = n.name; sel.appendChild(opt); });
+        const srcSel = document.getElementById('trace-src-node');
+        srcSel.innerHTML = '<option value="">选择...</option>';
+        nodes.forEach(n => {
+          const opt = new Option(`${n.name} (${n.ip})`, n.id);
+          opt.dataset.ip = n.ip;
+          opt.dataset.name = n.name;
+          srcSel.appendChild(opt);
         });
+        srcSel.onchange = refreshSingleTraceTargetOptions;
+        refreshSingleTraceTargetOptions();
         // Schedule modal dropdowns
         const schedSrc = document.getElementById('sched-src');
         schedSrc.innerHTML = '';
