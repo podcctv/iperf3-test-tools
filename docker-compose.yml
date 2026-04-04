@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   db:
     image: postgres:16
@@ -32,9 +30,9 @@ services:
       - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
 
   master-api:
-    image: ${MASTER_IMAGE:-iperf3-test-tools-master-api:fixed}
+    image: ${MASTER_IMAGE:-ghcr.io/podcctv/iperf3-master-api:latest}
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
-    # build: ./master-api
+    build: ./master-api
     environment:
       DATABASE_URL: postgresql://iperf:iperf_pass@db:5432/iperf_db
       REQUEST_TIMEOUT: 10
