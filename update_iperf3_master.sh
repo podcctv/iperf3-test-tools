@@ -476,7 +476,7 @@ case "$choice" in
         # 启动 master (使用 docker-compose 以正确连接 PostgreSQL)
         echo "[INFO] 启动 master-api 和数据库..."
         cd "$REPO_DIR"
-        MASTER_API_PORT="$MASTER_PORT" docker compose up -d
+        MASTER_IMAGE="$GHCR_MASTER" MASTER_API_PORT="$MASTER_PORT" docker compose up -d
         
         # 安装 agent（使用 ghcr.io 镜像）
         AGENT_IMAGE=$(get_agent_image "true")
