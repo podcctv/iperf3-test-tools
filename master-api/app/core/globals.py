@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Dict, Tuple, Optional
 from fastapi.templating import Jinja2Templates
 
@@ -37,7 +38,9 @@ ip_privacy_state: Dict[int, bool] = {}
 streaming_status_cache: Dict[int, dict] = {}
 
 # Templates
-templates = Jinja2Templates(directory="static")  # Adjusted directory to match typical setup or static folder
+# Use an absolute path so template loading works regardless of process CWD.
+_STATIC_DIR = Path(__file__).resolve().parents[2] / "static"
+templates = Jinja2Templates(directory=str(_STATIC_DIR))
 
 # Helper to get node status (used by dashboard)
 def get_node_status():
