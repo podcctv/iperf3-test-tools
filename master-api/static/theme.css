@@ -36,6 +36,11 @@
     --card-radius-lg: 1.25rem;
     --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
     --card-shadow-hover: 0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+    --surface-glass: linear-gradient(145deg, rgba(30, 41, 59, 0.78), rgba(15, 23, 42, 0.7));
+    --surface-glass-light: linear-gradient(145deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.88));
+    --btn-primary-bg: linear-gradient(135deg, #22d3ee 0%, #3b82f6 48%, #6366f1 100%);
+    --btn-danger-bg: linear-gradient(135deg, #fb7185 0%, #f43f5e 50%, #e11d48 100%);
+    --btn-secondary-bg: rgba(15, 23, 42, 0.56);
 }
 
 /* Light Theme */
@@ -71,6 +76,85 @@
     /* Light mode card shadows */
     --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
     --card-shadow-hover: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.06);
+    --btn-secondary-bg: rgba(226, 232, 240, 0.84);
+}
+
+body {
+    background-color: var(--bg-dark);
+    background-image:
+        radial-gradient(at 0% 0%, var(--gradient-bg-1) 0px, transparent 55%),
+        radial-gradient(at 100% 0%, var(--gradient-bg-2) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, var(--gradient-bg-3) 0px, transparent 52%),
+        radial-gradient(at 0% 100%, var(--gradient-bg-4) 0px, transparent 48%);
+    background-attachment: fixed;
+}
+
+.glass-card,
+.glass-panel,
+.panel-card,
+.dashboard-header {
+    background: var(--surface-glass) !important;
+    border-color: var(--glass-border) !important;
+    box-shadow: var(--card-shadow) !important;
+}
+
+[data-theme="light"] .glass-card,
+[data-theme="light"] .glass-panel,
+[data-theme="light"] .panel-card,
+[data-theme="light"] .dashboard-header {
+    background: var(--surface-glass-light) !important;
+}
+
+button:not(.theme-toggle):not(.mobile-menu-btn):not(.btn-icon),
+.btn {
+    min-height: 2.3rem;
+    border-radius: 0.72rem !important;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease, filter 0.18s ease;
+}
+
+button:not(.theme-toggle):not(.mobile-menu-btn):not(.btn-icon):hover,
+.btn:hover {
+    transform: translateY(-1px);
+    filter: saturate(1.08);
+}
+
+.btn-primary,
+button[class*="from-sky-"],
+button[class*="from-emerald-"],
+button[class*="bg-blue-600"] {
+    background: var(--btn-primary-bg) !important;
+    border: 1px solid rgba(125, 211, 252, 0.35) !important;
+    color: #f8fafc !important;
+    box-shadow: 0 12px 28px -14px rgba(34, 211, 238, 0.68) !important;
+}
+
+button[class*="border-slate-"],
+.btn-secondary {
+    background: var(--btn-secondary-bg) !important;
+    border-color: rgba(148, 163, 184, 0.32) !important;
+    color: var(--text-main) !important;
+}
+
+button[class*="border-rose-"],
+button[class*="border-red-"],
+.btn-danger,
+.btn-danger-solid {
+    background: var(--btn-danger-bg) !important;
+    border-color: rgba(253, 164, 175, 0.45) !important;
+    color: #fff1f2 !important;
+    box-shadow: 0 12px 28px -14px rgba(244, 63, 94, 0.6) !important;
+}
+
+.sidebar-footer > button.nav-item {
+    width: 100%;
+    justify-content: center;
+    border-radius: 0.72rem;
+    border: 1px solid rgba(251, 113, 133, 0.34) !important;
+    background: rgba(244, 63, 94, 0.12) !important;
+    color: #fecdd3 !important;
+    margin-top: 0.5rem;
 }
 
 /* Theme Toggle Button Styles */
