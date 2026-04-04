@@ -107,13 +107,13 @@
     align-items: center;
     justify-content: center;
     gap: var(--space-sm);
-    padding: 0.625rem 1.25rem;
-    border-radius: var(--radius-lg);
-    font-size: 0.875rem;
+    padding: 0.68rem 1.3rem;
+    border-radius: 0.72rem;
+    font-size: 0.86rem;
     font-weight: 600;
     line-height: 1;
     cursor: pointer;
-    transition: all var(--transition-normal);
+    transition: transform var(--transition-normal), box-shadow var(--transition-normal), border-color var(--transition-normal), filter var(--transition-normal);
     border: 1px solid transparent;
     text-decoration: none;
     white-space: nowrap;
@@ -126,11 +126,11 @@
 
 /* Primary Button */
 .btn-primary {
-    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 50%, #1d4ed8 100%);
+    background: linear-gradient(135deg, #22d3ee 0%, #3b82f6 48%, #6366f1 100%);
     color: white;
     border: none;
     box-shadow:
-        0 4px 12px rgba(59, 130, 246, 0.3),
+        0 10px 24px -12px rgba(34, 211, 238, 0.8),
         inset 0 1px 0 rgba(255, 255, 255, 0.1);
     position: relative;
     overflow: hidden;
@@ -165,7 +165,7 @@
 
 /* Secondary Button */
 .btn-secondary {
-    background: var(--glass-bg-light);
+    background: rgba(15, 23, 42, 0.56);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     border: 1px solid rgba(148, 163, 184, 0.2);
@@ -213,7 +213,7 @@
 
 /* Danger Solid Button */
 .btn-danger-solid {
-    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    background: linear-gradient(135deg, #fb7185 0%, #f43f5e 52%, #e11d48 100%);
     color: white;
     border: none;
     box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
