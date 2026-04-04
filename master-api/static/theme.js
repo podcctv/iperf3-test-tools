@@ -86,14 +86,14 @@
             // Create toggle button
             const toggle = this.createToggleButton();
 
-            // Find navigation bar and insert toggle
-            const nav = document.querySelector('.flex.flex-wrap.items-center.gap-3');
-            if (nav) {
-                // Insert before logout button
-                const logoutBtn = document.getElementById('logout-btn');
-                if (logoutBtn) {
-                    nav.insertBefore(toggle, logoutBtn);
-                } else {
+            // Insert near logout button when possible
+            const logoutBtn = document.getElementById('logout-btn');
+            if (logoutBtn?.parentElement) {
+                logoutBtn.parentElement.insertBefore(toggle, logoutBtn);
+            } else {
+                // Fallback to header action area
+                const nav = document.querySelector('.flex.flex-wrap.items-center.gap-3');
+                if (nav) {
                     nav.appendChild(toggle);
                 }
             }
